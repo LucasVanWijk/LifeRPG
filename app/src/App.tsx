@@ -5,15 +5,16 @@ import { Adventure } from './screens/Adventure';
 import { Glossary } from './screens/Glossary';
 import { Home } from './screens/Home';
 import { Quests } from './screens/Quests';
-import { CampaignSheet, NewQuestSheet } from './sheets/CreateSheets';
+import { CampaignSheet } from './sheets/CreateSheets';
 import { ProfileSheet, Welcome } from './sheets/ProfileSheet';
-import { QuestSheet } from './sheets/QuestSheet';
+import { ChronicleSheet } from './sheets/ChronicleSheet';
+import { NewQuestSheet, QuestSheet } from './sheets/QuestSheet';
 import { useStore, type Tab } from './state/store';
 
 const NAV: [Tab, string, IconName][] = [['home', 'Home', 'home'], ['quests', 'Quests', 'scroll'], ['glossary', 'Glossary', 'book-open'], ['adventure', 'Adventure', 'compass']];
 
 export function App() {
-  const { data, ui, setUi, isDesk, toast, lastToast, scrollRef, actions } = useStore();
+  const { data, ui, setUi, isDesk, toast, lastToast, canUndo, scrollRef, actions } = useStore();
   const { hero } = data;
   const openQuest = data.quests.find((q) => q.id === ui.openId);
   const buy = data.rewards.find((r) => r.id === ui.buyId);
@@ -23,7 +24,7 @@ export function App() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : u.buyId ? { buyId: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : u.buyId ? { buyId: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -79,6 +80,7 @@ export function App() {
             <span className="heading tnum" style={{ fontSize: 17 }}>{shown.text}</span>
             <span className="muted" style={{ fontSize: 12 }}>{shown.sub}</span>
           </span>
+          {canUndo && <button className="toast-undo" onClick={actions.undoLast}>Undo</button>}
         </div>
       </div>
 
@@ -86,6 +88,7 @@ export function App() {
       {ui.newOpen && <NewQuestSheet />}
       {ui.campSheet && <CampaignSheet key={ui.campSheet} campKey={ui.campSheet === 'new' ? null : ui.campSheet} />}
       {ui.profileOpen && <ProfileSheet />}
+      {ui.chronicleOpen && <ChronicleSheet />}
       {!hero.name && <Welcome />}
 
       {ui.confirm && (
@@ -94,8 +97,9 @@ export function App() {
             <div id="confirm-title" className="dialog-title" style={{ fontSize: 24 }}>{ui.confirm.title}</div>
             <div className="dialog-body">{ui.confirm.body}</div>
             <div className="dialog-actions">
-              <button className="btn btn-secondary" onClick={() => setUi({ confirm: null })} style={{ minHeight: 44 }} autoFocus>Cancel</button>
-              <button className="danger-btn" onClick={() => { const c = ui.confirm!; setUi({ confirm: null }); c.onConfirm(); }}>{ui.confirm.confirmLabel}</button>
+              <button className="btn btn-secondary" onClick={() => setUi({ confirm: null })} style={{ minHeight: 44 }} autoFocus={ui.confirm.tone !== 'go'}>{ui.confirm.cancelLabel ?? 'Cancel'}</button>
+              <button className={ui.confirm.tone === 'go' ? 'btn btn-primary inked' : 'danger-btn'} style={{ minHeight: 44 }} autoFocus={ui.confirm.tone === 'go'}
+                onClick={() => { const c = ui.confirm!; setUi({ confirm: null }); c.onConfirm(); }}>{ui.confirm.confirmLabel}</button>
             </div>
           </div>
         </div>

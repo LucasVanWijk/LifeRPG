@@ -6,6 +6,8 @@ export type Status = 'todo' | 'doing' | 'done';
 export type Every = 'daily' | 'weekly';
 
 export interface QuestNote { id: number; t: string }
+/** A step on a quest's checklist; steps are not cards of their own and pay nothing. */
+export interface QuestStep { id: number; t: string; done: boolean }
 
 /** A one-off task. Repeating things are Habits. */
 export interface Quest {
@@ -17,13 +19,17 @@ export interface Quest {
   campaign: string | null;
   status: Status;
   notes: QuestNote[];
+  steps: QuestStep[];
   /** Day the quest was completed (for Today's Quests + undo). */
   doneOn?: string | null;
   prevStatus?: Status | null;
 }
 
-/** A repeating habit, checked in once per day or once per week. `log` holds the days it was done. */
-export interface Habit { id: number; title: string; every: Every; size: SizeKey; log: string[]; created: string }
+/**
+ * A repeating habit. Daily habits are checked in once a day; weekly ones `target` times a week
+ * (on different days). `log` holds the days it was done.
+ */
+export interface Habit { id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string }
 
 export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;
@@ -68,10 +74,11 @@ export const QUADS: Quad[] = [
 ];
 export const QM = Object.fromEntries(QUADS.map((q) => [q.key, q])) as Record<QuadKey, Quad>;
 
-export const SIZE: Record<SizeKey, { xp: number; name: string }> = {
-  S: { xp: 20, name: 'Small' },
-  M: { xp: 40, name: 'Medium' },
-  L: { xp: 70, name: 'Large' },
+/** Quest sizes are shown by their token (S, M, L). */
+export const SIZE: Record<SizeKey, { xp: number }> = {
+  S: { xp: 20 },
+  M: { xp: 40 },
+  L: { xp: 70 },
 };
 
 export const CSIZE: Record<SizeKey, { name: string; xp: number; gold: number }> = {

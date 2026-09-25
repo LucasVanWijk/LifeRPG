@@ -2,7 +2,8 @@ import { addDays, nextAnnual, parseDay } from './dates';
 import type { Data, Every, Habit, Hero, Quest, Status } from './model';
 import { habitReward, reward, streakText } from './model';
 
-export interface Toast { text: string; sub: string }
+/** undo: the toast offers to reverse the action that produced it. */
+export interface Toast { text: string; sub: string; undo?: boolean }
 /** The result of anything that pays out: new data, what to announce, and whether to show the level-up screen. */
 export interface Outcome { data: Data; toasts: Toast[]; leveledUp: boolean }
 
@@ -46,7 +47,7 @@ export function settleCampaigns(data: Data, today: string): Outcome {
       const g = gain(d.hero, c.xp, c.gold);
       out = merge(out, {
         data: { ...d, hero: g.hero, camps: { ...d.camps, [key]: { ...c, completedOn: today } } },
-        toasts: [{ text: 'Campaign complete · ' + c.name, sub: c.seal + ' · +' + c.xp + ' XP · +' + c.gold + ' gold' }],
+        toasts: [{ text: 'Campaign complete · ' + c.name, sub: c.seal + ' · +' + c.xp + ' XP · +' + c.gold + ' gold', undo: true }],
         leveledUp: g.leveledUp,
       });
     } else if (c.completedOn === today && qs.some((q) => q.status !== 'done')) {
@@ -64,7 +65,7 @@ export function completeQuest(data: Data, id: number, today: string): Outcome | 
   const g = gain(data.hero, r.xp, r.gold);
   const paid: Outcome = {
     data: { ...patchQuest(data, id, { status: 'done', doneOn: today, prevStatus: q.status }), hero: g.hero },
-    toasts: [{ text: '+' + r.xp + ' XP · +' + r.gold + ' gold', sub: q.title }],
+    toasts: [{ text: '+' + r.xp + ' XP · +' + r.gold + ' gold', sub: q.title, undo: true }],
     leveledUp: g.leveledUp,
   };
   return merge(paid, settleCampaigns(paid.data, today));
@@ -107,20 +108,42 @@ export function periodOf(day: string, every: Every): string {
 }
 const stepBack = (period: string, every: Every) => addDays(period, every === 'daily' ? -1 : -7);
 
-export const habitDone = (h: Habit, today: string) => h.log.some((d) => periodOf(d, h.every) === periodOf(today, h.every));
+/** Check-ins a habit needs per period: always 1 for daily habits, the weekly target otherwise. */
+export const habitTarget = (h: Habit) => (h.every === 'weekly' ? Math.max(1, h.target ?? 1) : 1);
 
-/** Consecutive periods done, counting back from this period (or the last one, if this one is still open). */
+const countIn = (h: Habit, period: string) => new Set(h.log.filter((d) => periodOf(d, h.every) === period)).size;
+
+/** This period's check-ins against the target, e.g. 2 of 3 this week. */
+export const habitProgress = (h: Habit, today: string) => ({ count: countIn(h, periodOf(today, h.every)), target: habitTarget(h) });
+
+/** The period's target is met. */
+export const habitDone = (h: Habit, today: string) => countIn(h, periodOf(today, h.every)) >= habitTarget(h);
+
+/** Checked in today (for habits that take several check-ins a week). */
+export const checkedInToday = (h: Habit, today: string) => h.log.includes(today);
+
+const metPeriods = (h: Habit) => {
+  const counts = new Map<string, Set<string>>();
+  for (const d of h.log) {
+    const p = periodOf(d, h.every);
+    counts.set(p, (counts.get(p) ?? new Set()).add(d));
+  }
+  const t = habitTarget(h);
+  return new Set([...counts].filter(([, days]) => days.size >= t).map(([p]) => p));
+};
+
+/** Consecutive periods on target, counting back from this period (or the last one, if this one isn't met yet). */
 export function habitStreak(h: Habit, today: string): number {
-  const done = new Set(h.log.map((d) => periodOf(d, h.every)));
+  const met = metPeriods(h);
   let p = periodOf(today, h.every);
-  if (!done.has(p)) p = stepBack(p, h.every);
+  if (!met.has(p)) p = stepBack(p, h.every);
   let n = 0;
-  while (done.has(p)) { n++; p = stepBack(p, h.every); }
+  while (met.has(p)) { n++; p = stepBack(p, h.every); }
   return n;
 }
 
 export function bestStreak(h: Habit): number {
-  const periods = [...new Set(h.log.map((d) => periodOf(d, h.every)))].sort();
+  const periods = [...metPeriods(h)].sort();
   let best = 0, run = 0, prev = '';
   for (const p of periods) {
     run = prev && stepBack(p, h.every) === prev ? run + 1 : 1;
@@ -130,23 +153,48 @@ export function bestStreak(h: Habit): number {
   return best;
 }
 
-/** Checks a habit in for this period, or undoes this period's check-in. */
+/**
+ * Checks a habit in, or takes the check-in back. Habits done once per period toggle the whole period;
+ * habits with a weekly target of several days check in once per day, until the target is reached.
+ */
 export function toggleHabit(data: Data, id: number, today: string): Outcome {
   const h = data.habits.find((x) => x.id === id);
   if (!h) return none(data);
   const r = habitReward(h);
+  const target = habitTarget(h);
+  const cur = periodOf(today, h.every);
   const setLog = (log: string[]) => data.habits.map((x) => (x.id === id ? { ...x, log } : x));
-  if (habitDone(h, today)) {
-    const cur = periodOf(today, h.every);
-    return none({ ...data, hero: lose(data.hero, r.xp, r.gold), habits: setLog(h.log.filter((d) => periodOf(d, h.every) !== cur)) });
+  if (target === 1 ? habitDone(h, today) : checkedInToday(h, today)) {
+    const log = target === 1 ? h.log.filter((d) => periodOf(d, h.every) !== cur) : h.log.filter((d) => d !== today);
+    const removed = h.log.length - log.length;
+    return none({ ...data, hero: lose(data.hero, r.xp * removed, r.gold * removed), habits: setLog(log) });
   }
+  if (habitDone(h, today)) return none(data);
   const g = gain(data.hero, r.xp, r.gold);
   const next = { ...h, log: [...h.log, today] };
+  const prog = habitProgress(next, today);
+  const sub = prog.count < prog.target ? prog.count + ' of ' + prog.target + ' this week' : streakText(habitStreak(next, today), h.every);
   return {
     data: { ...data, hero: g.hero, habits: setLog(next.log) },
-    toasts: [{ text: '+' + r.xp + ' XP · +' + r.gold + ' gold', sub: h.title + ' · ' + streakText(habitStreak(next, today), h.every) }],
+    toasts: [{ text: '+' + r.xp + ' XP · +' + r.gold + ' gold', sub: h.title + ' · ' + sub, undo: true }],
     leveledUp: g.leveledUp,
   };
+}
+
+// ── Chronicle ───────────────────────────────────────────────
+
+export interface ChronicleEntry { date: string; kind: 'quest' | 'habit' | 'campaign'; title: string; xp: number; gold: number }
+
+/** Everything completed, newest first: quests, habit check-ins and finished campaigns. */
+export function chronicle(data: Data): ChronicleEntry[] {
+  const out: ChronicleEntry[] = [];
+  for (const q of data.quests) if (q.status === 'done' && q.doneOn) out.push({ date: q.doneOn, kind: 'quest', title: q.title, ...reward(q) });
+  for (const h of data.habits) {
+    const r = habitReward(h);
+    for (const d of new Set(h.log)) out.push({ date: d, kind: 'habit', title: h.title, ...r });
+  }
+  for (const c of Object.values(data.camps)) if (c.completedOn) out.push({ date: c.completedOn, kind: 'campaign', title: c.name, xp: c.xp, gold: c.gold });
+  return out.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 // ── Calendar ────────────────────────────────────────────────

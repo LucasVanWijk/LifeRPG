@@ -183,7 +183,7 @@ button { font: inherit; }
 .note[draggable='true'] { cursor: grab; }
 .note:hover { box-shadow: 0 1px 0 rgba(0,0,0,.08), 0 9px 18px rgba(20,8,0,.45); }
 .note-foot { display: flex; align-items: center; gap: 6px; border-top: 1px dashed var(--q-rule); padding-top: 6px; font-size: 11px; color: var(--color-accent-700); font-variant-numeric: tabular-nums; white-space: nowrap; }
-.camp-tag { display: inline-flex; align-items: center; gap: 3px; max-width: 100%; padding: 0 6px; border: 1px solid var(--q-rule); border-radius: 3px; color: var(--color-accent-800); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.camp-tag { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; padding: 0 6px; border: 1px solid var(--q-rule); border-radius: 3px; color: var(--color-accent-800); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile { display: flex; flex-direction: column; align-items: stretch; gap: 7px; min-height: 0; overflow: hidden; padding: 10px 9px; text-align: left; cursor: pointer; color: var(--color-accent-100); font-family: var(--font-body); }
 .tile-note { padding: 5px 7px; background: var(--q-parch); color: var(--q-ink); border-radius: 2px; font-size: 12px; line-height: 1.3; box-shadow: 0 2px 4px rgba(0,0,0,.35); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 
@@ -241,8 +241,12 @@ button { font: inherit; }
 /* ── additions: profile, habits, editing ─────────────────── */
 .hero-btn { display: flex; align-items: center; gap: 16px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--q-ink); font-family: var(--font-body); border-radius: var(--radius-md); }
 .hero-btn:hover .heading { color: var(--color-accent-800); }
-.desk .home-today { grid-column: 2; grid-row: 1 / span 2; }
+.desk .hero-card { grid-column: 1; grid-row: 1; }
+.desk .home-today { grid-column: 2; grid-row: 1; }
 .desk .home-habits { grid-column: 1; grid-row: 2; }
+.desk .home-next { grid-column: 2; grid-row: 2; }
+.desk .week { grid-row: 3; }
+.backup-nag { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 14px; border-color: color-mix(in srgb, var(--color-accent-700) 40%, transparent); }
 .danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--q-wax) 45%, transparent); border-radius: var(--radius-md); background: transparent; color: var(--q-wax); cursor: pointer; font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
 .danger-btn:hover { background: color-mix(in srgb, var(--q-wax) 8%, transparent); }
 .danger-btn:active { background: color-mix(in srgb, var(--q-wax) 16%, transparent); }
@@ -253,3 +257,19 @@ button { font: inherit; }
 .habit-dots span.on { background: var(--q-moss); border-color: var(--q-moss); }
 .side-hero { cursor: pointer; border-radius: var(--radius-md); }
 .side-hero:hover { background: color-mix(in srgb, var(--color-accent-300) 14%, transparent); }
+
+/* Quest steps: a checklist on the card and in the detail view */
+.steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.steps button { display: flex; align-items: flex-start; gap: 10px; width: 100%; padding: 9px 0; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--q-ink); font: inherit; font-size: 15px; line-height: 1.35; }
+.steps li + li button { border-top: 1px solid var(--q-rule); }
+.steps .checkbox { flex: none; margin-top: 1px; }
+.steps.compact { margin-top: 2px; gap: 1px; }
+.steps.compact button { gap: 6px; padding: 3px 0; font-size: 12px; line-height: 1.3; }
+.steps.compact li + li button { border-top: 0; }
+.steps.compact .checkbox { border-width: 1.2px; border-radius: 2px; margin-top: 1px; }
+.steps button:hover .step-text { text-decoration-color: var(--color-accent-500); }
+
+/* Undo on the reward toast */
+.toast-undo { pointer-events: auto; margin-left: 6px; min-height: 36px; padding: 4px 12px; border: 1px solid var(--color-accent-600); border-radius: var(--radius-md); background: transparent; color: var(--color-accent-700); font-family: var(--font-heading); font-weight: 600; font-size: 15px; cursor: pointer; }
+.toast-undo:hover { background: color-mix(in srgb, var(--color-accent) 12%, transparent); }
+.toast:not(.show) .toast-undo { pointer-events: none; }

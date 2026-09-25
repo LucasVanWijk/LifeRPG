@@ -1,50 +1,11 @@
 import { useState } from 'react';
-import type { QuadKey, SizeKey } from '../domain/model';
-import { CAMP_ICONS, campSize, CSIZE, QUADS } from '../domain/model';
+import type { SizeKey } from '../domain/model';
+import { CAMP_ICONS, campSize, CSIZE } from '../domain/model';
 import { Icon, type IconName } from '../components/Icon';
-import { CloseBtn, onEnter, Seg, Sheet } from '../components/common';
+import { CloseBtn, Seg, Sheet } from '../components/common';
 import { useStore } from '../state/store';
 
 const bigBtn = { minHeight: 50, fontSize: 18, color: 'var(--color-accent-700)', borderColor: 'var(--color-accent-600)' };
-
-export function NewQuestSheet() {
-  const { data, setUi, actions } = useStore();
-  const [title, setTitle] = useState('');
-  const [quad, setQuad] = useState<QuadKey>('side');
-  const [due, setDue] = useState('');
-  const [campaign, setCampaign] = useState('');
-  const close = () => setUi({ newOpen: false });
-  const create = () => {
-    const t = title.trim();
-    if (!t) return;
-    actions.createQuest({ title: t, quad, due: due || null, campaign: campaign || null });
-    close();
-  };
-  return (
-    <Sheet onClose={close} label="New Quest">
-      <div style={{ display: 'flex', alignItems: 'center', paddingTop: 6 }}><h3 style={{ fontSize: 26 }}>New Quest</h3><span style={{ marginLeft: 'auto' }}><CloseBtn onClick={close} /></span></div>
-      <input className="title-input" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(create)} placeholder="What needs doing?" aria-label="Title" autoFocus />
-      <p className="muted" style={{ margin: '-4px 0 0', fontSize: 12 }}>Only a title is needed. It goes to Side Quests unless you pick a zone.</p>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {QUADS.map((z) => (
-          <button key={z.key} className="chip" aria-pressed={quad === z.key} onClick={() => setQuad(z.key)} style={{ minHeight: 40, padding: '6px 11px', fontSize: 15 }}>
-            <span style={{ color: z.color }}><Icon n={z.icon} size={14} /></span>{z.name}
-          </button>
-        ))}
-      </div>
-      <div className="two-col">
-        <div className="field"><label htmlFor="nq-due">Due date</label><input id="nq-due" className="input" type="date" value={due} onChange={(e) => setDue(e.target.value)} style={{ minHeight: 44 }} /></div>
-        <div className="field"><label htmlFor="nq-camp">Campaign</label>
-          <select id="nq-camp" className="input" value={campaign} onChange={(e) => setCampaign(e.target.value)} style={{ minHeight: 44 }}>
-            <option value="">None</option>
-            {Object.entries(data.camps).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
-          </select>
-        </div>
-      </div>
-      <button className="btn btn-primary" onClick={create} disabled={!title.trim()} style={bigBtn}>Pin to the board</button>
-    </Sheet>
-  );
-}
 
 /** New Campaign, or editing an existing one when `campKey` is given. */
 export function CampaignSheet({ campKey }: { campKey: string | null }) {

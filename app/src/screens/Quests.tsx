@@ -1,8 +1,9 @@
 import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { addDays, shortDate } from '../domain/dates';
-import { bestStreak, habitDone, habitStreak, periodOf } from '../domain/logic';
+import { bestStreak, checkedInToday, habitDone, habitProgress, habitStreak, habitTarget, periodOf } from '../domain/logic';
 import type { Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
-import { EVERY_NAME, habitReward, noteRotation, QUADS, SIZE, STATUSES, streakText } from '../domain/model';
+import { EVERY_NAME, habitReward, noteRotation, QUADS, STATUSES, streakText } from '../domain/model';
+import { StepChecklist, stepCount } from '../components/Steps';
 import { Icon } from '../components/Icon';
 import { AddForm, byDue, Empty, onEnter, questView, ScreenHead, Seg } from '../components/common';
 import { useStore } from '../state/store';
@@ -10,7 +11,7 @@ import { useStore } from '../state/store';
 export function Quests() {
   const { data, ui, setUi, isDesk } = useStore();
   const activeCount = data.quests.filter((q) => q.status !== 'done').length;
-  const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : activeCount + ' open quests';
+  const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : activeCount + (activeCount === 1 ? ' open quest' : ' open quests');
   return (
     <div className="screen" style={{ flex: 1, gap: 14 }}>
       <ScreenHead kicker={kicker} title="Quests">
@@ -81,12 +82,14 @@ function DeskBoard() {
                         <div className="heading" style={{ fontSize: 18, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</div>
                         <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
                           {v.hasDue && <><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span><span style={{ color: 'var(--color-accent-500)' }}>·</span></>}
-                          <span>{SIZE[q.size].name}</span>
+                          <span>{q.size}</span>
+                          {stepCount(q) && <><span style={{ color: 'var(--color-accent-500)' }}>·</span><span className="tnum">{stepCount(q)} steps</span></>}
                         </div>
+                        <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
                         <div className="note-foot">
                           <span>+{v.xp} XP</span>
                           <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
-                            {v.campaignName && <span className="camp-tag"><Icon n="flag" size={10} />{v.campaignName}</span>}
+                            {v.campaignName && <span className="camp-tag" title={v.campaignName}><Icon n="flag" size={10} /><span className="ellipsis">{v.campaignName}</span></span>}
                           </span>
                           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} aria-label={v.gold + ' gold'}>+{v.gold}<span style={{ color: 'var(--color-accent-600)' }}><Icon n="coins" size={12} /></span></span>
                         </div>
@@ -167,7 +170,7 @@ function MobileZone({ zone }: { zone: QuadKey }) {
         {list.map((q) => {
           const v = questView(q, today, data.camps);
           return (
-            <button key={q.id} className="note" onClick={() => actions.openQuest(q.id)}
+            <div key={q.id} className="note" role="button" tabIndex={0} onClick={() => actions.openQuest(q.id)} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
               style={{ gap: 4, padding: '12px 12px 8px', border: 0, fontFamily: 'var(--font-body)', transform: 'rotate(' + noteRotation(q.id, 0.4, 2) + ')' }}>
               <span className="pin" />
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, width: '100%' }}>
@@ -176,10 +179,12 @@ function MobileZone({ zone }: { zone: QuadKey }) {
               </div>
               <div className="meta" style={{ gap: '6px 10px' }}>
                 {v.hasDue && <span style={{ color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
-                <span>{SIZE[q.size].name}</span>
-                {v.campaignName && <span style={{ gap: 4, padding: '1px 7px', border: '1px solid var(--q-rule)', borderRadius: 3 }}><Icon n="flag" size={10} />{v.campaignName}</span>}
+                <span>{q.size}</span>
+                {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+                {v.campaignName && <span className="camp-tag" title={v.campaignName} style={{ gap: 4, padding: '1px 7px', maxWidth: 180 }}><Icon n="flag" size={10} /><span className="ellipsis">{v.campaignName}</span></span>}
               </div>
-            </button>
+              <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
+            </div>
           );
         })}
         {!list.length && <p style={{ margin: '40px 0', textAlign: 'center', fontStyle: 'italic', color: 'var(--color-accent-200)' }}>No quests in this zone.</p>}
@@ -291,6 +296,7 @@ function CampaignView() {
                       <span>{q.size}</span>
                       <span className="tnum" style={{ marginLeft: 'auto', color: 'var(--color-accent-700)' }}>+{v.xp} XP</span>
                     </div>
+                    {!v.done && <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />}
                   </div>
                 );
               })}
@@ -308,11 +314,12 @@ function HabitsView() {
   const [title, setTitle] = useState('');
   const [every, setEvery] = useState<Every>('daily');
   const [size, setSize] = useState<SizeKey>('S');
-  const reset = () => { setTitle(''); setEvery('daily'); setSize('S'); };
+  const [target, setTarget] = useState(1);
+  const reset = () => { setTitle(''); setEvery('daily'); setSize('S'); setTarget(1); };
   const add = () => {
     const t = title.trim();
     if (!t) return false;
-    actions.createHabit({ title: t, every, size });
+    actions.createHabit({ title: t, every, size, target: every === 'weekly' ? target : 1 });
     reset();
     return true;
   };
@@ -325,14 +332,17 @@ function HabitsView() {
       {data.habits.map((h) => <HabitRow key={h.id} h={h} today={today} dots={isDesk ? 21 : 14} />)}
       <AddForm label="New habit" onSave={add} invalid={!title.trim()} onCancel={reset}>
         <div className="field"><label htmlFor="nh-title">Habit</label><input id="nh-title" className="input" placeholder="e.g. Read before bed" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(add)} autoFocus style={{ minHeight: 44 }} /></div>
-        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} />
+        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} target={target} setTarget={setTarget} />
       </AddForm>
     </div>
   );
 }
 
-function HabitFields({ every, setEvery, size, setSize }: { every: Every; setEvery: (e: Every) => void; size: SizeKey; setSize: (s: SizeKey) => void }) {
+function HabitFields({ every, setEvery, size, setSize, target, setTarget }: {
+  every: Every; setEvery: (e: Every) => void; size: SizeKey; setSize: (s: SizeKey) => void; target: number; setTarget: (n: number) => void;
+}) {
   return (
+    <>
     <div className="two-col">
       <div className="field"><label>Repeats</label>
         <Seg name="h-every" value={every} onChange={setEvery} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: '100%' }} optStyle={{ justifyContent: 'center', minHeight: 42 }}
@@ -343,6 +353,16 @@ function HabitFields({ every, setEvery, size, setSize }: { every: Every; setEver
           options={(['S', 'M', 'L'] as const).map((k) => ({ key: k, label: k + ' · ' + habitReward({ size: k }).xp }))} />
       </div>
     </div>
+    {every === 'weekly' && (
+      <div className="field"><label>Times a week</label>
+        <Seg name="h-target" value={String(target)} onChange={(v) => setTarget(Number(v))} style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', width: '100%' }}
+          optStyle={{ justifyContent: 'center', minHeight: 40, padding: '6px 0' }} options={[1, 2, 3, 4, 5, 6, 7].map((n) => ({ key: String(n), label: n }))} />
+        <span className="muted" style={{ display: 'block', marginTop: 5, fontSize: 12 }}>
+          {target === 1 ? 'Once any day of the week.' : 'Check in on ' + target + ' different days; the week counts toward the streak once all ' + target + ' are done.'}
+        </span>
+      </div>
+    )}
+    </>
   );
 }
 
@@ -352,15 +372,16 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
   const [title, setTitle] = useState(h.title);
   const [every, setEvery] = useState<Every>(h.every);
   const [size, setSize] = useState<SizeKey>(h.size);
-  const done = habitDone(h, today), streak = habitStreak(h, today), best = bestStreak(h);
-  const periods = new Set(h.log.map((d) => periodOf(d, h.every)));
+  const [target, setTarget] = useState(habitTarget(h));
+  const done = habitDone(h, today), streak = habitStreak(h, today), best = bestStreak(h), prog = habitProgress(h, today);
+  const multi = prog.target > 1, ticked = multi ? checkedInToday(h, today) : done, locked = multi && done && !ticked;
   const step = h.every === 'daily' ? 1 : 7;
   const cur = periodOf(today, h.every);
   const history = Array.from({ length: dots }, (_, i) => {
     const iso = addDays(cur, -(dots - 1 - i) * step);
-    return { iso, on: periods.has(iso) };
+    return { iso, on: habitDone(h, iso) };
   });
-  const save = () => { if (!title.trim()) return; actions.updateHabit(h.id, { title: title.trim(), every, size }); setEditing(false); };
+  const save = () => { if (!title.trim()) return; actions.updateHabit(h.id, { title: title.trim(), every, size, target: every === 'weekly' ? target : 1 }); setEditing(false); };
   const remove = () => actions.confirm({
     title: 'Delete this habit?', body: '“' + h.title + '” and its streak history will be gone. Rewards already earned are kept.',
     confirmLabel: 'Delete habit', onConfirm: () => actions.deleteHabit(h.id),
@@ -370,12 +391,12 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
     return (
       <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14 }}>
         <div className="field"><label htmlFor={'eh-' + h.id}>Habit</label><input id={'eh-' + h.id} className="input" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(save)} style={{ minHeight: 44 }} /></div>
-        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} />
-        {every !== h.every && <p className="muted" style={{ margin: 0, fontSize: 12 }}>Changing how often it repeats recounts the streak from the same check-ins.</p>}
+        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} target={target} setTarget={setTarget} />
+        {(every !== h.every || (every === 'weekly' && target !== habitTarget(h))) && <p className="muted" style={{ margin: 0, fontSize: 12 }}>Changing how often it repeats recounts the streak from the same check-ins.</p>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="danger-btn" onClick={remove}>Delete</button>
           <span style={{ flex: 1 }} />
-          <button className="btn btn-secondary" onClick={() => { setEditing(false); setTitle(h.title); setEvery(h.every); setSize(h.size); }} style={{ minHeight: 42 }}>Cancel</button>
+          <button className="btn btn-secondary" onClick={() => { setEditing(false); setTitle(h.title); setEvery(h.every); setSize(h.size); setTarget(habitTarget(h)); }} style={{ minHeight: 42 }}>Cancel</button>
           <button className="btn btn-primary inked" onClick={save} disabled={!title.trim()} style={{ minHeight: 42 }}>Save</button>
         </div>
       </section>
@@ -383,13 +404,13 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
   }
   return (
     <section className="panel" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 10px 4px' }}>
-      <button className="today-check" onClick={() => actions.toggleHabit(h.id)} aria-label={(done ? 'Undo ' : 'Check in ') + h.title} aria-pressed={done} style={{ marginLeft: 0 }}>
-        <span className={'checkbox' + (done ? ' on' : '')} style={{ width: 24, height: 24, borderRadius: '50%' }}>{done && <Icon n="check" size={15} stroke={2.4} />}</span>
+      <button className="today-check" onClick={() => actions.toggleHabit(h.id)} disabled={locked} aria-label={(ticked ? 'Undo ' : 'Check in ') + h.title} aria-pressed={ticked} style={{ marginLeft: 0 }}>
+        <span className={'checkbox' + (ticked || locked ? ' on' : '')} style={{ width: 24, height: 24, borderRadius: '50%', opacity: locked ? 0.5 : 1 }}>{(ticked || locked) && <Icon n="check" size={15} stroke={2.4} />}</span>
       </button>
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{h.title}</div>
         <div className="meta">
-          <span>{EVERY_NAME[h.every]} · {SIZE[h.size].name} · +{habitReward(h).xp} XP</span>
+          <span className="tnum">{multi ? prog.target + '× a week · ' + prog.count + ' of ' + prog.target + ' so far' : EVERY_NAME[h.every]} · {h.size} · +{habitReward(h).xp} XP</span>
           <span style={{ color: streak ? 'var(--q-wax)' : undefined, gap: 4 }}><Icon n="repeat" size={12} />{streak ? streakText(streak, h.every) : 'No streak yet'}</span>
           {best > streak && <span>best {best}</span>}
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
+import { exportBackup, lastExport } from '../backup';
 import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } from '../pwa';
 import { dayDiff, todayISO } from '../domain/dates';
 import { migrate } from '../domain/migrate';
@@ -8,8 +9,6 @@ import { Icon } from '../components/Icon';
 import { CloseBtn, onEnter, Portrait, Sheet } from '../components/common';
 import { useStore } from '../state/store';
 
-const EXPORT_KEY = 'questlog:lastExport';
-const readLastExport = () => { try { return localStorage.getItem(EXPORT_KEY); } catch { return null; } };
 
 /** Center-crops an image file to a small square JPEG, so the portrait stays light in storage. */
 function toPortrait(file: File): Promise<string> {
@@ -65,7 +64,7 @@ export function useImport() {
 export function ProfileSheet() {
   const { data, setUi, today, actions, showToast } = useStore();
   const { hero } = data;
-  const [lastExport, setLastExport] = useState(readLastExport);
+  const [lastExportDay, setLastExport] = useState(lastExport);
   const picker = useRef<HTMLInputElement>(null);
   const restore = useImport();
   const close = () => setUi({ profileOpen: false });
@@ -79,15 +78,9 @@ export function ProfileSheet() {
   };
 
   const exportLog = () => {
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'questlog-backup-' + today + '.json';
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-    try { localStorage.setItem(EXPORT_KEY, today); } catch { /* private mode */ }
+    const file = exportBackup(data, today);
     setLastExport(today);
-    showToast('Backup saved', a.download);
+    showToast('Backup saved', file);
   };
 
   const startOver = () => actions.confirm({
@@ -97,7 +90,7 @@ export function ProfileSheet() {
     onConfirm: () => { actions.replaceData(emptyData()); showToast('A fresh log', 'Everything was erased'); },
   });
 
-  const since = lastExport ? dayDiff(today, lastExport) : null;
+  const since = lastExportDay ? dayDiff(today, lastExportDay) : null;
   const backupNote = since === null ? 'You have not exported a backup from this browser yet.'
     : since === 0 ? 'Last backup: today.' : 'Last backup: ' + since + (since === 1 ? ' day' : ' days') + ' ago.';
 
