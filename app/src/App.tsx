@@ -1,0 +1,113 @@
+import { useEffect } from 'react';
+import { Icon, type IconName } from './components/Icon';
+import { Adventure } from './screens/Adventure';
+import { Glossary } from './screens/Glossary';
+import { Home } from './screens/Home';
+import { Quests } from './screens/Quests';
+import { NewCampaignSheet, NewQuestSheet } from './sheets/CreateSheets';
+import { QuestSheet } from './sheets/QuestSheet';
+import { useStore, type Tab } from './state/store';
+
+const NAV: [Tab, string, IconName][] = [['home', 'Home', 'home'], ['quests', 'Quests', 'scroll'], ['glossary', 'Glossary', 'book-open'], ['adventure', 'Adventure', 'compass']];
+
+export function App() {
+  const { data, ui, setUi, isDesk, toast, lastToast, scrollRef, actions } = useStore();
+  const { hero } = data;
+  const openQuest = data.quests.find((q) => q.id === ui.openId);
+  const buy = data.rewards.find((r) => r.id === ui.buyId);
+  const shown = toast || lastToast;
+
+  // Escape closes whatever overlay is on top.
+  useEffect(() => {
+    const on = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      setUi((u) => (u.levelUp ? { levelUp: false } : u.buyId ? { buyId: null } : { openId: null, newOpen: false, newCampOpen: false }));
+    };
+    window.addEventListener('keydown', on);
+    return () => window.removeEventListener('keydown', on);
+  }, [setUi]);
+
+  return (
+    <div className={'app' + (isDesk ? ' desk' : '')}>
+      {isDesk && (
+        <aside className="sidebar">
+          <div className="brand"><span className="seal">Q</span><span className="brand-name">Questlog</span></div>
+          <nav className="side-nav" aria-label="Main">
+            {NAV.map(([k, n, ic]) => (
+              <button key={k} onClick={() => actions.goTab(k)} aria-current={ui.tab === k ? 'page' : undefined}><Icon n={ic} size={20} />{n}</button>
+            ))}
+          </nav>
+          <div className="side-hero">
+            <div className="heading" style={{ fontSize: 18 }}>{hero.name}</div>
+            <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-accent-800)' }}>Level {hero.level} Wanderer</div>
+            <div className="bar"><div style={{ width: Math.round((hero.xp / hero.next) * 100) + '%' }} /></div>
+            <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+              <span>{hero.xp} / {hero.next} XP</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon n="coins" size={13} />{hero.gold}</span>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      <div className="app-main">
+        <main ref={scrollRef} className={'app-scroll' + (ui.tab === 'quests' ? ' fill' : '')}>
+          {ui.tab === 'home' && <Home />}
+          {ui.tab === 'quests' && <Quests />}
+          {ui.tab === 'glossary' && <Glossary />}
+          {ui.tab === 'adventure' && <Adventure />}
+        </main>
+
+        {!isDesk && (
+          <nav className="tabbar" aria-label="Main">
+            {NAV.map(([k, n, ic]) => (
+              <button key={k} onClick={() => actions.goTab(k)} aria-current={ui.tab === k ? 'page' : undefined}>
+                <span className="ind" /><Icon n={ic} size={22} /><span>{n}</span>
+              </button>
+            ))}
+          </nav>
+        )}
+
+        <button className="fab" onClick={() => setUi({ newOpen: true, openId: null, newCampOpen: false })} aria-label="New Quest">
+          <Icon n="plus" size={22} stroke={2} />{isDesk && <span>New Quest</span>}
+        </button>
+
+        <div className={'toast' + (toast ? ' show' : '')} role="status" aria-live="polite">
+          <span style={{ color: 'var(--color-accent-600)' }}><Icon n="sparkles" size={17} /></span>
+          <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.25 }}>
+            <span className="heading tnum" style={{ fontSize: 17 }}>{shown.text}</span>
+            <span className="muted" style={{ fontSize: 12 }}>{shown.sub}</span>
+          </span>
+        </div>
+      </div>
+
+      {openQuest && <QuestSheet key={openQuest.id} quest={openQuest} />}
+      {ui.newOpen && <NewQuestSheet />}
+      {ui.newCampOpen && <NewCampaignSheet />}
+
+      {buy && (
+        <div className="modal" onClick={(e) => e.target === e.currentTarget && setUi({ buyId: null })}>
+          <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="buy-title" style={{ background: 'var(--q-parch)', width: 'min(380px,100%)' }}>
+            <div id="buy-title" className="dialog-title" style={{ fontSize: 24 }}>{buy.title}</div>
+            <div className="dialog-body tnum">Spend {buy.price} gold? You'll have {hero.gold - buy.price} left.</div>
+            <div className="dialog-actions">
+              <button className="btn btn-secondary" onClick={() => setUi({ buyId: null })} style={{ minHeight: 44 }}>Not now</button>
+              <button className="btn btn-primary inked" onClick={() => actions.buy(buy.id)} style={{ minHeight: 44 }} autoFocus>Buy for {buy.price}g</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {ui.levelUp && (
+        <div className="modal" style={{ zIndex: 55, background: 'color-mix(in srgb, var(--color-neutral-900) 40%, transparent)' }}>
+          <div role="alertdialog" aria-modal="true" aria-label="Level up" style={{ width: 'min(320px,100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 22px 20px', textAlign: 'center', border: '1px solid color-mix(in srgb, var(--color-accent-800) 35%, transparent)', borderRadius: 'var(--radius-lg)', boxShadow: 'inset 0 0 0 5px var(--q-parch), inset 0 0 0 6px var(--color-accent-500), var(--shadow-lg)', background: 'var(--q-parch)' }}>
+            <span className="seal heading tnum" style={{ width: 72, height: 72, fontSize: 34, boxShadow: 'inset 0 0 0 5px var(--q-wax), inset 0 0 0 6px rgba(255,230,200,.35), 0 3px 8px rgba(40,10,0,.35)' }}>{hero.level}</span>
+            <span className="kicker">Level up</span>
+            <div className="heading" style={{ fontSize: 26, lineHeight: 1.1 }}>{hero.name} reaches level {hero.level}</div>
+            <p className="muted" style={{ margin: 0, fontSize: 14 }}>{hero.next} XP to the next level.</p>
+            <button className="btn btn-primary inked" onClick={() => setUi({ levelUp: false })} style={{ minHeight: 44, minWidth: 140, marginTop: 6 }} autoFocus>Onward</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
