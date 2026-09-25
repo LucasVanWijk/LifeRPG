@@ -22,7 +22,7 @@ The app switches between the mobile layout (bottom tab bar, bottom sheets) and t
 | `src/domain/migrate.ts` | Upgrades saved data and imported backups to the current format |
 | `src/state/store.tsx` | Persisted data + UI state and all actions, shared through a React context |
 | `src/screens/` | Home, Quests (desktop board, mobile 2×2 grid, opened zone, campaigns), Glossary, Adventure |
-| `src/sheets/` | Quest detail / Edit quest, New Quest, New/Edit Campaign, Profile (name, portrait, backup, install), Welcome |
+| `src/sheets/` | Quest detail, and one form for New Quest / Edit quest (with steps), New/Edit Campaign, Profile (name, portrait, backup, install), Welcome |
 | `src/pwa.ts`, `public/sw.js`, `public/manifest.webmanifest` | Service worker registration, install prompt, offline caching |
 | `src/styles/classical.css` | The Classical design system, unchanged except that fonts are bundled locally |
 | `src/styles/app.css` | Questlog's parchment tokens (`--q-*`) and component styles |

@@ -2,7 +2,8 @@ import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { addDays, shortDate } from '../domain/dates';
 import { bestStreak, habitDone, habitStreak, periodOf } from '../domain/logic';
 import type { Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
-import { EVERY_NAME, habitReward, noteRotation, QUADS, SIZE, STATUSES, streakText } from '../domain/model';
+import { EVERY_NAME, habitReward, noteRotation, QUADS, STATUSES, streakText } from '../domain/model';
+import { StepChecklist, stepCount } from '../components/Steps';
 import { Icon } from '../components/Icon';
 import { AddForm, byDue, Empty, onEnter, questView, ScreenHead, Seg } from '../components/common';
 import { useStore } from '../state/store';
@@ -10,7 +11,7 @@ import { useStore } from '../state/store';
 export function Quests() {
   const { data, ui, setUi, isDesk } = useStore();
   const activeCount = data.quests.filter((q) => q.status !== 'done').length;
-  const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : activeCount + ' open quests';
+  const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : activeCount + (activeCount === 1 ? ' open quest' : ' open quests');
   return (
     <div className="screen" style={{ flex: 1, gap: 14 }}>
       <ScreenHead kicker={kicker} title="Quests">
@@ -81,8 +82,10 @@ function DeskBoard() {
                         <div className="heading" style={{ fontSize: 18, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</div>
                         <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
                           {v.hasDue && <><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span><span style={{ color: 'var(--color-accent-500)' }}>·</span></>}
-                          <span>{SIZE[q.size].name}</span>
+                          <span>{q.size}</span>
+                          {stepCount(q) && <><span style={{ color: 'var(--color-accent-500)' }}>·</span><span className="tnum">{stepCount(q)} steps</span></>}
                         </div>
+                        <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
                         <div className="note-foot">
                           <span>+{v.xp} XP</span>
                           <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
@@ -167,7 +170,7 @@ function MobileZone({ zone }: { zone: QuadKey }) {
         {list.map((q) => {
           const v = questView(q, today, data.camps);
           return (
-            <button key={q.id} className="note" onClick={() => actions.openQuest(q.id)}
+            <div key={q.id} className="note" role="button" tabIndex={0} onClick={() => actions.openQuest(q.id)} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
               style={{ gap: 4, padding: '12px 12px 8px', border: 0, fontFamily: 'var(--font-body)', transform: 'rotate(' + noteRotation(q.id, 0.4, 2) + ')' }}>
               <span className="pin" />
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, width: '100%' }}>
@@ -176,10 +179,12 @@ function MobileZone({ zone }: { zone: QuadKey }) {
               </div>
               <div className="meta" style={{ gap: '6px 10px' }}>
                 {v.hasDue && <span style={{ color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
-                <span>{SIZE[q.size].name}</span>
+                <span>{q.size}</span>
+                {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
                 {v.campaignName && <span style={{ gap: 4, padding: '1px 7px', border: '1px solid var(--q-rule)', borderRadius: 3 }}><Icon n="flag" size={10} />{v.campaignName}</span>}
               </div>
-            </button>
+              <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
+            </div>
           );
         })}
         {!list.length && <p style={{ margin: '40px 0', textAlign: 'center', fontStyle: 'italic', color: 'var(--color-accent-200)' }}>No quests in this zone.</p>}
@@ -291,6 +296,7 @@ function CampaignView() {
                       <span>{q.size}</span>
                       <span className="tnum" style={{ marginLeft: 'auto', color: 'var(--color-accent-700)' }}>+{v.xp} XP</span>
                     </div>
+                    {!v.done && <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />}
                   </div>
                 );
               })}
@@ -389,7 +395,7 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{h.title}</div>
         <div className="meta">
-          <span>{EVERY_NAME[h.every]} · {SIZE[h.size].name} · +{habitReward(h).xp} XP</span>
+          <span>{EVERY_NAME[h.every]} · {h.size} · +{habitReward(h).xp} XP</span>
           <span style={{ color: streak ? 'var(--q-wax)' : undefined, gap: 4 }}><Icon n="repeat" size={12} />{streak ? streakText(streak, h.every) : 'No streak yet'}</span>
           {best > streak && <span>best {best}</span>}
         </div>

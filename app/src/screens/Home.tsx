@@ -3,6 +3,7 @@ import { glossaryEvents, habitDone, habitStreak } from '../domain/logic';
 import { EVERY_NAME, habitReward, heroName, QM, reward, streakText } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { Portrait, questView } from '../components/common';
+import { stepCount } from '../components/Steps';
 import { useStore } from '../state/store';
 
 export function Home() {
@@ -94,6 +95,7 @@ export function Home() {
                     <span style={{ color: v.quad.color }}><span className="dot" />{v.quad.name}</span>
                     <span style={{ color: checked ? 'var(--q-moss)' : v.dueColor }}>{checked ? 'Completed today' : v.dueLabel}</span>
                     {v.campaignName && <span style={{ gap: 4 }}><Icon n="flag" size={11} />{v.campaignName}</span>}
+                    {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
                   </div>
                 </div>
                 <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{v.xp} XP</span>

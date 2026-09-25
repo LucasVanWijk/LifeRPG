@@ -166,10 +166,14 @@ function useStoreValue() {
         // Only a change of campaign can finish or unfinish one.
         apply('campaign' in patch ? settleCampaigns(next, today) : { data: next, toasts: [], leveledUp: false });
       },
-      createQuest(q: Pick<Quest, 'title' | 'quad' | 'due' | 'campaign'>) {
+      createQuest(q: Omit<Quest, 'id'>) {
         const cur = d();
-        apply(settleCampaigns({ ...cur, quests: [...cur.quests, { id: nextId(cur.quests), size: 'M', status: 'todo', notes: [], ...q }] }, today));
-        showToast('Quest pinned', 'Added to ' + QM[q.quad].name);
+        apply(settleCampaigns({ ...cur, quests: [...cur.quests, { ...q, id: nextId(cur.quests) }] }, today));
+        showToast('Quest pinned', 'Added to ' + (q.campaign && cur.camps[q.campaign] ? cur.camps[q.campaign].name : QM[q.quad].name));
+      },
+      toggleStep(id: number, stepId: number) {
+        const q = d().quests.find((x) => x.id === id);
+        if (q) commit(patchQuest(d(), id, { steps: q.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) }));
       },
       deleteQuest(id: number) { apply(deleteQuest(d(), id, today)); setUi({ openId: null }); },
 

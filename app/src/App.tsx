@@ -5,9 +5,9 @@ import { Adventure } from './screens/Adventure';
 import { Glossary } from './screens/Glossary';
 import { Home } from './screens/Home';
 import { Quests } from './screens/Quests';
-import { CampaignSheet, NewQuestSheet } from './sheets/CreateSheets';
+import { CampaignSheet } from './sheets/CreateSheets';
 import { ProfileSheet, Welcome } from './sheets/ProfileSheet';
-import { QuestSheet } from './sheets/QuestSheet';
+import { NewQuestSheet, QuestSheet } from './sheets/QuestSheet';
 import { useStore, type Tab } from './state/store';
 
 const NAV: [Tab, string, IconName][] = [['home', 'Home', 'home'], ['quests', 'Quests', 'scroll'], ['glossary', 'Glossary', 'book-open'], ['adventure', 'Adventure', 'compass']];

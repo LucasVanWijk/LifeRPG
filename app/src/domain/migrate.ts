@@ -33,7 +33,7 @@ export function migrate(raw: unknown, today: string): Data | null {
   for (const q of d.quests) {
     const { recur, lastDone, prevDue, ...quest } = q;
     void prevDue;
-    if (!recur) { out.quests.push(quest); continue; }
+    if (!recur) { out.quests.push({ ...quest, notes: quest.notes ?? [], steps: quest.steps ?? [] }); continue; }
     const every: Every = recur.every === 'daily' ? 'daily' : 'weekly';
     const step = every === 'daily' ? 1 : 7;
     const log: string[] = [];

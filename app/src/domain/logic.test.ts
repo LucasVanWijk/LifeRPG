@@ -8,7 +8,7 @@ import { sampleData } from './sample';
 
 const T = '2026-09-25'; // a Friday
 const quest = (id: number, patch: Partial<Quest> = {}): Quest =>
-  ({ id, title: 'Q' + id, quad: 'side', due: null, size: 'S', campaign: null, status: 'todo', notes: [], ...patch });
+  ({ id, title: 'Q' + id, quad: 'side', due: null, size: 'S', campaign: null, status: 'todo', notes: [], steps: [], ...patch });
 
 describe('reward', () => {
   it('gives Main Quests the 1.5× multiplier', () => {
@@ -135,6 +135,12 @@ describe('migrate', () => {
     expect(d.quests.map((q) => q.id)).toEqual([1]);
     expect(d.habits[0]).toMatchObject({ title: 'Call mom', every: 'weekly' });
     expect(habitStreak(d.habits[0], T)).toBe(3);
+  });
+  it('gives older quests an empty checklist', () => {
+    const { steps, ...old } = quest(1);
+    void steps;
+    const d = migrate({ ...emptyData(), quests: [old] }, T)!;
+    expect(d.quests[0].steps).toEqual([]);
   });
   it('rejects things that are not a Questlog log', () => {
     expect(migrate({ foo: 1 }, T)).toBeNull();

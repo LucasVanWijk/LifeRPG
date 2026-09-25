@@ -18,7 +18,7 @@ export function sampleData(today: string): Data {
     : shortDate(d('2026-10-12')) + ' – ' + shortDate(d('2026-10-22'));
 
   const q = (id: number, title: string, quad: Quest['quad'], due: string | null, size: Quest['size'], campaign: string | null, status: Quest['status'], notes = ''): Quest =>
-    ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes) });
+    ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes), steps: [] });
 
   return {
     version: 2,
