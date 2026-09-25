@@ -1,15 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { todayISO } from '../domain/dates';
-import { completeQuest, patchQuest, setStatus, undoQuest } from '../domain/logic';
-import type { Campaign, Data, QuadKey, Quest, Status } from '../domain/model';
+import type { Outcome, Toast } from '../domain/logic';
+import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
+import { migrate } from '../domain/migrate';
+import type { Campaign, Data, Habit, Hero, QuadKey, Quest, Reward, Status } from '../domain/model';
 import { emptyData, QM } from '../domain/model';
 
-// v1 held the design's sample data; v2 starts every log empty.
+// v1 held the design's sample data; v2 starts every log empty. The data inside carries its own version (see migrate.ts).
 const STORAGE_KEY = 'questlog:v2';
 
 export type Tab = 'home' | 'quests' | 'glossary' | 'adventure';
-export type QuestView = 'board' | 'campaign';
+export type QuestView = 'board' | 'campaign' | 'habits';
 export type GlossaryCat = 'companions' | 'tomes' | 'codex';
+export type { Toast };
+
+export interface Confirm { title: string; body: string; confirmLabel: string; onConfirm: () => void }
 
 export interface Ui {
   tab: Tab;
@@ -19,7 +24,9 @@ export interface Ui {
   openId: number | null;
   sheetMode: 'view' | 'edit';
   newOpen: boolean;
-  newCampOpen: boolean;
+  /** 'new' for the New Campaign sheet, or the key of the campaign being edited. */
+  campSheet: string | null;
+  profileOpen: boolean;
   gCat: GlossaryCat;
   gSearch: string;
   gDetail: string | null;
@@ -28,18 +35,17 @@ export interface Ui {
   selDay: string;
   buyId: number | null;
   levelUp: boolean;
+  confirm: Confirm | null;
   dragId: number | null;
   dragOver: string | null;
 }
-
-export interface Toast { text: string; sub: string }
 
 function loadData(): Data {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
-      const d = JSON.parse(raw) as Data;
-      if (d && d.version === 1 && Array.isArray(d.quests)) return d;
+      const d = migrate(JSON.parse(raw), todayISO());
+      if (d) return d;
     }
   } catch {
     /* storage unavailable or corrupt: start a fresh log */
@@ -54,21 +60,23 @@ function initialUi(today: string): Ui {
   const quest = Number(p.get('quest'));
   return {
     tab: pick('screen', ['home', 'quests', 'glossary', 'adventure'] as const, 'home'),
-    questView: pick('view', ['board', 'campaign'] as const, 'board'),
+    questView: pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
     campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
     openId: quest > 0 ? quest : null,
     sheetMode: p.get('mode') === 'edit' ? 'edit' : 'view',
     newOpen: false,
-    newCampOpen: false,
+    campSheet: null,
+    profileOpen: false,
     gCat: pick('cat', ['companions', 'tomes', 'codex'] as const, 'companions'),
     gSearch: '',
     gDetail: p.get('detail'),
-    openTome: 'shows',
+    openTome: null,
     weekOffset: 0,
     selDay: today,
     buyId: null,
     levelUp: false,
+    confirm: null,
     dragId: null,
     dragOver: null,
   };
@@ -85,6 +93,8 @@ function useLayout() {
   return forced ? forced === 'desktop' : w >= 900;
 }
 
+const nextId = (xs: { id: number }[]) => Math.max(0, ...xs.map((x) => x.id)) + 1;
+
 function useStoreValue() {
   const [today, setToday] = useState(todayISO);
   const [data, setData] = useState<Data>(loadData);
@@ -92,6 +102,7 @@ function useStoreValue() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [lastToast, setLastToast] = useState<Toast>({ text: '', sub: '' });
   const toastTimer = useRef<number | undefined>(undefined);
+  const toastQueue = useRef<Toast[]>([]);
   const isDesk = useLayout();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -112,78 +123,114 @@ function useStoreValue() {
   const setUi = useCallback((patch: Partial<Ui> | ((u: Ui) => Partial<Ui>)) =>
     setUiState((u) => ({ ...u, ...(typeof patch === 'function' ? patch(u) : patch) })), []);
 
-  const showToast = useCallback((text: string, sub: string) => {
-    window.clearTimeout(toastTimer.current);
-    setToast({ text, sub });
-    setLastToast({ text, sub });
-    toastTimer.current = window.setTimeout(() => setToast(null), 2600);
+  // Toasts play one after another, so a quest's reward and its campaign's reward are both seen.
+  const playNext = useCallback(() => {
+    const t = toastQueue.current.shift();
+    if (!t) { setToast(null); return; }
+    setToast(t);
+    setLastToast(t);
+    toastTimer.current = window.setTimeout(playNext, 2600);
   }, []);
+  const showToasts = useCallback((ts: Toast[]) => {
+    if (!ts.length) return;
+    window.clearTimeout(toastTimer.current);
+    toastQueue.current = [...ts];
+    playNext();
+  }, [playNext]);
+  const showToast = useCallback((text: string, sub: string) => showToasts([{ text, sub }]), [showToasts]);
 
   // Reads the latest data synchronously so completion side effects (toast, level-up) fire once.
   const dataRef = useRef(data);
   dataRef.current = data;
   const commit = useCallback((d: Data) => { dataRef.current = d; setData(d); }, []);
+  const apply = useCallback((o: Outcome | null) => {
+    if (!o) return;
+    commit(o.data);
+    showToasts(o.toasts);
+    if (o.leveledUp) setUi({ levelUp: true });
+  }, [commit, showToasts, setUi]);
 
-  const announce = useCallback((c: ReturnType<typeof completeQuest>) => {
-    if (!c) return;
-    showToast('+' + c.xp + ' XP · +' + c.gold + ' gold', c.toastSub);
-    if (c.leveledUp) setUi({ levelUp: true });
-  }, [showToast, setUi]);
+  const actions = useMemo(() => {
+    const d = () => dataRef.current;
+    return {
+      // Quests
+      complete(id: number) { apply(completeQuest(d(), id, today)); },
+      undo(id: number) { apply(undoQuest(d(), id, today)); },
+      toggleToday(id: number) {
+        const q = d().quests.find((x) => x.id === id);
+        if (q) apply(q.doneOn === today ? undoQuest(d(), id, today) : completeQuest(d(), id, today));
+      },
+      setStatus(id: number, s: Status) { apply(setStatus(d(), id, s, today)); },
+      updateQuest(id: number, patch: Partial<Quest>) {
+        const next = patchQuest(d(), id, patch);
+        // Only a change of campaign can finish or unfinish one.
+        apply('campaign' in patch ? settleCampaigns(next, today) : { data: next, toasts: [], leveledUp: false });
+      },
+      createQuest(q: Pick<Quest, 'title' | 'quad' | 'due' | 'campaign'>) {
+        const cur = d();
+        apply(settleCampaigns({ ...cur, quests: [...cur.quests, { id: nextId(cur.quests), size: 'M', status: 'todo', notes: [], ...q }] }, today));
+        showToast('Quest pinned', 'Added to ' + QM[q.quad].name);
+      },
+      deleteQuest(id: number) { apply(deleteQuest(d(), id, today)); setUi({ openId: null }); },
 
-  const actions = useMemo(() => ({
-    complete(id: number) {
-      const c = completeQuest(dataRef.current, id, today);
-      if (c) { commit(c.data); announce(c); }
-    },
-    undo(id: number) { commit(undoQuest(dataRef.current, id, today)); },
-    toggleToday(id: number) {
-      const q = dataRef.current.quests.find((x) => x.id === id);
-      if (!q) return;
-      if (q.doneOn === today || q.lastDone === today) { commit(undoQuest(dataRef.current, id, today)); return; }
-      const c = completeQuest(dataRef.current, id, today);
-      if (c) { commit(c.data); announce(c); }
-    },
-    setStatus(id: number, s: Status) {
-      const r = setStatus(dataRef.current, id, s, today);
-      commit(r.data);
-      announce(r.completion);
-    },
-    updateQuest(id: number, patch: Partial<Quest>) { commit(patchQuest(dataRef.current, id, patch)); },
-    createQuest(q: Pick<Quest, 'title' | 'quad' | 'due' | 'campaign'>) {
-      const d = dataRef.current;
-      const id = Math.max(0, ...d.quests.map((x) => x.id)) + 1;
-      commit({ ...d, quests: [...d.quests, { id, size: 'M', status: 'todo', recur: null, notes: [], ...q }] });
-      showToast('Quest pinned', 'Added to ' + QM[q.quad].name);
-    },
-    createCampaign(c: Campaign) {
-      const d = dataRef.current, key = 'c' + Date.now();
-      commit({ ...d, camps: { ...d.camps, [key]: c } });
-      setUi({ campaign: key, questView: 'campaign', newCampOpen: false });
-      showToast('Campaign begun', c.name);
-    },
-    update(fn: (d: Data) => Data) { commit(fn(dataRef.current)); },
-    buy(id: number) {
-      const d = dataRef.current, r = d.rewards.find((x) => x.id === id);
-      if (!r || r.price > d.hero.gold) return;
-      commit({ ...d, hero: { ...d.hero, gold: d.hero.gold - r.price } });
-      setUi({ buyId: null });
-      showToast('Enjoy: ' + r.title, '−' + r.price + ' gold');
-    },
-    addReward(title: string, price: number) {
-      const d = dataRef.current;
-      commit({ ...d, rewards: [...d.rewards, { id: Date.now(), title, price }] });
-      showToast('Added to the Tavern', title + ' · ' + price + ' gold');
-    },
-    goTab(tab: Tab) {
-      setUi({ tab, mobileZone: null, gDetail: null, openId: null });
-      if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    },
-    goGlossary(detail: string) {
-      setUi({ tab: 'glossary', gDetail: detail, gSearch: '', openId: null });
-      if (scrollRef.current) scrollRef.current.scrollTop = 0;
-    },
-    openQuest(id: number) { setUi({ openId: id, newOpen: false, newCampOpen: false, sheetMode: 'view' }); },
-  }), [today, commit, announce, showToast, setUi]);
+      // Campaigns
+      createCampaign(c: Campaign) {
+        const key = 'c' + Date.now();
+        commit({ ...d(), camps: { ...d().camps, [key]: c } });
+        setUi({ campaign: key, questView: 'campaign', campSheet: null });
+        showToast('Campaign begun', c.name);
+      },
+      updateCampaign(key: string, patch: Partial<Campaign>) {
+        const c = d().camps[key];
+        if (c) commit({ ...d(), camps: { ...d().camps, [key]: { ...c, ...patch } } });
+      },
+      deleteCampaign(key: string) { commit(deleteCampaign(d(), key)); setUi({ campSheet: null, campaign: '' }); },
+
+      // Habits
+      toggleHabit(id: number) { apply(toggleHabit(d(), id, today)); },
+      createHabit(h: Pick<Habit, 'title' | 'every' | 'size'>) {
+        const cur = d();
+        commit({ ...cur, habits: [...cur.habits, { id: nextId(cur.habits), log: [], created: today, ...h }] });
+        showToast('Habit started', h.title);
+      },
+      updateHabit(id: number, patch: Partial<Habit>) { commit({ ...d(), habits: d().habits.map((h) => (h.id === id ? { ...h, ...patch } : h)) }); },
+      deleteHabit(id: number) { commit({ ...d(), habits: d().habits.filter((h) => h.id !== id) }); },
+
+      // Tavern
+      buy(id: number) {
+        const cur = d(), r = cur.rewards.find((x) => x.id === id);
+        if (!r || r.price > cur.hero.gold) return;
+        commit({ ...cur, hero: { ...cur.hero, gold: cur.hero.gold - r.price } });
+        setUi({ buyId: null });
+        showToast('Enjoy: ' + r.title, '−' + r.price + ' gold');
+      },
+      addReward(title: string, price: number) {
+        commit({ ...d(), rewards: [...d().rewards, { id: nextId(d().rewards), title, price }] });
+        showToast('Added to the Tavern', title + ' · ' + price + ' gold');
+      },
+      updateReward(id: number, patch: Partial<Reward>) { commit({ ...d(), rewards: d().rewards.map((r) => (r.id === id ? { ...r, ...patch } : r)) }); },
+      deleteReward(id: number) { commit({ ...d(), rewards: d().rewards.filter((r) => r.id !== id) }); },
+
+      // Profile and backup
+      updateHero(patch: Partial<Hero>) { commit({ ...d(), hero: { ...d().hero, ...patch } }); },
+      replaceData(next: Data) { commit(next); setUi({ openId: null, gDetail: null, campaign: '', profileOpen: false }); },
+
+      /** Generic edit for Glossary data that never pays out. */
+      update(fn: (d: Data) => Data) { commit(fn(d())); },
+      confirm(c: Confirm) { setUi({ confirm: c }); },
+
+      // Navigation
+      goTab(tab: Tab) {
+        setUi({ tab, mobileZone: null, gDetail: null, openId: null });
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      },
+      goGlossary(detail: string) {
+        setUi({ tab: 'glossary', gDetail: detail, gSearch: '', openId: null });
+        if (scrollRef.current) scrollRef.current.scrollTop = 0;
+      },
+      openQuest(id: number) { setUi({ openId: id, newOpen: false, campSheet: null, sheetMode: 'view' }); },
+    };
+  }, [today, commit, apply, showToast, setUi]);
 
   return { today, data, ui, setUi, toast, lastToast, isDesk, scrollRef, showToast, actions };
 }

@@ -1,8 +1,8 @@
 import { addDays, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
-import { glossaryEvents } from '../domain/logic';
-import { QM, reward, streakText } from '../domain/model';
+import { glossaryEvents, habitDone, habitStreak } from '../domain/logic';
+import { EVERY_NAME, habitReward, heroName, QM, reward, streakText } from '../domain/model';
 import { Icon } from '../components/Icon';
-import { questView } from '../components/common';
+import { Portrait, questView } from '../components/common';
 import { useStore } from '../state/store';
 
 export function Home() {
@@ -11,10 +11,12 @@ export function Home() {
   const active = data.quests.filter((q) => q.status !== 'done');
 
   const todayList = data.quests
-    .filter((q) => (q.status !== 'done' && q.due && q.due <= today && q.lastDone !== today) || q.doneOn === today || q.lastDone === today)
-    .map((q) => ({ q, checked: q.doneOn === today || q.lastDone === today }))
+    .filter((q) => (q.status !== 'done' && q.due && q.due <= today) || q.doneOn === today)
+    .map((q) => ({ q, checked: q.doneOn === today }))
     .sort((a, b) => Number(a.checked) - Number(b.checked) || (a.q.due || today).localeCompare(b.q.due || today));
   const doneToday = todayList.filter((t) => t.checked).length;
+  const habitsDone = data.habits.filter((h) => habitDone(h, today)).length;
+  const seals = Object.entries(data.camps).filter(([, c]) => c.completedOn);
 
   const dow = (parseDay(today).getDay() + 6) % 7;
   const mon = addDays(today, -dow + ui.weekOffset * 7), sun = addDays(mon, 6);
@@ -34,13 +36,14 @@ export function Home() {
       </header>
       <div className="home-grid">
         <section className="panel-framed hero-card">
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div className="portrait" style={{ width: 76, height: 76, fontSize: 38 }}>{hero.name[0]}</div>
-            <div style={{ minWidth: 0 }}>
-              <div className="heading" style={{ fontSize: 28, lineHeight: 1.05 }}>{hero.name}</div>
-              <div className="muted" style={{ fontStyle: 'italic', fontSize: 15 }}>Level {hero.level} Wanderer</div>
-            </div>
-          </div>
+          <button className="hero-btn" onClick={() => setUi({ profileOpen: true })} aria-label="Open your profile">
+            <Portrait hero={hero} size={76} fontSize={38} />
+            <span style={{ minWidth: 0, flex: 1 }}>
+              <span className="heading" style={{ display: 'block', fontSize: 28, lineHeight: 1.05 }}>{heroName(hero)}</span>
+              <span className="muted" style={{ fontStyle: 'italic', fontSize: 15 }}>Level {hero.level} Wanderer</span>
+            </span>
+            <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={18} /></span>
+          </button>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
             <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
               <span style={{ letterSpacing: '.12em', textTransform: 'uppercase', fontSize: 11 }}>Experience</span>
@@ -59,9 +62,21 @@ export function Home() {
             </span>
             <button className="btn btn-ghost" onClick={() => actions.goTab('adventure')} style={{ color: 'var(--color-accent-700)' }}>Visit the Tavern</button>
           </div>
+          {seals.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
+              <span className="label">Seals earned</span>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {seals.map(([k, c]) => (
+                  <button key={k} className="seal" title={c.seal + ' · ' + c.name} aria-label={c.seal + ', ' + c.name}
+                    onClick={() => { actions.goTab('quests'); setUi({ questView: 'campaign', campaign: k }); }}
+                    style={{ width: 34, height: 34, border: 0, cursor: 'pointer' }}><Icon n={c.icon} size={15} /></button>
+                ))}
+              </div>
+            </div>
+          )}
         </section>
 
-        <section className="panel today">
+        <section className="panel today home-today">
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
             <h3 style={{ fontSize: 24 }}>Today's Quests</h3>
             <span className="muted tnum" style={{ fontSize: 12 }}>{doneToday} of {todayList.length} done</span>
@@ -78,7 +93,6 @@ export function Home() {
                   <div className="meta">
                     <span style={{ color: v.quad.color }}><span className="dot" />{v.quad.name}</span>
                     <span style={{ color: checked ? 'var(--q-moss)' : v.dueColor }}>{checked ? 'Completed today' : v.dueLabel}</span>
-                    {q.recur && <span style={{ gap: 4, color: 'var(--q-wax)' }}><Icon n="repeat" size={12} />{streakText(q.recur)}</span>}
                     {v.campaignName && <span style={{ gap: 4 }}><Icon n="flag" size={11} />{v.campaignName}</span>}
                   </div>
                 </div>
@@ -87,6 +101,37 @@ export function Home() {
             );
           })}
           {!todayList.length && <p className="muted" style={{ margin: 0, padding: '14px 0', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic' }}>No quests due today.</p>}
+        </section>
+
+        <section className="panel today home-habits">
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
+            <h3 style={{ fontSize: 24 }}>Habits</h3>
+            {data.habits.length > 0 && <span className="muted tnum" style={{ fontSize: 12 }}>{habitsDone} of {data.habits.length} done</span>}
+          </div>
+          {data.habits.map((h) => {
+            const done = habitDone(h, today), streak = habitStreak(h, today);
+            return (
+              <div key={h.id} className="today-row">
+                <button className="today-check" onClick={() => actions.toggleHabit(h.id)} aria-label={(done ? 'Undo ' : 'Check in ') + h.title} aria-pressed={done}>
+                  <span className={'checkbox' + (done ? ' on' : '')} style={{ width: 22, height: 22, borderRadius: '50%' }}>{done && <Icon n="check" size={15} stroke={2.4} />}</span>
+                </button>
+                <div style={{ flex: 1, minWidth: 0, padding: '9px 0' }}>
+                  <div className="heading" style={{ fontSize: 19, lineHeight: 1.2, color: done ? 'var(--color-accent-700)' : 'var(--q-ink)' }}>{h.title}</div>
+                  <div className="meta">
+                    <span>{EVERY_NAME[h.every]}{h.every === 'weekly' && done ? ' · done this week' : ''}</span>
+                    {streak > 0 && <span style={{ gap: 4, color: 'var(--q-wax)' }}><Icon n="repeat" size={12} />{streakText(streak, h.every)}</span>}
+                  </div>
+                </div>
+                <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{habitReward(h).xp} XP</span>
+              </div>
+            );
+          })}
+          {!data.habits.length && (
+            <p className="muted" style={{ margin: 0, padding: '10px 0 12px', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>
+              No habits yet. <button className="btn btn-ghost" style={{ padding: '0 4px', fontStyle: 'normal', color: 'var(--color-accent-700)' }}
+                onClick={() => { actions.goTab('quests'); setUi({ questView: 'habits' }); }}>Start one</button>
+            </p>
+          )}
         </section>
 
         <section className="panel week">

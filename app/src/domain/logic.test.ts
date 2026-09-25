@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { addMonths, dueLabel } from './dates';
-import { completeQuest, glossaryEvents, setStatus, undoQuest } from './logic';
-import { reward } from './model';
-import { emptyData } from './model';
+import { bestStreak, completeQuest, deleteCampaign, deleteQuest, glossaryEvents, habitStreak, periodOf, setStatus, toggleHabit, undoQuest } from './logic';
+import { migrate } from './migrate';
+import type { Data, Habit, Quest } from './model';
+import { emptyData, habitReward, reward } from './model';
 import { sampleData } from './sample';
 
-const T = '2026-09-25';
+const T = '2026-09-25'; // a Friday
+const quest = (id: number, patch: Partial<Quest> = {}): Quest =>
+  ({ id, title: 'Q' + id, quad: 'side', due: null, size: 'S', campaign: null, status: 'todo', notes: [], ...patch });
 
 describe('reward', () => {
   it('gives Main Quests the 1.5× multiplier', () => {
@@ -13,33 +16,22 @@ describe('reward', () => {
     expect(reward({ size: 'L', quad: 'side' })).toEqual({ xp: 40, gold: 13 });
     expect(reward({ size: 'S', quad: 'crisis' })).toEqual({ xp: 25, gold: 8 });
   });
+  it('pays habits half a quest of the same size', () => {
+    expect(habitReward({ size: 'M' })).toEqual({ xp: 20, gold: 7 });
+  });
 });
 
 describe('completeQuest / undoQuest', () => {
-  it('pays out a one-off quest and reverses it exactly', () => {
+  it('pays out a quest and reverses it exactly', () => {
     const d = sampleData(T);
     const c = completeQuest(d, 8, T)!; // Pay car insurance: crisis S → 25 XP, 8 gold
-    expect(c.xp).toBe(25);
+    expect(c.toasts[0]).toEqual({ text: '+25 XP · +8 gold', sub: 'Pay car insurance' });
     expect(c.data.hero).toMatchObject({ xp: 365, gold: 433, level: 7 });
-    const q = c.data.quests.find((x) => x.id === 8)!;
-    expect(q).toMatchObject({ status: 'done', doneOn: T, prevStatus: 'todo' });
+    expect(c.data.quests.find((x) => x.id === 8)).toMatchObject({ status: 'done', doneOn: T, prevStatus: 'todo' });
     expect(completeQuest(c.data, 8, T)).toBeNull();
-
-    const u = undoQuest(c.data, 8, T);
+    const u = undoQuest(c.data, 8, T).data;
     expect(u.hero).toEqual(d.hero);
     expect(u.quests.find((x) => x.id === 8)!.status).toBe('todo');
-  });
-
-  it('rolls a weekly bounty forward and extends its streak', () => {
-    const d = sampleData(T);
-    const c = completeQuest(d, 3, T)!; // Call mom, weekly, streak 3
-    const q = c.data.quests.find((x) => x.id === 3)!;
-    expect(q.due).toBe('2026-10-02');
-    expect(q.recur).toEqual({ every: 'weekly', streak: 4 });
-    expect(c.toastSub).toBe('Call mom · 4-week streak');
-    const u = undoQuest(c.data, 3, T).quests.find((x) => x.id === 3)!;
-    expect(u.due).toBe(T);
-    expect(u.recur!.streak).toBe(3);
   });
 
   it('levels up and carries the overflow', () => {
@@ -49,13 +41,9 @@ describe('completeQuest / undoQuest', () => {
     expect(c.leveledUp).toBe(true);
     expect(c.data.hero).toMatchObject({ level: 8, xp: 95, next: 600 });
   });
-});
 
-describe('emptyData', () => {
-  it('starts a fresh log that levels from 1', () => {
-    const d = emptyData();
-    expect(d.quests).toHaveLength(0);
-    d.quests.push({ id: 1, title: 'First steps', quad: 'main', due: null, size: 'L', campaign: null, status: 'todo', recur: null, notes: [] });
+  it('starts a fresh log at level 1', () => {
+    const d: Data = { ...emptyData(), quests: [quest(1, { quad: 'main', size: 'L' })] };
     const c = completeQuest(d, 1, T)!;
     expect(c.leveledUp).toBe(true);
     expect(c.data.hero).toMatchObject({ level: 2, xp: 5, next: 200, gold: 35 });
@@ -66,10 +54,91 @@ describe('setStatus', () => {
   it('pays when dragged to Done and refunds when dragged back', () => {
     const d = sampleData(T);
     const a = setStatus(d, 9, 'done', T);
-    expect(a.completion?.xp).toBe(60);
+    expect(a.toasts[0].text).toBe('+60 XP · +20 gold');
     const b = setStatus(a.data, 9, 'doing', T);
     expect(b.data.hero).toEqual(d.hero);
     expect(b.data.quests.find((x) => x.id === 9)!.status).toBe('doing');
+  });
+});
+
+describe('campaign rewards', () => {
+  const camp = { name: 'Trip', short: 'Trip', desc: '', xp: 250, gold: 100, seal: "Wayfarer's seal", icon: 'compass' as const };
+  const withCamp = (): Data => ({ ...emptyData(), camps: { trip: { ...camp } }, quests: [quest(1, { campaign: 'trip', status: 'done' }), quest(2, { campaign: 'trip' })] });
+
+  it('pays the reward when the last quest is done', () => {
+    const c = completeQuest(withCamp(), 2, T)!;
+    expect(c.data.camps.trip.completedOn).toBe(T);
+    expect(c.toasts.map((t) => t.text)).toEqual(['+10 XP · +3 gold', 'Campaign complete · Trip']);
+    expect(c.data.hero).toMatchObject({ gold: 103, level: 2, xp: 160 });
+  });
+
+  it('takes the reward back if reopened the same day, keeps it on later days', () => {
+    const c = completeQuest(withCamp(), 2, T)!;
+    const same = undoQuest(c.data, 2, T).data;
+    expect(same.camps.trip.completedOn).toBeNull();
+    expect(same.hero.gold).toBe(0);
+    const later = undoQuest(c.data, 2, '2026-09-26').data;
+    expect(later.camps.trip.completedOn).toBe(T);
+    expect(later.hero.gold).toBe(100);
+  });
+
+  it('keeps the reward when finished quests are deleted', () => {
+    const c = completeQuest(withCamp(), 2, T)!;
+    const d = deleteQuest(deleteQuest(c.data, 1, T).data, 2, T).data;
+    expect(d.camps.trip.completedOn).toBe(T);
+    expect(d.hero.gold).toBe(103);
+  });
+
+  it('keeps quests when a campaign is deleted', () => {
+    const d = deleteCampaign(withCamp(), 'trip');
+    expect(d.camps).toEqual({});
+    expect(d.quests.map((q) => q.campaign)).toEqual([null, null]);
+  });
+});
+
+describe('habits', () => {
+  const h = (patch: Partial<Habit>): Habit => ({ id: 1, title: 'Read', every: 'daily', size: 'S', log: [], created: T, ...patch });
+
+  it('groups weekly check-ins by the Monday of the week', () => {
+    expect(periodOf('2026-09-27', 'weekly')).toBe('2026-09-21');
+    expect(periodOf('2026-09-21', 'weekly')).toBe('2026-09-21');
+  });
+
+  it('counts streaks back from today, or from yesterday while today is open', () => {
+    const daily = h({ log: ['2026-09-22', '2026-09-23', '2026-09-24'] });
+    expect(habitStreak(daily, T)).toBe(3);
+    expect(habitStreak(daily, '2026-09-26')).toBe(0);
+    const weekly = h({ every: 'weekly', log: ['2026-09-01', '2026-09-10', '2026-09-16'] });
+    expect(habitStreak(weekly, T)).toBe(3);
+    expect(bestStreak(h({ log: ['2026-09-01', '2026-09-02', '2026-09-05', '2026-09-06', '2026-09-07'] }))).toBe(3);
+  });
+
+  it('checks in once per period and undoes cleanly', () => {
+    const d: Data = { ...emptyData(), habits: [h({ log: ['2026-09-24'] })] };
+    const a = toggleHabit(d, 1, T);
+    expect(a.toasts[0]).toEqual({ text: '+10 XP · +3 gold', sub: 'Read · 2-day streak' });
+    expect(a.data.habits[0].log).toEqual(['2026-09-24', T]);
+    const b = toggleHabit(a.data, 1, T);
+    expect(b.data.habits[0].log).toEqual(['2026-09-24']);
+    expect(b.data.hero).toEqual(d.hero);
+  });
+});
+
+describe('migrate', () => {
+  it('turns version-1 bounties into habits with their streak', () => {
+    const v1 = {
+      version: 1, hero: { name: 'Rowan', xp: 0, level: 1, next: 100, gold: 0 }, camps: {}, companions: [], tomes: [], codex: [], rewards: [],
+      quests: [quest(1), { ...quest(2, { title: 'Call mom' }), recur: { every: 'weekly', streak: 3 } }],
+    };
+    const d = migrate(v1, T)!;
+    expect(d.version).toBe(2);
+    expect(d.quests.map((q) => q.id)).toEqual([1]);
+    expect(d.habits[0]).toMatchObject({ title: 'Call mom', every: 'weekly' });
+    expect(habitStreak(d.habits[0], T)).toBe(3);
+  });
+  it('rejects things that are not a Questlog log', () => {
+    expect(migrate({ foo: 1 }, T)).toBeNull();
+    expect(migrate('nope', T)).toBeNull();
   });
 });
 

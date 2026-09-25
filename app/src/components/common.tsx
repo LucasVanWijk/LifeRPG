@@ -1,7 +1,7 @@
-import type { CSSProperties, KeyboardEvent, ReactNode } from 'react';
+import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { dayDiff, dueLabel } from '../domain/dates';
-import type { Campaign, Quest } from '../domain/model';
-import { QM, reward } from '../domain/model';
+import type { Campaign, Hero, Quest } from '../domain/model';
+import { heroName, QM, reward } from '../domain/model';
 import { Icon } from './Icon';
 
 /** Display fields shared by every quest card. */
@@ -100,3 +100,36 @@ export function DoneBanner({ onReopen }: { onReopen: () => void }) {
 
 /** Enter submits in single-line add fields. */
 export const onEnter = (fn: () => void) => (e: KeyboardEvent) => { if (e.key === 'Enter') fn(); };
+
+/** The hero's portrait: their picture if they chose one, otherwise a monogram. */
+export function Portrait({ hero, size, fontSize }: { hero: Hero; size: number; fontSize: number }) {
+  return (
+    <span className="portrait" style={{ width: size, height: size, fontSize, overflow: 'hidden' }}>
+      {hero.portrait
+        ? <img src={hero.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', padding: 5 }} />
+        : heroName(hero)[0]}
+    </span>
+  );
+}
+
+export function Empty({ children }: { children: ReactNode }) {
+  return <p className="muted" style={{ margin: 0, padding: '14px 0', fontStyle: 'italic', fontSize: 14 }}>{children}</p>;
+}
+
+/** A dashed "add" button that opens an inline form; onSave returns false to keep the form open. */
+export function AddForm({ label, children, onSave, onCancel, invalid }: { label: string; children: ReactNode; onSave: () => boolean; onCancel: () => void; invalid: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return <button className="dashed-btn" onClick={() => setOpen(true)} style={{ gap: 8, minHeight: 50, marginTop: 10, fontSize: 17 }}><Icon n="plus" size={17} />{label}</button>;
+  }
+  return (
+    <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, padding: 14 }}>
+      {children}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button className="btn btn-secondary" onClick={() => { onCancel(); setOpen(false); }} style={{ minHeight: 42 }}>Cancel</button>
+        <button className="btn btn-primary inked" onClick={() => { if (onSave()) setOpen(false); }} disabled={invalid} style={{ minHeight: 42 }}>Add</button>
+      </div>
+    </div>
+  );
+}
+

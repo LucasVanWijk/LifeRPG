@@ -1,10 +1,10 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
 import { dayDiff, MONL, nextAnnual, shortDate } from '../domain/dates';
 import { glossaryEvents } from '../domain/logic';
-import type { Companion, CodexEntry, Data } from '../domain/model';
+import type { Companion, CodexEntry, CodexField, Data } from '../domain/model';
 import { CODEX_ICONS } from '../domain/model';
 import { Icon, type IconName } from '../components/Icon';
-import { onEnter, Seg } from '../components/common';
+import { AddForm, Empty, onEnter, Seg } from '../components/common';
 import { useStore, type GlossaryCat } from '../state/store';
 
 export function Glossary() {
@@ -167,11 +167,22 @@ function TomeList() {
                       onChange={(e) => { const v = e.target.value; updTome(t.id, (items) => items.map((y) => (y.id === i.id ? { ...y, t: v } : y))); }}
                       onBlur={() => { if (!i.t.trim()) updTome(t.id, (items) => items.filter((y) => y.id !== i.id)); }}
                       style={{ color: i.done ? 'var(--color-accent-700)' : 'var(--q-ink)', textDecoration: i.done ? 'line-through' : 'none' }} />
+                    <button className="icon-btn" onClick={() => updTome(t.id, (items) => items.filter((y) => y.id !== i.id))} aria-label={'Remove ' + i.t} style={{ width: 32, height: 32 }}><Icon n="x" size={14} /></button>
                   </div>
                 ))}
                 <div style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid var(--q-rule)' }}>
                   <input className="input" placeholder="Add an item" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={onEnter(add)} style={{ minHeight: 42 }} />
                   <button className="btn btn-primary btn-icon" onClick={add} aria-label="Add item" style={{ width: 42, height: 42, flex: 'none' }}><Icon n="plus" size={18} /></button>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--q-rule)' }}>
+                  <label className="label" htmlFor={'tn-' + t.id} style={{ flex: 'none' }}>Tome name</label>
+                  <input id={'tn-' + t.id} className="bare-input" value={t.name} style={{ fontSize: 14 }}
+                    onChange={(e) => { const v = e.target.value; actions.update((d) => ({ ...d, tomes: d.tomes.map((x) => (x.id === t.id ? { ...x, name: v } : x)) })); }}
+                    onBlur={() => { if (!t.name.trim()) actions.update((d) => ({ ...d, tomes: d.tomes.map((x) => (x.id === t.id ? { ...x, name: 'Untitled tome' } : x)) })); }} />
+                  <button className="danger-btn" style={{ minHeight: 36, padding: '4px 10px', fontSize: 14 }} onClick={() => actions.confirm({
+                    title: 'Delete “' + t.name + '”?', body: 'The tome and its ' + t.items.length + (t.items.length === 1 ? ' item' : ' items') + ' will be gone.', confirmLabel: 'Delete tome',
+                    onConfirm: () => actions.update((d) => ({ ...d, tomes: d.tomes.filter((x) => x.id !== t.id) })),
+                  })}>Delete</button>
                 </div>
               </div>
             )}
@@ -228,27 +239,6 @@ function CodexList() {
   );
 }
 
-function Empty({ children }: { children: ReactNode }) {
-  return <p className="muted" style={{ margin: 0, padding: '14px 0', fontStyle: 'italic', fontSize: 14 }}>{children}</p>;
-}
-
-/** A dashed "add" button that opens an inline form; onSave returns false to keep the form open. */
-function AddForm({ label, children, onSave, onCancel, invalid }: { label: string; children: ReactNode; onSave: () => boolean; onCancel: () => void; invalid: boolean }) {
-  const [open, setOpen] = useState(false);
-  if (!open) {
-    return <button className="dashed-btn" onClick={() => setOpen(true)} style={{ gap: 8, minHeight: 50, marginTop: 10, fontSize: 17 }}><Icon n="plus" size={17} />{label}</button>;
-  }
-  return (
-    <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, padding: 14 }}>
-      {children}
-      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-        <button className="btn btn-secondary" onClick={() => { onCancel(); setOpen(false); }} style={{ minHeight: 42 }}>Cancel</button>
-        <button className="btn btn-primary inked" onClick={() => { if (onSave()) setOpen(false); }} disabled={invalid} style={{ minHeight: 42 }}>Add</button>
-      </div>
-    </div>
-  );
-}
-
 function BackButton({ label, cat }: { label: string; cat: GlossaryCat }) {
   const { setUi } = useStore();
   return (
@@ -259,16 +249,32 @@ function BackButton({ label, cat }: { label: string; cat: GlossaryCat }) {
 }
 
 function CompanionDetail({ c }: { c: Companion }) {
-  const { today, actions } = useStore();
+  const { today, actions, setUi } = useStore();
   const [draft, setDraft] = useState('');
   const [date, setDate] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [name, setName] = useState(c.name);
+  const [rel, setRel] = useState(c.rel);
+  // Birthdays keep only month and day; the date field needs a year, so a leap year stands in.
+  const [bday, setBday] = useState(c.bday ? '2000-' + c.bday : '');
+  const updC = (fn: (x: Companion) => Companion) => actions.update((d) => ({ ...d, companions: d.companions.map((x) => (x.id === c.id ? fn(x) : x)) }));
+  const save = () => {
+    const n = name.trim();
+    if (!n) return;
+    updC((x) => ({ ...x, name: n, first: n.split(' ')[0], rel: rel.trim(), bday: bday ? bday.slice(5) : '' }));
+    setEditing(false);
+  };
+  const remove = () => actions.confirm({
+    title: 'Remove ' + c.name + '?', body: 'Their notes and dates leave the Glossary and your week.', confirmLabel: 'Remove companion',
+    onConfirm: () => { actions.update((d) => ({ ...d, companions: d.companions.filter((x) => x.id !== c.id) })); setUi({ gDetail: null, gCat: 'companions' }); },
+  });
   const [bm, bd] = c.bday ? c.bday.split('-').map(Number) : [0, 0];
   const inDays = c.bday ? dayDiff(nextAnnual(c.bday, today), today) : null;
   const add = () => {
     const t = draft.trim();
     if (!t) return;
     const n = date ? { t, date, label: c.first + ' → ' + t } : { t };
-    actions.update((d) => ({ ...d, companions: d.companions.map((x) => (x.id === c.id ? { ...x, notes: [...x.notes, n] } : x)) }));
+    updC((x) => ({ ...x, notes: [...x.notes, n] }));
     setDraft('');
     setDate('');
   };
@@ -277,8 +283,24 @@ function CompanionDetail({ c }: { c: Companion }) {
       <BackButton label="Companions" cat="companions" />
       <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
         <div className="portrait" style={{ width: 84, height: 84, fontSize: 40 }}>{c.name[0]}</div>
-        <div><h2 style={{ fontSize: 32 }}>{c.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{c.rel}</div></div>
+        <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ fontSize: 32 }}>{c.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{c.rel}</div></div>
+        {!editing && <button className="btn btn-secondary" onClick={() => setEditing(true)} style={{ minHeight: 40 }}><Icon n="pencil" size={14} />Edit</button>}
       </div>
+      {editing && (
+        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14 }}>
+          <div className="field"><label htmlFor="ec-name">Name</label><input id="ec-name" className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ minHeight: 44 }} /></div>
+          <div className="two-col">
+            <div className="field"><label htmlFor="ec-rel">Relation</label><input id="ec-rel" className="input" value={rel} onChange={(e) => setRel(e.target.value)} style={{ minHeight: 44 }} /></div>
+            <div className="field"><label htmlFor="ec-bday">Birthday</label><input id="ec-bday" className="input" type="date" value={bday} onChange={(e) => setBday(e.target.value)} style={{ minHeight: 44 }} /></div>
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <button className="danger-btn" onClick={remove}>Remove</button>
+            <span style={{ flex: 1 }} />
+            <button className="btn btn-secondary" onClick={() => { setEditing(false); setName(c.name); setRel(c.rel); setBday(c.bday ? '2000-' + c.bday : ''); }} style={{ minHeight: 42 }}>Cancel</button>
+            <button className="btn btn-primary inked" onClick={save} disabled={!name.trim()} style={{ minHeight: 42 }}>Save</button>
+          </div>
+        </div>
+      )}
       <div className="facts" style={{ borderTop: '1px solid var(--q-rule)', borderBottom: '1px solid var(--q-rule)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '12px 0' }}>
           <span className="label">Birthday</span>
@@ -298,6 +320,7 @@ function CompanionDetail({ c }: { c: Companion }) {
             <span className="bullet" />
             <span style={{ flex: 1, fontSize: 15, textWrap: 'pretty' }}>{n.t}</span>
             {n.date && <span className="pill" style={{ flex: 'none' }}><Icon n="calendar" size={12} />{shortDate(n.date)}</span>}
+            <button className="icon-btn" onClick={() => updC((x) => ({ ...x, notes: x.notes.filter((_, j) => j !== i) }))} aria-label="Remove note" style={{ width: 30, height: 30, marginTop: -3 }}><Icon n="x" size={14} /></button>
           </div>
         ))}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
@@ -311,23 +334,80 @@ function CompanionDetail({ c }: { c: Companion }) {
 }
 
 function CodexDetail({ x }: { x: CodexEntry }) {
-  const { actions } = useStore();
+  const { actions, setUi } = useStore();
   const [k, setK] = useState('');
   const [v, setV] = useState('');
   const [date, setDate] = useState('');
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState<CodexEntry>(x);
+  const updX = (fn: (y: CodexEntry) => CodexEntry) => actions.update((d) => ({ ...d, codex: d.codex.map((y) => (y.id === x.id ? fn(y) : y)) }));
   const add = () => {
     const key = k.trim(), val = v.trim();
     if (!key || !(val || date)) return;
     const f = date ? { k: key, v: val || shortDate(date), date, label: x.name + ' → ' + key } : { k: key, v: val };
-    actions.update((d) => ({ ...d, codex: d.codex.map((y) => (y.id === x.id ? { ...y, fields: [...y.fields, f] } : y)) }));
+    updX((y) => ({ ...y, fields: [...y.fields, f] }));
     setK(''); setV(''); setDate('');
   };
+  const startEdit = () => { setDraft(x); setEditing(true); };
+  const setField = (i: number, patch: Partial<CodexField>) => setDraft((dr) => ({ ...dr, fields: dr.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) }));
+  const save = () => {
+    if (!draft.name.trim()) return;
+    const name = draft.name.trim();
+    updX(() => ({
+      ...draft, name, sub: draft.sub.trim(),
+      fields: draft.fields.filter((f) => f.k.trim()).map((f) => (f.date ? { ...f, k: f.k.trim(), label: name + ' → ' + f.k.trim() } : { k: f.k.trim(), v: f.v })),
+    }));
+    setEditing(false);
+  };
+  const remove = () => actions.confirm({
+    title: 'Delete “' + x.name + '”?', body: 'The entry and all its details will be gone.', confirmLabel: 'Delete entry',
+    onConfirm: () => { actions.update((d) => ({ ...d, codex: d.codex.filter((y) => y.id !== x.id) })); setUi({ gDetail: null, gCat: 'codex' }); },
+  });
+
+  if (editing) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <BackButton label="Codex" cat="codex" />
+        <div className="field"><label htmlFor="ex-name">Name</label><input id="ex-name" className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} style={{ minHeight: 44 }} /></div>
+        <div className="field"><label htmlFor="ex-sub">Subtitle</label><input id="ex-sub" className="input" value={draft.sub} onChange={(e) => setDraft({ ...draft, sub: e.target.value })} style={{ minHeight: 44 }} /></div>
+        <div className="field"><label>Icon</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CODEX_ICONS.map((ic) => (
+              <button key={ic} className="chip" aria-pressed={draft.icon === ic} aria-label={ic} onClick={() => setDraft({ ...draft, icon: ic })} style={{ width: 44, height: 44, justifyContent: 'center' }}><Icon n={ic} size={19} /></button>
+            ))}
+          </div>
+        </div>
+        <div className="field"><label>Details</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {draft.fields.map((f, i) => (
+              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
+                <input className="input" aria-label="Detail label" value={f.k} onChange={(e) => setField(i, { k: e.target.value })} style={{ flex: '1 1 110px', minHeight: 42, fontSize: 13 }} />
+                {f.date
+                  ? <input className="input" type="date" aria-label="Date" value={f.date} onChange={(e) => e.target.value && setField(i, { date: e.target.value, v: shortDate(e.target.value) })} style={{ flex: '2 1 150px', minHeight: 42 }} />
+                  : <input className="input" aria-label="Detail value" value={f.v} onChange={(e) => setField(i, { v: e.target.value })} style={{ flex: '2 1 150px', minHeight: 42 }} />}
+                <button className="icon-btn" onClick={() => setDraft({ ...draft, fields: draft.fields.filter((_, j) => j !== i) })} aria-label={'Remove ' + f.k}><Icon n="x" size={15} /></button>
+              </div>
+            ))}
+            {!draft.fields.length && <span className="muted" style={{ fontSize: 13, fontStyle: 'italic' }}>No details.</span>}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="danger-btn" onClick={remove}>Delete entry</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn btn-secondary" onClick={() => setEditing(false)} style={{ minHeight: 42 }}>Cancel</button>
+          <button className="btn btn-primary inked" onClick={save} disabled={!draft.name.trim()} style={{ minHeight: 42 }}>Save</button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <BackButton label="Codex" cat="codex" />
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
         <span className="icon-box" style={{ width: 64, height: 64, boxShadow: 'inset 0 0 0 4px var(--q-parch), inset 0 0 0 5px var(--q-rule)' }}><Icon n={x.icon} size={28} /></span>
-        <div style={{ minWidth: 0 }}><h2 style={{ fontSize: 30, textWrap: 'pretty' }}>{x.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{x.sub}</div></div>
+        <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ fontSize: 30, textWrap: 'pretty' }}>{x.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{x.sub}</div></div>
+        <button className="btn btn-secondary" onClick={startEdit} style={{ minHeight: 40 }}><Icon n="pencil" size={14} />Edit</button>
       </div>
       <dl style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
         {x.fields.map((f, i) => (
