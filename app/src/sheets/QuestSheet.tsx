@@ -90,7 +90,7 @@ function QuestForm({ q, set, isNew, onStatus }: { q: Omit<Quest, 'id'>; set: (pa
         </select>
       </div>
       {camp && onStatus && (
-        <div className="field"><label>Status in {camp.short}</label>
+        <div className="field"><label>Status in {camp.name}</label>
           <Seg name="q-status" value={q.status} onChange={onStatus} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', width: '100%' }}
             optStyle={{ justifyContent: 'center', minHeight: 42 }} options={STATUSES.map(([k, n]) => ({ key: k, label: n }))} />
         </div>

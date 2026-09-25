@@ -16,7 +16,7 @@ export function questView(q: Quest, today: string, camps: Record<string, Campaig
     hasDue: !!q.due && !done,
     dueLabel: q.due ? dueLabel(q.due, today) : '',
     dueColor: overdue ? 'var(--q-wax)' : 'var(--color-accent-800)',
-    campaignName: c ? c.short : '',
+    campaignName: c ? c.name : '',
     quad: QM[q.quad],
   };
 }

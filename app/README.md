@@ -47,7 +47,9 @@ The first screen can be picked with query parameters, matching the frames in the
 ## Notes
 
 - To start over, clear the site's `localStorage`.
-- **Quests and habits are separate.** Quests are one-off tasks on the board. Habits repeat daily or weekly, are checked in on Home, and pay half a quest of the same size. A streak counts periods in a row.
+- **Quests and habits are separate.** Quests are one-off tasks on the board, optionally with a checklist of steps; ticking the last step offers to complete the quest. Habits repeat daily, or weekly with a target of 1–7 days a week; they are checked in on Home and pay half a quest of the same size. A streak counts periods in a row that met the target.
+- **Home** shows Today's Quests, Up next (open Main Quests that aren't due today), habits, the week, and a reminder when the last backup is more than 14 days old. History (from the character card) lists everything completed by week.
+- **Undo:** completing a quest, checking in a habit or deleting a quest shows an Undo button on the message for five seconds.
 - **Campaign rewards** are paid when the campaign's last quest is done, and the seal shows on Home. Reopening or adding a quest the same day takes the reward back; after that the seal is kept.
 - **Undoing** a completion takes its XP and gold back but never removes a level.
 - **Offline:** the service worker only runs in production builds (`npm run build && npm run preview`) and needs HTTPS or localhost. To install on a phone, host `dist/` on any static HTTPS host.

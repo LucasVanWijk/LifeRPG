@@ -25,8 +25,11 @@ export interface Quest {
   prevStatus?: Status | null;
 }
 
-/** A repeating habit, checked in once per day or once per week. `log` holds the days it was done. */
-export interface Habit { id: number; title: string; every: Every; size: SizeKey; log: string[]; created: string }
+/**
+ * A repeating habit. Daily habits are checked in once a day; weekly ones `target` times a week
+ * (on different days). `log` holds the days it was done.
+ */
+export interface Habit { id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string }
 
 export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;

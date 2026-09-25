@@ -14,7 +14,8 @@ export type QuestView = 'board' | 'campaign' | 'habits';
 export type GlossaryCat = 'companions' | 'tomes' | 'codex';
 export type { Toast };
 
-export interface Confirm { title: string; body: string; confirmLabel: string; onConfirm: () => void }
+/** tone 'go' shows the confirm button as a normal action instead of a destructive one. */
+export interface Confirm { title: string; body: string; confirmLabel: string; cancelLabel?: string; tone?: 'danger' | 'go'; onConfirm: () => void }
 
 export interface Ui {
   tab: Tab;
@@ -27,6 +28,7 @@ export interface Ui {
   /** 'new' for the New Campaign sheet, or the key of the campaign being edited. */
   campSheet: string | null;
   profileOpen: boolean;
+  chronicleOpen: boolean;
   gCat: GlossaryCat;
   gSearch: string;
   gDetail: string | null;
@@ -68,6 +70,7 @@ function initialUi(today: string): Ui {
     newOpen: false,
     campSheet: null,
     profileOpen: false,
+    chronicleOpen: false,
     gCat: pick('cat', ['companions', 'tomes', 'codex'] as const, 'companions'),
     gSearch: '',
     gDetail: p.get('detail'),
@@ -103,6 +106,8 @@ function useStoreValue() {
   const [lastToast, setLastToast] = useState<Toast>({ text: '', sub: '' });
   const toastTimer = useRef<number | undefined>(undefined);
   const toastQueue = useRef<Toast[]>([]);
+  // The data just before and after the last undoable action; Undo only applies while nothing else has changed.
+  const undoRef = useRef<{ before: Data; after: Data } | null>(null);
   const isDesk = useLayout();
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -129,7 +134,7 @@ function useStoreValue() {
     if (!t) { setToast(null); return; }
     setToast(t);
     setLastToast(t);
-    toastTimer.current = window.setTimeout(playNext, 2600);
+    toastTimer.current = window.setTimeout(playNext, t.undo ? 5000 : 2600);
   }, []);
   const showToasts = useCallback((ts: Toast[]) => {
     if (!ts.length) return;
@@ -145,7 +150,9 @@ function useStoreValue() {
   const commit = useCallback((d: Data) => { dataRef.current = d; setData(d); }, []);
   const apply = useCallback((o: Outcome | null) => {
     if (!o) return;
+    const before = dataRef.current;
     commit(o.data);
+    if (o.toasts.some((t) => t.undo)) undoRef.current = { before, after: o.data };
     showToasts(o.toasts);
     if (o.leveledUp) setUi({ levelUp: true });
   }, [commit, showToasts, setUi]);
@@ -173,9 +180,36 @@ function useStoreValue() {
       },
       toggleStep(id: number, stepId: number) {
         const q = d().quests.find((x) => x.id === id);
-        if (q) commit(patchQuest(d(), id, { steps: q.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s)) }));
+        if (!q) return;
+        const steps = q.steps.map((s) => (s.id === stepId ? { ...s, done: !s.done } : s));
+        commit(patchQuest(d(), id, { steps }));
+        // Ticking the last step offers to finish the quest.
+        if (q.status !== 'done' && steps.every((s) => s.done) && steps.find((s) => s.id === stepId)?.done) {
+          setUi({ confirm: {
+            title: 'All steps done', body: '“' + q.title + '” has every step ticked. Complete the quest?',
+            confirmLabel: 'Complete quest', cancelLabel: 'Not yet', tone: 'go',
+            onConfirm: () => { apply(completeQuest(dataRef.current, id, today)); setUi({ openId: null }); },
+          } });
+        }
       },
-      deleteQuest(id: number) { apply(deleteQuest(d(), id, today)); setUi({ openId: null }); },
+      deleteQuest(id: number) {
+        const q = d().quests.find((x) => x.id === id);
+        const o = deleteQuest(d(), id, today);
+        apply({ ...o, toasts: [...o.toasts, { text: 'Quest deleted', sub: q?.title ?? '', undo: true }] });
+        setUi({ openId: null });
+      },
+      /** Reverses the last completion, check-in or delete, if nothing has changed since. */
+      undoLast() {
+        const u = undoRef.current;
+        window.clearTimeout(toastTimer.current);
+        toastQueue.current = [];
+        if (u && dataRef.current === u.after) {
+          commit(u.before);
+          undoRef.current = null;
+          setUi({ levelUp: false });
+          showToast('Undone', 'Rewards put back as they were');
+        } else setToast(null);
+      },
 
       // Campaigns
       createCampaign(c: Campaign) {
@@ -192,7 +226,7 @@ function useStoreValue() {
 
       // Habits
       toggleHabit(id: number) { apply(toggleHabit(d(), id, today)); },
-      createHabit(h: Pick<Habit, 'title' | 'every' | 'size'>) {
+      createHabit(h: Pick<Habit, 'title' | 'every' | 'size' | 'target'>) {
         const cur = d();
         commit({ ...cur, habits: [...cur.habits, { id: nextId(cur.habits), log: [], created: today, ...h }] });
         showToast('Habit started', h.title);
@@ -236,7 +270,8 @@ function useStoreValue() {
     };
   }, [today, commit, apply, showToast, setUi]);
 
-  return { today, data, ui, setUi, toast, lastToast, isDesk, scrollRef, showToast, actions };
+  const canUndo = !!toast?.undo && !!undoRef.current && undoRef.current.after === data;
+  return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions };
 }
 
 export type Store = ReturnType<typeof useStoreValue>;
