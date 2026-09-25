@@ -1,10 +1,12 @@
 import { useEffect } from 'react';
 import { Icon, type IconName } from './components/Icon';
+import { heroName } from './domain/model';
 import { Adventure } from './screens/Adventure';
 import { Glossary } from './screens/Glossary';
 import { Home } from './screens/Home';
 import { Quests } from './screens/Quests';
-import { NewCampaignSheet, NewQuestSheet } from './sheets/CreateSheets';
+import { CampaignSheet, NewQuestSheet } from './sheets/CreateSheets';
+import { ProfileSheet, Welcome } from './sheets/ProfileSheet';
 import { QuestSheet } from './sheets/QuestSheet';
 import { useStore, type Tab } from './state/store';
 
@@ -21,7 +23,7 @@ export function App() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.levelUp ? { levelUp: false } : u.buyId ? { buyId: null } : { openId: null, newOpen: false, newCampOpen: false }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : u.buyId ? { buyId: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -37,8 +39,8 @@ export function App() {
               <button key={k} onClick={() => actions.goTab(k)} aria-current={ui.tab === k ? 'page' : undefined}><Icon n={ic} size={20} />{n}</button>
             ))}
           </nav>
-          <div className="side-hero">
-            <div className="heading" style={{ fontSize: 18 }}>{hero.name}</div>
+          <div className="side-hero" role="button" tabIndex={0} aria-label="Open your profile" onClick={() => setUi({ profileOpen: true })} onKeyDown={(e) => e.key === 'Enter' && setUi({ profileOpen: true })}>
+            <div className="heading" style={{ fontSize: 18 }}>{heroName(hero)}</div>
             <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-accent-800)' }}>Level {hero.level} Wanderer</div>
             <div className="bar"><div style={{ width: Math.round((hero.xp / hero.next) * 100) + '%' }} /></div>
             <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
@@ -67,7 +69,7 @@ export function App() {
           </nav>
         )}
 
-        <button className="fab" onClick={() => setUi({ newOpen: true, openId: null, newCampOpen: false })} aria-label="New Quest">
+        <button className="fab" onClick={() => setUi({ newOpen: true, openId: null, campSheet: null })} aria-label="New Quest">
           <Icon n="plus" size={22} stroke={2} />{isDesk && <span>New Quest</span>}
         </button>
 
@@ -82,7 +84,22 @@ export function App() {
 
       {openQuest && <QuestSheet key={openQuest.id} quest={openQuest} />}
       {ui.newOpen && <NewQuestSheet />}
-      {ui.newCampOpen && <NewCampaignSheet />}
+      {ui.campSheet && <CampaignSheet key={ui.campSheet} campKey={ui.campSheet === 'new' ? null : ui.campSheet} />}
+      {ui.profileOpen && <ProfileSheet />}
+      {!hero.name && <Welcome />}
+
+      {ui.confirm && (
+        <div className="modal" style={{ zIndex: 80 }} onClick={(e) => e.target === e.currentTarget && setUi({ confirm: null })}>
+          <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="confirm-title" style={{ background: 'var(--q-parch)', width: 'min(400px,100%)' }}>
+            <div id="confirm-title" className="dialog-title" style={{ fontSize: 24 }}>{ui.confirm.title}</div>
+            <div className="dialog-body">{ui.confirm.body}</div>
+            <div className="dialog-actions">
+              <button className="btn btn-secondary" onClick={() => setUi({ confirm: null })} style={{ minHeight: 44 }} autoFocus>Cancel</button>
+              <button className="danger-btn" onClick={() => { const c = ui.confirm!; setUi({ confirm: null }); c.onConfirm(); }}>{ui.confirm.confirmLabel}</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {buy && (
         <div className="modal" onClick={(e) => e.target === e.currentTarget && setUi({ buyId: null })}>
@@ -102,7 +119,7 @@ export function App() {
           <div role="alertdialog" aria-modal="true" aria-label="Level up" style={{ width: 'min(320px,100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 22px 20px', textAlign: 'center', border: '1px solid color-mix(in srgb, var(--color-accent-800) 35%, transparent)', borderRadius: 'var(--radius-lg)', boxShadow: 'inset 0 0 0 5px var(--q-parch), inset 0 0 0 6px var(--color-accent-500), var(--shadow-lg)', background: 'var(--q-parch)' }}>
             <span className="seal heading tnum" style={{ width: 72, height: 72, fontSize: 34, boxShadow: 'inset 0 0 0 5px var(--q-wax), inset 0 0 0 6px rgba(255,230,200,.35), 0 3px 8px rgba(40,10,0,.35)' }}>{hero.level}</span>
             <span className="kicker">Level up</span>
-            <div className="heading" style={{ fontSize: 26, lineHeight: 1.1 }}>{hero.name} reaches level {hero.level}</div>
+            <div className="heading" style={{ fontSize: 26, lineHeight: 1.1 }}>{heroName(hero)} reaches level {hero.level}</div>
             <p className="muted" style={{ margin: 0, fontSize: 14 }}>{hero.next} XP to the next level.</p>
             <button className="btn btn-primary inked" onClick={() => setUi({ levelUp: false })} style={{ minHeight: 44, minWidth: 140, marginTop: 6 }} autoFocus>Onward</button>
           </div>

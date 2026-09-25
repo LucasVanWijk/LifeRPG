@@ -1,21 +1,24 @@
-import { useRef, type CSSProperties, type DragEvent } from 'react';
-import type { QuadKey, Quest, Status } from '../domain/model';
-import { noteRotation, QUADS, SIZE, STATUSES } from '../domain/model';
+import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
+import { addDays, shortDate } from '../domain/dates';
+import { bestStreak, habitDone, habitStreak, periodOf } from '../domain/logic';
+import type { Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
+import { EVERY_NAME, habitReward, noteRotation, QUADS, SIZE, STATUSES, streakText } from '../domain/model';
 import { Icon } from '../components/Icon';
-import { byDue, questView, ScreenHead, Seg } from '../components/common';
+import { AddForm, byDue, Empty, onEnter, questView, ScreenHead, Seg } from '../components/common';
 import { useStore } from '../state/store';
 
 export function Quests() {
   const { data, ui, setUi, isDesk } = useStore();
   const activeCount = data.quests.filter((q) => q.status !== 'done').length;
+  const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : activeCount + ' open quests';
   return (
     <div className="screen" style={{ flex: 1, gap: 14 }}>
-      <ScreenHead kicker={activeCount + ' open quests'} title="Quests">
+      <ScreenHead kicker={kicker} title="Quests">
         <Seg name="quest-view" value={ui.questView} onChange={(v) => setUi({ questView: v, mobileZone: null })}
-          optStyle={{ minHeight: 40, padding: '8px 16px', fontSize: 14 }}
-          options={[{ key: 'board', label: 'Quest Board' }, { key: 'campaign', label: 'Campaigns' }]} />
+          optStyle={{ minHeight: 40, padding: isDesk ? '8px 16px' : '8px 12px', fontSize: 14 }}
+          options={[{ key: 'board', label: isDesk ? 'Quest Board' : 'Board' }, { key: 'campaign', label: 'Campaigns' }, { key: 'habits', label: 'Habits' }]} />
       </ScreenHead>
-      {ui.questView === 'campaign' ? <CampaignView /> : isDesk ? <DeskBoard /> : ui.mobileZone ? <MobileZone zone={ui.mobileZone} /> : <MobileGrid />}
+      {ui.questView === 'habits' ? <HabitsView /> : ui.questView === 'campaign' ? <CampaignView /> : isDesk ? <DeskBoard /> : ui.mobileZone ? <MobileZone zone={ui.mobileZone} /> : <MobileGrid />}
     </div>
   );
 }
@@ -193,6 +196,7 @@ function CampaignView() {
   const cq = data.quests.filter((q) => q.campaign === campKey);
   const done = cq.filter((q) => q.status === 'done').length;
   const pct = Math.round((done / Math.max(1, cq.length)) * 100) + '%';
+  const edit = () => setUi({ campSheet: campKey, openId: null, newOpen: false });
   const drop = (e: DragEvent, s: Status) => {
     e.preventDefault();
     const id = ui.dragId;
@@ -212,7 +216,7 @@ function CampaignView() {
             </button>
           );
         })}
-        <button className="dashed-btn" onClick={() => setUi({ newCampOpen: true, openId: null, newOpen: false })} style={{ flex: 'none', minHeight: 44, padding: '6px 12px', fontSize: 16 }}>
+        <button className="dashed-btn" onClick={() => setUi({ campSheet: 'new', openId: null, newOpen: false })} style={{ flex: 'none', minHeight: 44, padding: '6px 12px', fontSize: 16 }}>
           <Icon n="plus" size={15} />New campaign
         </button>
       </div>
@@ -223,15 +227,21 @@ function CampaignView() {
             <span className="seal" style={{ width: 30, height: 30, boxShadow: 'inset 0 0 0 2px var(--q-wax), inset 0 0 0 3px rgba(255,230,200,.35), 0 1px 3px rgba(40,10,0,.3)' }}><Icon n={camp.icon} size={14} /></span>
             <h3 className="ellipsis" style={{ flex: 1, minWidth: 0, fontSize: 21 }}>{camp.name}</h3>
             <span className="tnum" style={{ fontSize: 13, whiteSpace: 'nowrap' }}>{done} / {cq.length}</span>
+            <button className="icon-btn" onClick={edit} aria-label="Edit campaign" style={{ width: 32, height: 32, marginRight: -6 }}><Icon n="pencil" size={15} /></button>
           </div>
           <div className="bar" style={{ height: 7, borderRadius: 4 }}><div style={{ width: pct, borderRadius: 2, background: 'var(--q-moss)' }} /></div>
-          <div className="muted tnum ellipsis" style={{ fontSize: 12 }}>Reward: {camp.seal} · +{camp.xp} XP · +{camp.gold} gold</div>
+          <div className="muted tnum ellipsis" style={{ fontSize: 12, color: camp.completedOn ? 'var(--q-moss)' : undefined }}>
+            {camp.completedOn ? 'Complete · ' + camp.seal + ' earned ' + shortDate(camp.completedOn) : 'Reward: ' + camp.seal + ' · +' + camp.xp + ' XP · +' + camp.gold + ' gold'}
+          </div>
         </section>
       )}
       {camp && isDesk && (
         <section className="panel-framed" style={{ display: 'flex', flexWrap: 'wrap', gap: '16px 28px', alignItems: 'center', padding: '18px 20px' }}>
           <div style={{ flex: '1 1 260px', minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span className="kicker">Campaign</span>
+            <span className="kicker" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              Campaign{camp.completedOn && <span style={{ color: 'var(--q-moss)' }}>· complete {shortDate(camp.completedOn)}</span>}
+              <button className="btn btn-ghost" onClick={edit} style={{ marginLeft: 'auto', color: 'var(--color-accent-700)', letterSpacing: 0, textTransform: 'none', fontSize: 14 }}><Icon n="pencil" size={14} />Edit</button>
+            </span>
             <h2 style={{ fontSize: 30 }}>{camp.name}</h2>
             <p className="muted" style={{ margin: 0, fontSize: 14 }}>{camp.desc}</p>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
@@ -242,7 +252,7 @@ function CampaignView() {
           <div style={{ flex: '0 1 260px', display: 'flex', alignItems: 'center', gap: 14, paddingLeft: 18, borderLeft: '1px solid var(--q-rule)' }}>
             <span className="seal" style={{ width: 54, height: 54, boxShadow: 'inset 0 0 0 4px var(--q-wax), inset 0 0 0 5px rgba(255,230,200,.35), 0 2px 5px rgba(40,10,0,.35)' }}><Icon n={camp.icon} size={22} /></span>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <span className="label">Completion reward</span>
+              <span className="label">{camp.completedOn ? 'Reward earned' : 'Completion reward'}</span>
               <span className="heading" style={{ fontSize: 18, lineHeight: 1.15 }}>{camp.seal}</span>
               <span className="muted tnum" style={{ fontSize: 13 }}>+{camp.xp} XP · +{camp.gold} gold</span>
             </div>
@@ -250,7 +260,12 @@ function CampaignView() {
         </section>
       )}
 
-      <div className="hscroll" style={{ flex: 1, gap: 12, scrollSnapType: 'x mandatory', margin: isDesk ? 0 : '0 -18px', padding: isDesk ? '4px 0 0' : '4px 18px 6px' }}>
+      {!camp && (
+        <p className="muted" style={{ margin: '8px 0', fontStyle: 'italic', fontSize: 14, maxWidth: 520 }}>
+          No campaigns yet. A campaign groups quests toward one goal, like a trip or a renovation, and pays a reward when every quest is done.
+        </p>
+      )}
+      {camp && <div className="hscroll" style={{ flex: 1, gap: 12, scrollSnapType: 'x mandatory', margin: isDesk ? 0 : '0 -18px', padding: isDesk ? '4px 0 0' : '4px 18px 6px' }}>
         {STATUSES.map(([k, name]) => {
           const list = cq.filter((q) => q.status === k).sort(byDue);
           return (
@@ -283,7 +298,106 @@ function CampaignView() {
             </div>
           );
         })}
+      </div>}
+    </div>
+  );
+}
+
+function HabitsView() {
+  const { data, today, isDesk, actions } = useStore();
+  const [title, setTitle] = useState('');
+  const [every, setEvery] = useState<Every>('daily');
+  const [size, setSize] = useState<SizeKey>('S');
+  const reset = () => { setTitle(''); setEvery('daily'); setSize('S'); };
+  const add = () => {
+    const t = title.trim();
+    if (!t) return false;
+    actions.createHabit({ title: t, every, size });
+    reset();
+    return true;
+  };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxWidth: 760 }}>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+        Habits come round every day or every week. Check them in on Home; a streak grows for every period in a row.
+      </p>
+      {!data.habits.length && <Empty>No habits yet. Try “Read before bed” or “Call mom”.</Empty>}
+      {data.habits.map((h) => <HabitRow key={h.id} h={h} today={today} dots={isDesk ? 21 : 14} />)}
+      <AddForm label="New habit" onSave={add} invalid={!title.trim()} onCancel={reset}>
+        <div className="field"><label htmlFor="nh-title">Habit</label><input id="nh-title" className="input" placeholder="e.g. Read before bed" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(add)} autoFocus style={{ minHeight: 44 }} /></div>
+        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} />
+      </AddForm>
+    </div>
+  );
+}
+
+function HabitFields({ every, setEvery, size, setSize }: { every: Every; setEvery: (e: Every) => void; size: SizeKey; setSize: (s: SizeKey) => void }) {
+  return (
+    <div className="two-col">
+      <div className="field"><label>Repeats</label>
+        <Seg name="h-every" value={every} onChange={setEvery} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', width: '100%' }} optStyle={{ justifyContent: 'center', minHeight: 42 }}
+          options={(['daily', 'weekly'] as const).map((k) => ({ key: k, label: EVERY_NAME[k] }))} />
+      </div>
+      <div className="field"><label>Size</label>
+        <Seg name="h-size" value={size} onChange={setSize} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', width: '100%' }} optStyle={{ justifyContent: 'center', minHeight: 42, padding: '6px 4px' }}
+          options={(['S', 'M', 'L'] as const).map((k) => ({ key: k, label: k + ' · ' + habitReward({ size: k }).xp }))} />
       </div>
     </div>
+  );
+}
+
+function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number }) {
+  const { actions } = useStore();
+  const [editing, setEditing] = useState(false);
+  const [title, setTitle] = useState(h.title);
+  const [every, setEvery] = useState<Every>(h.every);
+  const [size, setSize] = useState<SizeKey>(h.size);
+  const done = habitDone(h, today), streak = habitStreak(h, today), best = bestStreak(h);
+  const periods = new Set(h.log.map((d) => periodOf(d, h.every)));
+  const step = h.every === 'daily' ? 1 : 7;
+  const cur = periodOf(today, h.every);
+  const history = Array.from({ length: dots }, (_, i) => {
+    const iso = addDays(cur, -(dots - 1 - i) * step);
+    return { iso, on: periods.has(iso) };
+  });
+  const save = () => { if (!title.trim()) return; actions.updateHabit(h.id, { title: title.trim(), every, size }); setEditing(false); };
+  const remove = () => actions.confirm({
+    title: 'Delete this habit?', body: '“' + h.title + '” and its streak history will be gone. Rewards already earned are kept.',
+    confirmLabel: 'Delete habit', onConfirm: () => actions.deleteHabit(h.id),
+  });
+
+  if (editing) {
+    return (
+      <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14 }}>
+        <div className="field"><label htmlFor={'eh-' + h.id}>Habit</label><input id={'eh-' + h.id} className="input" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(save)} style={{ minHeight: 44 }} /></div>
+        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} />
+        {every !== h.every && <p className="muted" style={{ margin: 0, fontSize: 12 }}>Changing how often it repeats recounts the streak from the same check-ins.</p>}
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <button className="danger-btn" onClick={remove}>Delete</button>
+          <span style={{ flex: 1 }} />
+          <button className="btn btn-secondary" onClick={() => { setEditing(false); setTitle(h.title); setEvery(h.every); setSize(h.size); }} style={{ minHeight: 42 }}>Cancel</button>
+          <button className="btn btn-primary inked" onClick={save} disabled={!title.trim()} style={{ minHeight: 42 }}>Save</button>
+        </div>
+      </section>
+    );
+  }
+  return (
+    <section className="panel" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px 10px 4px' }}>
+      <button className="today-check" onClick={() => actions.toggleHabit(h.id)} aria-label={(done ? 'Undo ' : 'Check in ') + h.title} aria-pressed={done} style={{ marginLeft: 0 }}>
+        <span className={'checkbox' + (done ? ' on' : '')} style={{ width: 24, height: 24, borderRadius: '50%' }}>{done && <Icon n="check" size={15} stroke={2.4} />}</span>
+      </button>
+      <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{h.title}</div>
+        <div className="meta">
+          <span>{EVERY_NAME[h.every]} · {SIZE[h.size].name} · +{habitReward(h).xp} XP</span>
+          <span style={{ color: streak ? 'var(--q-wax)' : undefined, gap: 4 }}><Icon n="repeat" size={12} />{streak ? streakText(streak, h.every) : 'No streak yet'}</span>
+          {best > streak && <span>best {best}</span>}
+        </div>
+        <div className="habit-dots" aria-label={'Last ' + dots + (h.every === 'daily' ? ' days' : ' weeks')}>
+          {history.map((d) => <span key={d.iso} className={d.on ? 'on' : ''} title={(h.every === 'weekly' ? 'Week of ' : '') + shortDate(d.iso)} />)}
+        </div>
+      </div>
+      <button className="icon-btn" onClick={() => setEditing(true)} aria-label={'Edit ' + h.title}><Icon n="pencil" size={16} /></button>
+    </section>
   );
 }

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { weekdayDate } from '../domain/dates';
-import type { Every, Quest, QuestNote } from '../domain/model';
-import { QM, QUADS, recurName, SIZE, STATUS_NAME, STATUSES, streakText } from '../domain/model';
+import type { Quest, QuestNote } from '../domain/model';
+import { QM, QUADS, SIZE, STATUS_NAME, STATUSES } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { CloseBtn, CompleteButton, DoneBanner, onEnter, questView, Seg, Sheet } from '../components/common';
 import { useStore } from '../state/store';
@@ -18,15 +18,19 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
   const setNotes = (fn: (ns: QuestNote[]) => QuestNote[]) => upd({ notes: fn(q.notes) });
   const addNote = () => { const t = draft.trim(); if (!t) return; setNotes((ns) => [...ns, { id: Date.now(), t }]); setDraft(''); };
   const complete = () => { actions.complete(q.id); close(); };
-  const completeLabel = q.recur ? 'Complete this bounty' : 'Complete quest';
+  const remove = () => actions.confirm({
+    title: 'Delete this quest?',
+    body: '“' + q.title + '” and its notes will be gone. Rewards already earned are kept.',
+    confirmLabel: 'Delete quest',
+    onConfirm: () => actions.deleteQuest(q.id),
+  });
 
   const badges = (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 13 }}>
       <span className="pill" style={{ fontSize: 13, padding: '3px 9px' }}><Icon n="sparkles" size={13} />+{v.xp} XP · +{v.gold} gold</span>
-      {q.recur && <span className="pill" style={{ fontSize: 13, padding: '3px 9px', borderColor: 'color-mix(in srgb, var(--q-wax) 50%, transparent)', color: 'var(--q-wax)' }}><Icon n="repeat" size={13} />Bounty · {streakText(q.recur)}</span>}
     </div>
   );
-  const finish = v.done ? <DoneBanner onReopen={() => actions.undo(q.id)} /> : <CompleteButton label={completeLabel} onClick={complete} />;
+  const finish = v.done ? <DoneBanner onReopen={() => actions.undo(q.id)} /> : <CompleteButton label="Complete quest" onClick={complete} />;
 
   return (
     <Sheet onClose={close} label={editing ? 'Edit quest' : q.title}>
@@ -49,7 +53,6 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
               { k: 'Quadrant', v: QM[q.quad].name, color: QM[q.quad].color },
               { k: 'Due', v: q.due ? weekdayDate(q.due) : 'No due date', color: q.due && q.due < today && !v.done ? 'var(--q-wax)' : 'var(--q-ink)' },
               { k: 'Size', v: SIZE[q.size].name },
-              { k: 'Repeats', v: recurName(q.recur) },
               { k: 'Campaign', v: camp ? camp.name : 'None' },
               { k: 'Status', v: STATUS_NAME[q.status], color: v.done ? 'var(--q-moss)' : undefined },
             ].map((f) => (
@@ -116,22 +119,11 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
                 optStyle={{ justifyContent: 'center', minHeight: 42, padding: '6px 4px' }} options={(['S', 'M', 'L'] as const).map((k) => ({ key: k, label: k }))} />
             </div>
           </div>
-          <div className="two-col">
-            <div className="field"><label htmlFor="q-camp">Campaign</label>
+          <div className="field"><label htmlFor="q-camp">Campaign</label>
               <select id="q-camp" className="input" value={q.campaign || ''} onChange={(e) => upd({ campaign: e.target.value || null })} style={{ minHeight: 44 }}>
                 <option value="">None</option>
                 {Object.entries(data.camps).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
               </select>
-            </div>
-            <div className="field"><label htmlFor="q-recur">Recurrence</label>
-              <select id="q-recur" className="input" value={q.recur ? q.recur.every : 'none'} style={{ minHeight: 44 }}
-                onChange={(e) => { const val = e.target.value; upd({ recur: val === 'none' ? null : { every: val as Every, streak: q.recur ? q.recur.streak : 0 } }); }}>
-                <option value="none">Once</option>
-                <option value="daily">Daily bounty</option>
-                <option value="weekly">Weekly bounty</option>
-                <option value="monthly">Monthly bounty</option>
-              </select>
-            </div>
           </div>
           {camp && (
             <div className="field"><label>Status in {camp.short}</label>
@@ -140,6 +132,7 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
             </div>
           )}
           {finish}
+          <button className="danger-btn" onClick={remove}><Icon n="x" size={15} />Delete quest</button>
         </>
       )}
     </Sheet>

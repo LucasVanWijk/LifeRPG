@@ -6,7 +6,8 @@ const BASE = '2026-09-25';
 
 const splitNotes = (s: string) => s.split(/(?<=\.)\s+/).filter(Boolean).map((t, i) => ({ id: i + 1, t }));
 
-export function seedData(today: string): Data {
+/** Sample log used by the tests (the data from the design prototype). The app itself starts empty. */
+export function sampleData(today: string): Data {
   const shift = dayDiff(today, BASE);
   const d = (iso: string) => addDays(iso, shift);
   const mmdd = (iso: string) => d(iso).slice(5);
@@ -16,19 +17,17 @@ export function seedData(today: string): Data {
     ? tripStart.getDate() + '–' + tripEnd.getDate() + ' ' + MONL[tripEnd.getMonth()]
     : shortDate(d('2026-10-12')) + ' – ' + shortDate(d('2026-10-22'));
 
-  const q = (id: number, title: string, quad: Quest['quad'], due: string | null, size: Quest['size'], campaign: string | null, status: Quest['status'], notes = '', recur: Quest['recur'] = null): Quest =>
-    ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, recur, notes: splitNotes(notes) });
+  const q = (id: number, title: string, quad: Quest['quad'], due: string | null, size: Quest['size'], campaign: string | null, status: Quest['status'], notes = ''): Quest =>
+    ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes) });
 
   return {
-    version: 1,
+    version: 2,
     hero: { name: 'Rowan', xp: 340, level: 7, next: 500, gold: 425 },
     quests: [
       q(1, 'Renew passport', 'crisis', '2026-09-25', 'M', 'ireland', 'doing', 'Current one expires in November. Bring two photos and the old passport to the town hall.'),
       q(2, 'Book dentist appointment', 'errand', '2026-09-23', 'S', null, 'todo', 'Six-month check-up. Number is in the Codex.'),
-      q(3, 'Call mom', 'main', '2026-09-25', 'S', null, 'todo', 'Ask what she wants to do for her birthday.', { every: 'weekly', streak: 3 }),
       q(4, 'Plan Ireland itinerary', 'main', '2026-10-02', 'L', 'ireland', 'doing', 'Galway, Connemara, Dingle. Check ferry times to the Aran Islands. Sophie wants to see the Cliffs of Moher.'),
       q(5, 'Clean out garage', 'side', '2026-10-04', 'L', null, 'todo'),
-      q(6, 'Weekly groceries', 'errand', '2026-09-26', 'M', null, 'todo', '', { every: 'weekly', streak: 5 }),
       q(7, 'Book rental car in Shannon', 'crisis', '2026-09-27', 'M', 'ireland', 'todo'),
       q(8, 'Pay car insurance', 'crisis', '2026-09-25', 'S', null, 'todo'),
       q(9, 'Pick paint colour', 'main', '2026-09-28', 'M', 'study', 'todo'),
@@ -44,6 +43,10 @@ export function seedData(today: string): Data {
       q(19, 'Choose B&B in Galway', 'main', null, 'M', 'ireland', 'done'),
       q(20, 'Empty the study', 'main', null, 'L', 'study', 'done'),
       q(21, 'Buy paint rollers', 'errand', null, 'S', 'study', 'done'),
+    ],
+    habits: [
+      { id: 1, title: 'Call mom', every: 'weekly', size: 'S', created: d('2026-09-01'), log: [d('2026-09-01'), d('2026-09-10'), d('2026-09-16')] },
+      { id: 2, title: 'Read before bed', every: 'daily', size: 'S', created: d('2026-09-20'), log: [d('2026-09-22'), d('2026-09-23'), d('2026-09-24')] },
     ],
     camps: {
       ireland: { name: 'Ireland trip', short: 'Ireland', desc: 'Ten days on the west coast with Sophie, ' + tripRange + '.', xp: 250, gold: 100, seal: "Wayfarer's seal", icon: 'compass' },

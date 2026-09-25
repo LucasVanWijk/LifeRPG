@@ -237,3 +237,19 @@ button { font: inherit; }
 @keyframes rise { from { transform: translateY(40px); opacity: .6; } }
 @keyframes slide { from { transform: translateX(40px); opacity: .6; } }
 @media (prefers-reduced-motion: reduce) { .scrim, .sheet, .modal { animation: none; } .toast { transition: none; } }
+
+/* ── additions: profile, habits, editing ─────────────────── */
+.hero-btn { display: flex; align-items: center; gap: 16px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--q-ink); font-family: var(--font-body); border-radius: var(--radius-md); }
+.hero-btn:hover .heading { color: var(--color-accent-800); }
+.desk .home-today { grid-column: 2; grid-row: 1 / span 2; }
+.desk .home-habits { grid-column: 1; grid-row: 2; }
+.danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--q-wax) 45%, transparent); border-radius: var(--radius-md); background: transparent; color: var(--q-wax); cursor: pointer; font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
+.danger-btn:hover { background: color-mix(in srgb, var(--q-wax) 8%, transparent); }
+.danger-btn:active { background: color-mix(in srgb, var(--q-wax) 16%, transparent); }
+.icon-btn { width: 36px; height: 36px; flex: none; display: grid; place-items: center; border: 0; border-radius: var(--radius-md); background: transparent; color: var(--color-accent-800); cursor: pointer; }
+.icon-btn:hover { background: color-mix(in srgb, var(--color-accent-300) 25%, transparent); }
+.habit-dots { display: flex; gap: 3px; }
+.habit-dots span { width: 9px; height: 9px; border-radius: 50%; border: 1px solid color-mix(in srgb, var(--color-accent-800) 35%, transparent); }
+.habit-dots span.on { background: var(--q-moss); border-color: var(--q-moss); }
+.side-hero { cursor: pointer; border-radius: var(--radius-md); }
+.side-hero:hover { background: color-mix(in srgb, var(--color-accent-300) 14%, transparent); }
