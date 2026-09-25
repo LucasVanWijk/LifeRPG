@@ -2,10 +2,10 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { todayISO } from '../domain/dates';
 import { completeQuest, patchQuest, setStatus, undoQuest } from '../domain/logic';
 import type { Campaign, Data, QuadKey, Quest, Status } from '../domain/model';
-import { QM } from '../domain/model';
-import { seedData } from '../domain/seed';
+import { emptyData, QM } from '../domain/model';
 
-const STORAGE_KEY = 'questlog:v1';
+// v1 held the design's sample data; v2 starts every log empty.
+const STORAGE_KEY = 'questlog:v2';
 
 export type Tab = 'home' | 'quests' | 'glossary' | 'adventure';
 export type QuestView = 'board' | 'campaign';
@@ -34,7 +34,7 @@ export interface Ui {
 
 export interface Toast { text: string; sub: string }
 
-function loadData(today: string): Data {
+function loadData(): Data {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
@@ -42,9 +42,9 @@ function loadData(today: string): Data {
       if (d && d.version === 1 && Array.isArray(d.quests)) return d;
     }
   } catch {
-    /* storage unavailable or corrupt: fall back to the sample log */
+    /* storage unavailable or corrupt: start a fresh log */
   }
-  return seedData(today);
+  return emptyData();
 }
 
 /** Initial screen can be deep-linked, e.g. ?screen=quests&zone=main or ?quest=4&mode=edit. */
@@ -55,7 +55,7 @@ function initialUi(today: string): Ui {
   return {
     tab: pick('screen', ['home', 'quests', 'glossary', 'adventure'] as const, 'home'),
     questView: pick('view', ['board', 'campaign'] as const, 'board'),
-    campaign: p.get('campaign') || 'ireland',
+    campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
     openId: quest > 0 ? quest : null,
     sheetMode: p.get('mode') === 'edit' ? 'edit' : 'view',
@@ -87,7 +87,7 @@ function useLayout() {
 
 function useStoreValue() {
   const [today, setToday] = useState(todayISO);
-  const [data, setData] = useState<Data>(() => loadData(today));
+  const [data, setData] = useState<Data>(loadData);
   const [ui, setUiState] = useState<Ui>(() => initialUi(today));
   const [toast, setToast] = useState<Toast | null>(null);
   const [lastToast, setLastToast] = useState<Toast>({ text: '', sub: '' });
@@ -183,7 +183,6 @@ function useStoreValue() {
       if (scrollRef.current) scrollRef.current.scrollTop = 0;
     },
     openQuest(id: number) { setUi({ openId: id, newOpen: false, newCampOpen: false, sheetMode: 'view' }); },
-    resetSample() { commit(seedData(today)); },
   }), [today, commit, announce, showToast, setUi]);
 
   return { today, data, ui, setUi, toast, lastToast, isDesk, scrollRef, showToast, actions };

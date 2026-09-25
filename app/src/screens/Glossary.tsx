@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { dayDiff, MONL, nextAnnual, shortDate } from '../domain/dates';
 import { glossaryEvents } from '../domain/logic';
 import type { Companion, CodexEntry, Data } from '../domain/model';
+import { CODEX_ICONS } from '../domain/model';
 import { Icon, type IconName } from '../components/Icon';
 import { onEnter, Seg } from '../components/common';
 import { useStore, type GlossaryCat } from '../state/store';
@@ -80,10 +81,23 @@ function SearchResults({ query }: { query: string }) {
 }
 
 function CompanionList() {
-  const { data, setUi, today } = useStore();
+  const { data, setUi, today, actions } = useStore();
   const events = glossaryEvents(data, today);
+  const [name, setName] = useState('');
+  const [rel, setRel] = useState('');
+  const [bday, setBday] = useState('');
+  const add = () => {
+    const n = name.trim();
+    if (!n) return false;
+    const id = 'p' + Date.now();
+    actions.update((d) => ({ ...d, companions: [...d.companions, { id, name: n, first: n.split(' ')[0], rel: rel.trim(), bday: bday ? bday.slice(5) : '', notes: [] }] }));
+    setName(''); setRel(''); setBday('');
+    setUi({ gDetail: 'companion:' + id });
+    return true;
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {!data.companions.length && <Empty>No companions yet. Add the people you want to remember things about.</Empty>}
       {data.companions.map((c) => {
         const next = events.filter((e) => e.who === c.first && e.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
         return (
@@ -98,6 +112,13 @@ function CompanionList() {
           </button>
         );
       })}
+      <AddForm label="Add companion" onSave={add} invalid={!name.trim()} onCancel={() => { setName(''); setRel(''); setBday(''); }}>
+        <div className="field"><label htmlFor="nc-name">Name</label><input id="nc-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus style={{ minHeight: 44 }} /></div>
+        <div className="two-col">
+          <div className="field"><label htmlFor="nc-rel">Relation</label><input id="nc-rel" className="input" placeholder="e.g. Best friend" value={rel} onChange={(e) => setRel(e.target.value)} style={{ minHeight: 44 }} /></div>
+          <div className="field"><label htmlFor="nc-bday">Birthday</label><input id="nc-bday" className="input" type="date" value={bday} onChange={(e) => setBday(e.target.value)} style={{ minHeight: 44 }} /></div>
+        </div>
+      </AddForm>
     </div>
   );
 }
@@ -105,10 +126,21 @@ function CompanionList() {
 function TomeList() {
   const { data, ui, setUi, actions } = useStore();
   const [draft, setDraft] = useState('');
+  const [tomeName, setTomeName] = useState('');
+  const addTome = () => {
+    const n = tomeName.trim();
+    if (!n) return false;
+    const id = 't' + Date.now();
+    actions.update((d) => ({ ...d, tomes: [...d.tomes, { id, name: n, items: [] }] }));
+    setUi({ openTome: id });
+    setTomeName('');
+    return true;
+  };
   const updTome = (tid: string, fn: (items: Data['tomes'][number]['items']) => Data['tomes'][number]['items']) =>
     actions.update((d) => ({ ...d, tomes: d.tomes.map((t) => (t.id === tid ? { ...t, items: fn(t.items) } : t)) }));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {!data.tomes.length && <Empty>No tomes yet. A tome is a list: shows to watch, gift ideas, books to read.</Empty>}
       {data.tomes.map((t) => {
         const open = ui.openTome === t.id, left = t.items.filter((i) => !i.done).length;
         const add = () => { const v = draft.trim(); if (!v) return; updTome(t.id, (items) => [...items, { id: Date.now(), t: v, done: false }]); setDraft(''); };
@@ -146,14 +178,31 @@ function TomeList() {
           </section>
         );
       })}
+      <AddForm label="New tome" onSave={addTome} invalid={!tomeName.trim()} onCancel={() => setTomeName('')}>
+        <div className="field"><label htmlFor="nt-name">Name</label><input id="nt-name" className="input" placeholder="e.g. Books to read" value={tomeName} onChange={(e) => setTomeName(e.target.value)} onKeyDown={onEnter(addTome)} autoFocus style={{ minHeight: 44 }} /></div>
+      </AddForm>
     </div>
   );
 }
 
 function CodexList() {
-  const { data, setUi } = useStore();
+  const { data, setUi, actions } = useStore();
+  const [name, setName] = useState('');
+  const [sub, setSub] = useState('');
+  const [icon, setIcon] = useState<IconName>('pin');
+  const reset = () => { setName(''); setSub(''); setIcon('pin'); };
+  const add = () => {
+    const n = name.trim();
+    if (!n) return false;
+    const id = 'x' + Date.now();
+    actions.update((d) => ({ ...d, codex: [...d.codex, { id, name: n, sub: sub.trim(), icon, fields: [] }] }));
+    reset();
+    setUi({ gDetail: 'codex:' + id });
+    return true;
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
+      {!data.codex.length && <Empty>No codex entries yet. Keep the facts you look up often: your car, your dentist, a locker code.</Empty>}
       {data.codex.map((x) => (
         <button key={x.id} className="row-btn" onClick={() => setUi({ gDetail: 'codex:' + x.id })} style={{ gap: 14, minHeight: 64, padding: '12px 0' }}>
           <span className="icon-box" style={{ width: 44, height: 44 }}><Icon n={x.icon} size={19} /></span>
@@ -164,6 +213,38 @@ function CodexList() {
           <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={17} /></span>
         </button>
       ))}
+      <AddForm label="New codex entry" onSave={add} invalid={!name.trim()} onCancel={reset}>
+        <div className="field"><label htmlFor="nx-name">Name</label><input id="nx-name" className="input" placeholder="e.g. Car" value={name} onChange={(e) => setName(e.target.value)} autoFocus style={{ minHeight: 44 }} /></div>
+        <div className="field"><label htmlFor="nx-sub">Subtitle</label><input id="nx-sub" className="input" placeholder="e.g. Volkswagen Golf, grey" value={sub} onChange={(e) => setSub(e.target.value)} style={{ minHeight: 44 }} /></div>
+        <div className="field"><label>Icon</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {CODEX_ICONS.map((ic) => (
+              <button key={ic} className="chip" aria-pressed={icon === ic} aria-label={ic} onClick={() => setIcon(ic)} style={{ width: 44, height: 44, justifyContent: 'center' }}><Icon n={ic} size={19} /></button>
+            ))}
+          </div>
+        </div>
+      </AddForm>
+    </div>
+  );
+}
+
+function Empty({ children }: { children: ReactNode }) {
+  return <p className="muted" style={{ margin: 0, padding: '14px 0', fontStyle: 'italic', fontSize: 14 }}>{children}</p>;
+}
+
+/** A dashed "add" button that opens an inline form; onSave returns false to keep the form open. */
+function AddForm({ label, children, onSave, onCancel, invalid }: { label: string; children: ReactNode; onSave: () => boolean; onCancel: () => void; invalid: boolean }) {
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return <button className="dashed-btn" onClick={() => setOpen(true)} style={{ gap: 8, minHeight: 50, marginTop: 10, fontSize: 17 }}><Icon n="plus" size={17} />{label}</button>;
+  }
+  return (
+    <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 10, padding: 14 }}>
+      {children}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+        <button className="btn btn-secondary" onClick={() => { onCancel(); setOpen(false); }} style={{ minHeight: 42 }}>Cancel</button>
+        <button className="btn btn-primary inked" onClick={() => { if (onSave()) setOpen(false); }} disabled={invalid} style={{ minHeight: 42 }}>Add</button>
+      </div>
     </div>
   );
 }
@@ -181,8 +262,8 @@ function CompanionDetail({ c }: { c: Companion }) {
   const { today, actions } = useStore();
   const [draft, setDraft] = useState('');
   const [date, setDate] = useState('');
-  const [bm, bd] = c.bday.split('-').map(Number);
-  const inDays = dayDiff(nextAnnual(c.bday, today), today);
+  const [bm, bd] = c.bday ? c.bday.split('-').map(Number) : [0, 0];
+  const inDays = c.bday ? dayDiff(nextAnnual(c.bday, today), today) : null;
   const add = () => {
     const t = draft.trim();
     if (!t) return;
@@ -201,11 +282,11 @@ function CompanionDetail({ c }: { c: Companion }) {
       <div className="facts" style={{ borderTop: '1px solid var(--q-rule)', borderBottom: '1px solid var(--q-rule)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '12px 0' }}>
           <span className="label">Birthday</span>
-          <span className="heading" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 19 }}><Icon n="cake" size={16} />{bd + ' ' + MONL[bm - 1]}</span>
+          <span className="heading" style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 19 }}><Icon n="cake" size={16} />{c.bday ? bd + ' ' + MONL[bm - 1] : 'Unknown'}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '12px 0 12px 16px', borderLeft: '1px solid var(--q-rule)' }}>
           <span className="label">Turns a year older</span>
-          <span className="heading" style={{ fontSize: 19 }}>{inDays === 0 ? 'Today' : inDays === 1 ? 'Tomorrow' : 'In ' + inDays + ' days'}</span>
+          <span className="heading" style={{ fontSize: 19 }}>{inDays === null ? '—' : inDays === 0 ? 'Today' : inDays === 1 ? 'Tomorrow' : 'In ' + inDays + ' days'}</span>
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column' }}>
@@ -230,6 +311,17 @@ function CompanionDetail({ c }: { c: Companion }) {
 }
 
 function CodexDetail({ x }: { x: CodexEntry }) {
+  const { actions } = useStore();
+  const [k, setK] = useState('');
+  const [v, setV] = useState('');
+  const [date, setDate] = useState('');
+  const add = () => {
+    const key = k.trim(), val = v.trim();
+    if (!key || !(val || date)) return;
+    const f = date ? { k: key, v: val || shortDate(date), date, label: x.name + ' → ' + key } : { k: key, v: val };
+    actions.update((d) => ({ ...d, codex: d.codex.map((y) => (y.id === x.id ? { ...y, fields: [...y.fields, f] } : y)) }));
+    setK(''); setV(''); setDate('');
+  };
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
       <BackButton label="Codex" cat="codex" />
@@ -238,8 +330,8 @@ function CodexDetail({ x }: { x: CodexEntry }) {
         <div style={{ minWidth: 0 }}><h2 style={{ fontSize: 30, textWrap: 'pretty' }}>{x.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{x.sub}</div></div>
       </div>
       <dl style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
-        {x.fields.map((f) => (
-          <div key={f.k} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '12px 0', borderTop: '1px solid var(--q-rule)' }}>
+        {x.fields.map((f, i) => (
+          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '12px 0', borderTop: '1px solid var(--q-rule)' }}>
             <dt className="label">{f.k}</dt>
             <dd className="tnum" style={{ margin: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: 16 }}>
               {f.v}
@@ -248,6 +340,17 @@ function CodexDetail({ x }: { x: CodexEntry }) {
           </div>
         ))}
       </dl>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
+        <span className="muted" style={{ fontSize: 12 }}>Add a detail. Give it a date to show it on your week.</span>
+        <div className="two-col">
+          <input className="input" placeholder="Label, e.g. Phone" aria-label="Detail label" value={k} onChange={(e) => setK(e.target.value)} style={{ minHeight: 44 }} />
+          <input className="input" placeholder="Value" aria-label="Detail value" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={onEnter(add)} style={{ minHeight: 44 }} />
+        </div>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <input className="input" type="date" aria-label="Optional date" value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: '1 1 auto', minHeight: 44 }} />
+          <button className="btn btn-primary inked" onClick={add} disabled={!k.trim() || !(v.trim() || date)} style={{ minHeight: 44 }}>Add</button>
+        </div>
+      </div>
     </div>
   );
 }

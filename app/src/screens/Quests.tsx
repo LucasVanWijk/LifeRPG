@@ -250,7 +250,12 @@ function CampaignView() {
         </section>
       )}
 
-      <div className="hscroll" style={{ flex: 1, gap: 12, scrollSnapType: 'x mandatory', margin: isDesk ? 0 : '0 -18px', padding: isDesk ? '4px 0 0' : '4px 18px 6px' }}>
+      {!camp && (
+        <p className="muted" style={{ margin: '8px 0', fontStyle: 'italic', fontSize: 14, maxWidth: 520 }}>
+          No campaigns yet. A campaign groups quests toward one goal, like a trip or a renovation, and pays a reward when every quest is done.
+        </p>
+      )}
+      {camp && <div className="hscroll" style={{ flex: 1, gap: 12, scrollSnapType: 'x mandatory', margin: isDesk ? 0 : '0 -18px', padding: isDesk ? '4px 0 0' : '4px 18px 6px' }}>
         {STATUSES.map(([k, name]) => {
           const list = cq.filter((q) => q.status === k).sort(byDue);
           return (
@@ -283,7 +288,7 @@ function CampaignView() {
             </div>
           );
         })}
-      </div>
+      </div>}
     </div>
   );
 }

@@ -29,6 +29,7 @@ export interface Quest {
 export interface Campaign { name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName }
 
 export interface CompanionNote { t: string; date?: string; label?: string }
+/** bday is MM-DD, or empty when unknown. */
 export interface Companion { id: string; name: string; first: string; rel: string; bday: string; notes: CompanionNote[] }
 
 export interface TomeItem { id: number; t: string; done: boolean }
@@ -92,3 +93,17 @@ export const recurName = (r: Recur | null) => (r ? r.every[0].toUpperCase() + r.
 /** Small tilt for pinned notes so the board doesn't look machine-aligned. */
 const ROT = [-1.4, 0.9, -0.5, 1.2, -0.9, 0.5, 1.5];
 export const noteRotation = (id: number, scale = 1, shift = 0) => ROT[(id + shift) % ROT.length] * scale + 'deg';
+
+/** A fresh log: level 1, no gold, nothing written down yet. */
+export const emptyData = (): Data => ({
+  version: 1,
+  hero: { name: 'Adventurer', xp: 0, level: 1, next: 100, gold: 0 },
+  quests: [],
+  camps: {},
+  companions: [],
+  tomes: [],
+  codex: [],
+  rewards: [],
+});
+
+export const CODEX_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map'];

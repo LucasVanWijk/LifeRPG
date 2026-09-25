@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { addMonths, dueLabel } from './dates';
 import { completeQuest, glossaryEvents, setStatus, undoQuest } from './logic';
 import { reward } from './model';
-import { seedData } from './seed';
+import { emptyData } from './model';
+import { sampleData } from './sample';
 
 const T = '2026-09-25';
 
@@ -16,7 +17,7 @@ describe('reward', () => {
 
 describe('completeQuest / undoQuest', () => {
   it('pays out a one-off quest and reverses it exactly', () => {
-    const d = seedData(T);
+    const d = sampleData(T);
     const c = completeQuest(d, 8, T)!; // Pay car insurance: crisis S → 25 XP, 8 gold
     expect(c.xp).toBe(25);
     expect(c.data.hero).toMatchObject({ xp: 365, gold: 433, level: 7 });
@@ -30,7 +31,7 @@ describe('completeQuest / undoQuest', () => {
   });
 
   it('rolls a weekly bounty forward and extends its streak', () => {
-    const d = seedData(T);
+    const d = sampleData(T);
     const c = completeQuest(d, 3, T)!; // Call mom, weekly, streak 3
     const q = c.data.quests.find((x) => x.id === 3)!;
     expect(q.due).toBe('2026-10-02');
@@ -42,7 +43,7 @@ describe('completeQuest / undoQuest', () => {
   });
 
   it('levels up and carries the overflow', () => {
-    const d = seedData(T);
+    const d = sampleData(T);
     d.hero.xp = 490;
     const c = completeQuest(d, 4, T)!; // L main → 105 XP
     expect(c.leveledUp).toBe(true);
@@ -50,9 +51,20 @@ describe('completeQuest / undoQuest', () => {
   });
 });
 
+describe('emptyData', () => {
+  it('starts a fresh log that levels from 1', () => {
+    const d = emptyData();
+    expect(d.quests).toHaveLength(0);
+    d.quests.push({ id: 1, title: 'First steps', quad: 'main', due: null, size: 'L', campaign: null, status: 'todo', recur: null, notes: [] });
+    const c = completeQuest(d, 1, T)!;
+    expect(c.leveledUp).toBe(true);
+    expect(c.data.hero).toMatchObject({ level: 2, xp: 5, next: 200, gold: 35 });
+  });
+});
+
 describe('setStatus', () => {
   it('pays when dragged to Done and refunds when dragged back', () => {
-    const d = seedData(T);
+    const d = sampleData(T);
     const a = setStatus(d, 9, 'done', T);
     expect(a.completion?.xp).toBe(60);
     const b = setStatus(a.data, 9, 'doing', T);
@@ -61,14 +73,14 @@ describe('setStatus', () => {
   });
 });
 
-describe('seed', () => {
+describe('sample data', () => {
   it('shifts sample dates so they stay relative to today', () => {
-    const later = seedData('2027-01-10');
+    const later = sampleData('2027-01-10');
     expect(later.quests.find((x) => x.id === 1)!.due).toBe('2027-01-10');
     expect(later.companions.find((c) => c.id === 'tom')!.notes[0].t).toBe('Housewarming on 11 Jan');
   });
   it('puts birthdays and dated notes on the calendar', () => {
-    const ev = glossaryEvents(seedData(T), T);
+    const ev = glossaryEvents(sampleData(T), T);
     expect(ev.some((e) => e.date === '2026-09-27' && e.label === "Mom's birthday")).toBe(true);
     expect(ev.some((e) => e.date === '2026-09-29' && e.kind === 'Codex')).toBe(true);
   });

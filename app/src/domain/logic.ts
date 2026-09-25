@@ -71,7 +71,7 @@ export function glossaryEvents(data: Data, today: string): CalendarEvent[] {
   const out: CalendarEvent[] = [];
   const y = Number(today.slice(0, 4));
   for (const c of data.companions) {
-    for (const yr of [y - 1, y, y + 1]) out.push({ date: yr + '-' + c.bday, label: c.first + "'s birthday", kind: 'Companion', target: 'companion:' + c.id, who: c.first });
+    if (c.bday) for (const yr of [y - 1, y, y + 1]) out.push({ date: yr + '-' + c.bday, label: c.first + "'s birthday", kind: 'Companion', target: 'companion:' + c.id, who: c.first });
     for (const n of c.notes) if (n.date) out.push({ date: n.date, label: n.label || c.first + ': ' + n.t, kind: 'Companion', target: 'companion:' + c.id, who: c.first });
   }
   for (const x of data.codex)

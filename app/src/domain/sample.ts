@@ -6,7 +6,8 @@ const BASE = '2026-09-25';
 
 const splitNotes = (s: string) => s.split(/(?<=\.)\s+/).filter(Boolean).map((t, i) => ({ id: i + 1, t }));
 
-export function seedData(today: string): Data {
+/** Sample log used by the tests (the data from the design prototype). The app itself starts empty. */
+export function sampleData(today: string): Data {
   const shift = dayDiff(today, BASE);
   const d = (iso: string) => addDays(iso, shift);
   const mmdd = (iso: string) => d(iso).slice(5);
