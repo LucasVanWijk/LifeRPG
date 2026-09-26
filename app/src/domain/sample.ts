@@ -1,5 +1,6 @@
 import { addDays, dayDiff, MONL, parseDay, shortDate } from './dates';
 import type { Data, Quest } from './model';
+import { newExpedition } from './expedition/engine';
 
 /** The day the sample data was written against; every sample date is shifted so it stays relative to today. */
 const BASE = '2026-09-25';
@@ -18,11 +19,11 @@ export function sampleData(today: string): Data {
     : shortDate(d('2026-10-12')) + ' – ' + shortDate(d('2026-10-22'));
 
   const q = (id: number, title: string, quad: Quest['quad'], due: string | null, size: Quest['size'], campaign: string | null, status: Quest['status'], notes = ''): Quest =>
-    ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes), steps: [] });
+    ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes), steps: [], companions: [] });
 
   return {
     version: 2,
-    hero: { name: 'Rowan', xp: 340, level: 7, next: 500, gold: 425 },
+    hero: { name: 'Rowan', xp: 340, level: 7, next: 500, gold: 425, points: 340 },
     quests: [
       q(1, 'Renew passport', 'crisis', '2026-09-25', 'M', 'ireland', 'doing', 'Current one expires in November. Bring two photos and the old passport to the town hall.'),
       q(2, 'Book dentist appointment', 'errand', '2026-09-23', 'S', null, 'todo', 'Six-month check-up. Number is in the Codex.'),
@@ -81,13 +82,6 @@ export function sampleData(today: string): Data {
       { id: 'gym', name: 'Gym', sub: 'Sportcentrum Olympos', icon: 'dumbbell', fields: [
         { k: 'Locker code', v: '4471' }, { k: 'Membership', v: 'Renews ' + longDay('2027-01-01') }] },
     ],
-    rewards: [
-      { id: 1, title: 'Guilt-free gaming evening', price: 200 },
-      { id: 2, title: 'Order takeout', price: 150 },
-      { id: 3, title: 'Buy a new book', price: 300 },
-      { id: 4, title: 'Lazy Sunday morning', price: 120 },
-      { id: 5, title: 'Cinema night', price: 250 },
-      { id: 6, title: 'New board game', price: 600 },
-    ],
+    expedition: newExpedition(0),
   };
 }

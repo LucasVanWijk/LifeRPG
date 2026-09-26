@@ -1,6 +1,6 @@
 import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { dayDiff, dueLabel } from '../domain/dates';
-import type { Campaign, Hero, Quest } from '../domain/model';
+import type { Campaign, Companion, Hero, Quest } from '../domain/model';
 import { heroName, QM, reward } from '../domain/model';
 import { Icon } from './Icon';
 
@@ -133,3 +133,9 @@ export function AddForm({ label, children, onSave, onCancel, invalid }: { label:
   );
 }
 
+
+/** "Sophie, Tom" for the companions a quest involves, or null. */
+export function withNames(q: Quest, companions: Companion[]): string | null {
+  const names = q.companions.map((id) => companions.find((c) => c.id === id)?.first).filter(Boolean);
+  return names.length ? names.join(', ') : null;
+}

@@ -2,8 +2,9 @@ import { addDays, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domai
 import { checkedInToday, glossaryEvents, habitDone, habitProgress, habitStreak } from '../domain/logic';
 import { EVERY_NAME, habitReward, heroName, QM, reward, streakText } from '../domain/model';
 import { Icon } from '../components/Icon';
-import { Portrait, questView } from '../components/common';
+import { Portrait, questView, withNames } from '../components/common';
 import { stepCount } from '../components/Steps';
+import { QuickAdd } from '../components/QuickAdd';
 import { useState } from 'react';
 import { backupDue, exportBackup, snoozeBackup } from '../backup';
 import { useStore } from '../state/store';
@@ -54,6 +55,7 @@ export function Home() {
           </span>
         </div>
       )}
+      <QuickAdd />
       <div className="home-grid">
         <section className="panel-framed hero-card">
           <button className="hero-btn" onClick={() => setUi({ profileOpen: true })} aria-label="Open your profile">
@@ -82,7 +84,7 @@ export function Home() {
             </span>
             <span style={{ display: 'flex', gap: 2 }}>
               <button className="btn btn-ghost" onClick={() => setUi({ chronicleOpen: true })} style={{ color: 'var(--color-accent-700)' }}>History</button>
-              <button className="btn btn-ghost" onClick={() => actions.goTab('adventure')} style={{ color: 'var(--color-accent-700)' }}>Visit the Tavern</button>
+              <button className="btn btn-ghost" onClick={() => actions.goTab('adventure')} style={{ color: 'var(--color-accent-700)' }}>Expeditions</button>
             </span>
           </div>
           {seals.length > 0 && (
@@ -118,6 +120,7 @@ export function Home() {
                     <span style={{ color: checked ? 'var(--q-moss)' : v.dueColor }}>{checked ? 'Completed today' : v.dueLabel}</span>
                     {v.campaignName && <span style={{ gap: 4, minWidth: 0, maxWidth: 200 }} title={v.campaignName}><Icon n="flag" size={11} /><span className="ellipsis">{v.campaignName}</span></span>}
                     {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+                    {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                   </div>
                 </div>
                 <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{v.xp} XP</span>
@@ -142,6 +145,7 @@ export function Home() {
                   <span className="meta">
                     <span style={{ color: q.due ? v.dueColor : undefined }}>{q.due ? v.dueLabel : 'No due date'}</span>
                     {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+                    {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                     {v.campaignName && <span style={{ gap: 4, maxWidth: 160 }}><Icon n="flag" size={11} /><span className="ellipsis">{v.campaignName}</span></span>}
                   </span>
                 </span>

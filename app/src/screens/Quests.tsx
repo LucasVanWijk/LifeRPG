@@ -4,8 +4,9 @@ import { bestStreak, checkedInToday, habitDone, habitProgress, habitStreak, habi
 import type { Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
 import { EVERY_NAME, habitReward, noteRotation, QUADS, STATUSES, streakText } from '../domain/model';
 import { StepChecklist, stepCount } from '../components/Steps';
+import { QuickAdd } from '../components/QuickAdd';
 import { Icon } from '../components/Icon';
-import { AddForm, byDue, Empty, onEnter, questView, ScreenHead, Seg } from '../components/common';
+import { AddForm, byDue, Empty, onEnter, questView, ScreenHead, Seg, withNames } from '../components/common';
 import { useStore } from '../state/store';
 
 export function Quests() {
@@ -19,6 +20,7 @@ export function Quests() {
           optStyle={{ minHeight: 40, padding: isDesk ? '8px 16px' : '8px 12px', fontSize: 14 }}
           options={[{ key: 'board', label: isDesk ? 'Quest Board' : 'Board' }, { key: 'campaign', label: 'Campaigns' }, { key: 'habits', label: 'Habits' }]} />
       </ScreenHead>
+      {ui.questView === 'board' && <QuickAdd />}
       {ui.questView === 'habits' ? <HabitsView /> : ui.questView === 'campaign' ? <CampaignView /> : isDesk ? <DeskBoard /> : ui.mobileZone ? <MobileZone zone={ui.mobileZone} /> : <MobileGrid />}
     </div>
   );
@@ -85,6 +87,7 @@ function DeskBoard() {
                           <span>{q.size}</span>
                           {stepCount(q) && <><span style={{ color: 'var(--color-accent-500)' }}>·</span><span className="tnum">{stepCount(q)} steps</span></>}
                         </div>
+                        {withNames(q, data.companions) && <div className="with-line"><Icon n="users" size={11} />with {withNames(q, data.companions)}</div>}
                         <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
                         <div className="note-foot">
                           <span>+{v.xp} XP</span>
@@ -181,6 +184,7 @@ function MobileZone({ zone }: { zone: QuadKey }) {
                 {v.hasDue && <span style={{ color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
                 <span>{q.size}</span>
                 {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+                {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                 {v.campaignName && <span className="camp-tag" title={v.campaignName} style={{ gap: 4, padding: '1px 7px', maxWidth: 180 }}><Icon n="flag" size={10} /><span className="ellipsis">{v.campaignName}</span></span>}
               </div>
               <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
@@ -294,6 +298,7 @@ function CampaignView() {
                       {v.hasDue && <span style={{ color: v.dueColor }}>{v.dueLabel}</span>}
                       <span style={{ gap: 4, color: v.quad.color }}><span className="dot" style={{ width: 6, height: 6 }} />{v.quad.name}</span>
                       <span>{q.size}</span>
+                      {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                       <span className="tnum" style={{ marginLeft: 'auto', color: 'var(--color-accent-700)' }}>+{v.xp} XP</span>
                     </div>
                     {!v.done && <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />}

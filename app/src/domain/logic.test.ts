@@ -8,7 +8,7 @@ import { sampleData } from './sample';
 
 const T = '2026-09-25'; // a Friday
 const quest = (id: number, patch: Partial<Quest> = {}): Quest =>
-  ({ id, title: 'Q' + id, quad: 'side', due: null, size: 'S', campaign: null, status: 'todo', notes: [], steps: [], ...patch });
+  ({ id, title: 'Q' + id, quad: 'side', due: null, size: 'S', campaign: null, status: 'todo', notes: [], steps: [], companions: [], ...patch });
 
 describe('reward', () => {
   it('gives Main Quests the 1.5× multiplier', () => {
@@ -47,6 +47,25 @@ describe('completeQuest / undoQuest', () => {
     const c = completeQuest(d, 1, T)!;
     expect(c.leveledUp).toBe(true);
     expect(c.data.hero).toMatchObject({ level: 2, xp: 5, next: 200, gold: 35 });
+  });
+});
+
+describe('skill points', () => {
+  it('fills the pool 1:1 with XP and takes it back on undo, never below zero', () => {
+    const d: Data = { ...emptyData(), quests: [quest(1, { quad: 'main', size: 'L' })] };
+    const c = completeQuest(d, 1, T)!;
+    expect(c.data.hero.points).toBe(105);
+    expect(undoQuest(c.data, 1, T).data.hero.points).toBe(0);
+    const spent = { ...c.data, hero: { ...c.data.hero, points: 20 } };
+    expect(undoQuest(spent, 1, T).data.hero.points).toBe(0);
+  });
+
+  it('seeds the pool from XP already earned when an older log is loaded', () => {
+    const { points, ...hero } = { ...emptyData().hero, name: 'Old' };
+    void points;
+    const old = { ...emptyData(), hero, quests: [quest(1, { status: 'done', doneOn: T, quad: 'main', size: 'L' })] };
+    expect(migrate(old, T)!.hero.points).toBe(105);
+    expect(migrate({ ...old, hero: { ...hero, points: 7 } }, T)!.hero.points).toBe(7);
   });
 });
 

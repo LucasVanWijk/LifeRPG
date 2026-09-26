@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { dayDiff, MONL, nextAnnual, shortDate } from '../domain/dates';
+import { dayDiff, dueLabel, MONL, nextAnnual, shortDate } from '../domain/dates';
 import { glossaryEvents } from '../domain/logic';
 import type { Companion, CodexEntry, CodexField, Data } from '../domain/model';
-import { CODEX_ICONS } from '../domain/model';
+import { CODEX_ICONS, QM } from '../domain/model';
 import { Icon, type IconName } from '../components/Icon';
 import { AddForm, Empty, onEnter, Seg } from '../components/common';
 import { useStore, type GlossaryCat } from '../state/store';
@@ -266,7 +266,10 @@ function CompanionDetail({ c }: { c: Companion }) {
   };
   const remove = () => actions.confirm({
     title: 'Remove ' + c.name + '?', body: 'Their notes and dates leave the Glossary and your week.', confirmLabel: 'Remove companion',
-    onConfirm: () => { actions.update((d) => ({ ...d, companions: d.companions.filter((x) => x.id !== c.id) })); setUi({ gDetail: null, gCat: 'companions' }); },
+    onConfirm: () => {
+      actions.update((d) => ({ ...d, companions: d.companions.filter((x) => x.id !== c.id), quests: d.quests.map((q) => (q.companions.includes(c.id) ? { ...q, companions: q.companions.filter((x) => x !== c.id) } : q)) }));
+      setUi({ gDetail: null, gCat: 'companions' });
+    },
   });
   const [bm, bd] = c.bday ? c.bday.split('-').map(Number) : [0, 0];
   const inDays = c.bday ? dayDiff(nextAnnual(c.bday, today), today) : null;
@@ -311,6 +314,7 @@ function CompanionDetail({ c }: { c: Companion }) {
           <span className="heading" style={{ fontSize: 19 }}>{inDays === null ? '—' : inDays === 0 ? 'Today' : inDays === 1 ? 'Tomorrow' : 'In ' + inDays + ' days'}</span>
         </div>
       </div>
+      <CompanionQuests id={c.id} />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 6 }}>
           <h3 style={{ fontSize: 23 }}>Notes</h3><span className="muted" style={{ fontSize: 12 }}>Dated notes appear on your week</span>
@@ -431,6 +435,35 @@ function CodexDetail({ x }: { x: CodexEntry }) {
           <button className="btn btn-primary inked" onClick={add} disabled={!k.trim() || !(v.trim() || date)} style={{ minHeight: 44 }}>Add</button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Quests that involve a companion: open ones to tap into, and how many are done. */
+function CompanionQuests({ id }: { id: string }) {
+  const { data, today, actions } = useStore();
+  const qs = data.quests.filter((q) => q.companions.includes(id));
+  const open = qs.filter((q) => q.status !== 'done').sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999'));
+  const done = qs.length - open.length;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 6 }}>
+        <h3 style={{ fontSize: 23 }}>Quests</h3>
+        <span className="muted tnum" style={{ fontSize: 12 }}>{open.length} open{done ? ' · ' + done + ' done' : ''}</span>
+      </div>
+      {open.map((q) => (
+        <button key={q.id} className="row-btn" onClick={() => actions.openQuest(q.id)} style={{ gap: 10, minHeight: 48, padding: '8px 0' }}>
+          <span style={{ color: QM[q.quad].color }}><Icon n={QM[q.quad].icon} size={16} /></span>
+          <span className="heading" style={{ flex: 1, minWidth: 0, fontSize: 17 }}>{q.title}</span>
+          {q.due && <span className="muted tnum" style={{ fontSize: 12 }}>{dueLabel(q.due, today)}</span>}
+          <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={16} /></span>
+        </button>
+      ))}
+      {!open.length && (
+        <p className="muted" style={{ margin: 0, padding: '10px 0', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>
+          No open quests. Link one from a quest's edit screen, or type #name in quick add.
+        </p>
+      )}
     </div>
   );
 }

@@ -17,14 +17,13 @@ export function App() {
   const { data, ui, setUi, isDesk, toast, lastToast, canUndo, scrollRef, actions } = useStore();
   const { hero } = data;
   const openQuest = data.quests.find((q) => q.id === ui.openId);
-  const buy = data.rewards.find((r) => r.id === ui.buyId);
   const shown = toast || lastToast;
 
   // Escape closes whatever overlay is on top.
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : u.buyId ? { buyId: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -105,18 +104,6 @@ export function App() {
         </div>
       )}
 
-      {buy && (
-        <div className="modal" onClick={(e) => e.target === e.currentTarget && setUi({ buyId: null })}>
-          <div className="dialog" role="alertdialog" aria-modal="true" aria-labelledby="buy-title" style={{ background: 'var(--q-parch)', width: 'min(380px,100%)' }}>
-            <div id="buy-title" className="dialog-title" style={{ fontSize: 24 }}>{buy.title}</div>
-            <div className="dialog-body tnum">Spend {buy.price} gold? You'll have {hero.gold - buy.price} left.</div>
-            <div className="dialog-actions">
-              <button className="btn btn-secondary" onClick={() => setUi({ buyId: null })} style={{ minHeight: 44 }}>Not now</button>
-              <button className="btn btn-primary inked" onClick={() => actions.buy(buy.id)} style={{ minHeight: 44 }} autoFocus>Buy for {buy.price}g</button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {ui.levelUp && (
         <div className="modal" style={{ zIndex: 55, background: 'color-mix(in srgb, var(--color-neutral-900) 40%, transparent)' }}>

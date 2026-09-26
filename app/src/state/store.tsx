@@ -3,7 +3,11 @@ import { todayISO } from '../domain/dates';
 import type { Outcome, Toast } from '../domain/logic';
 import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
-import type { Campaign, Data, Habit, Hero, QuadKey, Quest, Reward, Status } from '../domain/model';
+import type { Campaign, Data, Habit, Hero, QuadKey, Quest, Status } from '../domain/model';
+import type { Skill } from '../domain/expedition/content';
+import { ITEMS, SHOP, SKILL_NAME } from '../domain/expedition/content';
+import type { Activity, Summary } from '../domain/expedition/engine';
+import * as X from '../domain/expedition/engine';
 import { emptyData, QM } from '../domain/model';
 
 // v1 held the design's sample data; v2 starts every log empty. The data inside carries its own version (see migrate.ts).
@@ -35,7 +39,6 @@ export interface Ui {
   openTome: string | null;
   weekOffset: number;
   selDay: string;
-  buyId: number | null;
   levelUp: boolean;
   confirm: Confirm | null;
   dragId: number | null;
@@ -77,7 +80,6 @@ function initialUi(today: string): Ui {
     openTome: null,
     weekOffset: 0,
     selDay: today,
-    buyId: null,
     levelUp: false,
     confirm: null,
     dragId: null,
@@ -97,6 +99,10 @@ function useLayout() {
 }
 
 const nextId = (xs: { id: number }[]) => Math.max(0, ...xs.map((x) => x.id)) + 1;
+
+/** Undo is still safe while the quest log and rewards are unchanged; Expeditions ticking alongside doesn't count. */
+const sameLog = (a: Data, b: Data) =>
+  a.quests === b.quests && a.habits === b.habits && a.camps === b.camps && a.hero.xp === b.hero.xp && a.hero.gold === b.hero.gold && a.hero.level === b.hero.level;
 
 function useStoreValue() {
   const [today, setToday] = useState(todayISO);
@@ -119,9 +125,29 @@ function useStoreValue() {
     return () => { document.removeEventListener('visibilitychange', on); window.clearInterval(t); };
   }, []);
 
+  // Saving is throttled (Expeditions changes data every second) and flushed when the app is hidden or closed.
+  const savedAt = useRef(0);
+  const saveTimer = useRef<number | undefined>(undefined);
+  const latest = useRef(data);
+  latest.current = data;
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* quota or private mode */ }
+    const save = () => {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = undefined;
+      savedAt.current = Date.now();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(latest.current)); } catch { /* quota or private mode */ }
+    };
+    const wait = 5000 - (Date.now() - savedAt.current);
+    if (wait <= 0) save();
+    else if (saveTimer.current === undefined) saveTimer.current = window.setTimeout(save, wait);
   }, [data]);
+  useEffect(() => {
+    const flush = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(latest.current)); } catch { /* ignore */ } };
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => { document.removeEventListener('visibilitychange', onHide); window.removeEventListener('pagehide', flush); };
+  }, []);
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
@@ -203,8 +229,11 @@ function useStoreValue() {
         const u = undoRef.current;
         window.clearTimeout(toastTimer.current);
         toastQueue.current = [];
-        if (u && dataRef.current === u.after) {
-          commit(u.before);
+        if (u && sameLog(dataRef.current, u.after)) {
+          // Put the log back, but keep Expeditions as it is now and take the undone XP out of the skill-point pool.
+          const cur = dataRef.current;
+          const points = Math.max(0, cur.hero.points - (u.after.hero.points - u.before.hero.points));
+          commit({ ...u.before, expedition: cur.expedition, hero: { ...u.before.hero, points } });
           undoRef.current = null;
           setUi({ levelUp: false });
           showToast('Undone', 'Rewards put back as they were');
@@ -234,20 +263,35 @@ function useStoreValue() {
       updateHabit(id: number, patch: Partial<Habit>) { commit({ ...d(), habits: d().habits.map((h) => (h.id === id ? { ...h, ...patch } : h)) }); },
       deleteHabit(id: number) { commit({ ...d(), habits: d().habits.filter((h) => h.id !== id) }); },
 
-      // Tavern
-      buy(id: number) {
-        const cur = d(), r = cur.rewards.find((x) => x.id === id);
-        if (!r || r.price > cur.hero.gold) return;
-        commit({ ...cur, hero: { ...cur.hero, gold: cur.hero.gold - r.price } });
-        setUi({ buyId: null });
-        showToast('Enjoy: ' + r.title, '−' + r.price + ' gold');
+      // Expeditions
+      /** Plays out the time since the last tick; the screen calls this every second while open. */
+      expAdvance(now = Date.now()): Summary {
+        const r = X.advance(d().expedition, now);
+        commit({ ...d(), expedition: r.exp });
+        return r.summary;
       },
-      addReward(title: string, price: number) {
-        commit({ ...d(), rewards: [...d().rewards, { id: nextId(d().rewards), title, price }] });
-        showToast('Added to the Tavern', title + ' · ' + price + ' gold');
+      expStart(kind: Activity['kind'], id: string) {
+        const now = Date.now();
+        const r = X.start(X.advance(d().expedition, now).exp, kind, id, now);
+        if (!r.ok) { showToast("Can't start", r.reason); return; }
+        commit({ ...d(), expedition: r.exp });
       },
-      updateReward(id: number, patch: Partial<Reward>) { commit({ ...d(), rewards: d().rewards.map((r) => (r.id === id ? { ...r, ...patch } : r)) }); },
-      deleteReward(id: number) { commit({ ...d(), rewards: d().rewards.filter((r) => r.id !== id) }); },
+      expStop() { const now = Date.now(); commit({ ...d(), expedition: X.stop(X.advance(d().expedition, now).exp, now) }); },
+      expBuy(shopId: string) {
+        const cur = d(), r = X.buy(cur.expedition, cur.hero.gold, shopId);
+        if (!r.ok) { showToast("Can't buy that", r.reason); return; }
+        commit({ ...cur, expedition: r.exp, hero: { ...cur.hero, gold: r.gold } });
+        showToast('Bought ' + SHOP.find((x) => x.id === shopId)!.name, '−' + (cur.hero.gold - r.gold) + ' gold');
+      },
+      expEquip(item: string) { commit({ ...d(), expedition: X.equip(d().expedition, item) }); showToast('Equipped', ITEMS[item].name); },
+      expTrain(skill: Skill) {
+        const cur = d(), before = X.level(cur.expedition, skill);
+        const r = X.train(cur.expedition, cur.hero.points, skill);
+        if (!r.used) return;
+        commit({ ...cur, expedition: r.exp, hero: { ...cur.hero, points: cur.hero.points - r.used } });
+        const after = X.level(r.exp, skill);
+        showToast(after > before ? SKILL_NAME[skill] + ' level ' + after : SKILL_NAME[skill] + ' trained', '−' + r.used + ' skill points');
+      },
 
       // Profile and backup
       updateHero(patch: Partial<Hero>) { commit({ ...d(), hero: { ...d().hero, ...patch } }); },
@@ -270,7 +314,7 @@ function useStoreValue() {
     };
   }, [today, commit, apply, showToast, setUi]);
 
-  const canUndo = !!toast?.undo && !!undoRef.current && undoRef.current.after === data;
+  const canUndo = !!toast?.undo && !!undoRef.current && sameLog(data, undoRef.current.after);
   return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions };
 }
 

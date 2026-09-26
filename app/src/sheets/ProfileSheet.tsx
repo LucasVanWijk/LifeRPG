@@ -85,7 +85,7 @@ export function ProfileSheet() {
 
   const startOver = () => actions.confirm({
     title: 'Start over?',
-    body: 'This erases every quest, habit, campaign, Glossary entry and reward in this browser, and resets you to level 1. Export a backup first if you might want it back.',
+    body: 'This erases every quest, habit, campaign, Glossary entry and all Expeditions progress in this browser, and resets you to level 1. Export a backup first if you might want it back.',
     confirmLabel: 'Erase everything',
     onConfirm: () => { actions.replaceData(emptyData()); showToast('A fresh log', 'Everything was erased'); },
   });

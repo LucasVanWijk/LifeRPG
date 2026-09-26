@@ -20,12 +20,12 @@ export function gain(hero: Hero, xpGain: number, goldGain: number): { hero: Hero
     next += 100;
     leveledUp = true;
   }
-  return { hero: { ...hero, xp, level, next, gold: hero.gold + goldGain }, leveledUp };
+  return { hero: { ...hero, xp, level, next, gold: hero.gold + goldGain, points: (hero.points ?? 0) + xpGain }, leveledUp };
 }
 
-/** Takes a reward back. Levels are never lost; XP and gold stop at zero. */
+/** Takes a reward back. Levels are never lost; XP, gold and skill points stop at zero. */
 export const lose = (hero: Hero, xp: number, gold: number): Hero =>
-  ({ ...hero, xp: Math.max(0, hero.xp - xp), gold: Math.max(0, hero.gold - gold) });
+  ({ ...hero, xp: Math.max(0, hero.xp - xp), gold: Math.max(0, hero.gold - gold), points: Math.max(0, (hero.points ?? 0) - xp) });
 
 export const patchQuest = (data: Data, id: number, patch: Partial<Quest>): Data => ({
   ...data,

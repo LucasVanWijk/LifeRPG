@@ -89,6 +89,21 @@ function QuestForm({ q, set, isNew, onStatus }: { q: Omit<Quest, 'id'>; set: (pa
           {Object.entries(data.camps).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
         </select>
       </div>
+      {data.companions.length > 0 && (
+        <div className="field"><label>Companions</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {data.companions.map((c) => {
+              const on = q.companions.includes(c.id);
+              return (
+                <button key={c.id} className="chip" aria-pressed={on} onClick={() => set({ companions: on ? q.companions.filter((x) => x !== c.id) : [...q.companions, c.id] })}
+                  style={{ minHeight: 38, padding: '4px 10px', fontSize: 15 }}>
+                  {on && <Icon n="check" size={13} stroke={2.2} />}{c.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
       {camp && onStatus && (
         <div className="field"><label>Status in {camp.name}</label>
           <Seg name="q-status" value={q.status} onChange={onStatus} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', width: '100%' }}
@@ -106,7 +121,7 @@ export function NewQuestSheet() {
   const campKey = data.camps[ui.campaign] ? ui.campaign : Object.keys(data.camps)[0] ?? null;
   const [q, setQ] = useState<Omit<Quest, 'id'>>(() => ({
     title: '', quad: (ui.tab === 'quests' && ui.questView === 'board' && ui.mobileZone) || 'side', due: null, size: 'M',
-    campaign: onCampaigns ? campKey : null, status: 'todo', notes: [], steps: [],
+    campaign: onCampaigns ? campKey : null, status: 'todo', notes: [], steps: [], companions: [],
   }));
   const close = () => setUi({ newOpen: false });
   const create = () => {
@@ -178,6 +193,16 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
               </div>
             ))}
           </div>
+          {q.companions.length > 0 && (
+            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
+              <span className="label" style={{ marginRight: 4 }}>With</span>
+              {q.companions.map((id) => data.companions.find((c) => c.id === id)).filter((c) => !!c).map((c) => (
+                <button key={c!.id} className="chip" onClick={() => actions.goGlossary('companion:' + c!.id)} style={{ minHeight: 34, padding: '2px 10px', fontSize: 15 }}>
+                  <Icon n="users" size={13} />{c!.name}
+                </button>
+              ))}
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 4 }}>
               <h3 style={{ fontSize: 22 }}>Steps</h3>
