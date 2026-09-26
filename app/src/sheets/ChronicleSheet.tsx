@@ -31,6 +31,7 @@ export function ChronicleSheet() {
     <Sheet onClose={close} label="History">
       <div style={{ display: 'flex', alignItems: 'center', paddingTop: 6 }}>
         <h3 style={{ fontSize: 26 }}>History</h3>
+        <button className="btn btn-ghost inked" onClick={() => setUi({ chronicleOpen: false, reviewOpen: true })} style={{ marginLeft: 12 }}>Weekly review</button>
         <span style={{ marginLeft: 'auto' }}><CloseBtn onClick={close} /></span>
       </div>
       <p className="muted tnum" style={{ margin: '-8px 0 0', fontSize: 13 }}>

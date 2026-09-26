@@ -1,7 +1,10 @@
 import { useEffect } from 'react';
 import { Icon, type IconName } from './components/Icon';
-import { heroName } from './domain/model';
+import { heroName, titleFor } from './domain/model';
 import { Adventure } from './screens/Adventure';
+import { Calendar } from './screens/Calendar';
+import { EventSheet } from './sheets/EventSheet';
+import { ReviewSheet } from './sheets/ReviewSheet';
 import { Glossary } from './screens/Glossary';
 import { Home } from './screens/Home';
 import { Quests } from './screens/Quests';
@@ -11,7 +14,7 @@ import { ChronicleSheet } from './sheets/ChronicleSheet';
 import { NewQuestSheet, QuestSheet } from './sheets/QuestSheet';
 import { useStore, type Tab } from './state/store';
 
-const NAV: [Tab, string, IconName][] = [['home', 'Home', 'home'], ['quests', 'Quests', 'scroll'], ['glossary', 'Glossary', 'book-open'], ['adventure', 'Adventure', 'compass']];
+const NAV: [Tab, string, IconName][] = [['home', 'Home', 'home'], ['quests', 'Quests', 'scroll'], ['calendar', 'Calendar', 'calendar'], ['glossary', 'Glossary', 'book-open'], ['adventure', 'Adventure', 'compass']];
 
 export function App() {
   const { data, ui, setUi, isDesk, toast, lastToast, canUndo, scrollRef, actions } = useStore();
@@ -23,7 +26,7 @@ export function App() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -41,7 +44,7 @@ export function App() {
           </nav>
           <div className="side-hero" role="button" tabIndex={0} aria-label="Open your profile" onClick={() => setUi({ profileOpen: true })} onKeyDown={(e) => e.key === 'Enter' && setUi({ profileOpen: true })}>
             <div className="heading" style={{ fontSize: 18 }}>{heroName(hero)}</div>
-            <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-accent-800)' }}>Level {hero.level} Wanderer</div>
+            <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-accent-800)' }}>Level {hero.level} {titleFor(hero.level)}</div>
             <div className="bar"><div style={{ width: Math.round((hero.xp / hero.next) * 100) + '%' }} /></div>
             <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
               <span>{hero.xp} / {hero.next} XP</span>
@@ -56,6 +59,7 @@ export function App() {
           {ui.tab === 'home' && <Home />}
           {ui.tab === 'quests' && <Quests />}
           {ui.tab === 'glossary' && <Glossary />}
+          {ui.tab === 'calendar' && <Calendar />}
           {ui.tab === 'adventure' && <Adventure />}
         </main>
 
@@ -69,9 +73,15 @@ export function App() {
           </nav>
         )}
 
-        <button className="fab" onClick={() => setUi({ newOpen: true, openId: null, campSheet: null })} aria-label="New Quest">
-          <Icon n="plus" size={22} stroke={2} />{isDesk && <span>New Quest</span>}
-        </button>
+        {ui.tab === 'calendar' ? (
+          <button className="fab" onClick={() => actions.openEvent('new')} aria-label="New event">
+            <Icon n="plus" size={22} stroke={2} />{isDesk && <span>New Event</span>}
+          </button>
+        ) : (
+          <button className="fab" onClick={() => setUi({ newOpen: true, openId: null, campSheet: null })} aria-label="New Quest">
+            <Icon n="plus" size={22} stroke={2} />{isDesk && <span>New Quest</span>}
+          </button>
+        )}
 
         <div className={'toast' + (toast ? ' show' : '')} role="status" aria-live="polite">
           <span style={{ color: 'var(--color-accent-600)' }}><Icon n="sparkles" size={17} /></span>
@@ -88,6 +98,8 @@ export function App() {
       {ui.campSheet && <CampaignSheet key={ui.campSheet} campKey={ui.campSheet === 'new' ? null : ui.campSheet} />}
       {ui.profileOpen && <ProfileSheet />}
       {ui.chronicleOpen && <ChronicleSheet />}
+      {ui.reviewOpen && <ReviewSheet />}
+      {ui.eventSheet !== null && <EventSheet key={String(ui.eventSheet)} id={ui.eventSheet} />}
       {!hero.name && <Welcome />}
 
       {ui.confirm && (
@@ -110,7 +122,7 @@ export function App() {
           <div role="alertdialog" aria-modal="true" aria-label="Level up" style={{ width: 'min(320px,100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 22px 20px', textAlign: 'center', border: '1px solid color-mix(in srgb, var(--color-accent-800) 35%, transparent)', borderRadius: 'var(--radius-lg)', boxShadow: 'inset 0 0 0 5px var(--q-parch), inset 0 0 0 6px var(--color-accent-500), var(--shadow-lg)', background: 'var(--q-parch)' }}>
             <span className="seal heading tnum" style={{ width: 72, height: 72, fontSize: 34, boxShadow: 'inset 0 0 0 5px var(--q-wax), inset 0 0 0 6px rgba(255,230,200,.35), 0 3px 8px rgba(40,10,0,.35)' }}>{hero.level}</span>
             <span className="kicker">Level up</span>
-            <div className="heading" style={{ fontSize: 26, lineHeight: 1.1 }}>{heroName(hero)} reaches level {hero.level}</div>
+            <div className="heading" style={{ fontSize: 26, lineHeight: 1.1 }}>{heroName(hero)} reaches level {hero.level}{titleFor(hero.level) !== titleFor(hero.level - 1) ? ' and becomes a ' + titleFor(hero.level) : ''}</div>
             <p className="muted" style={{ margin: 0, fontSize: 14 }}>{hero.next} XP to the next level.</p>
             <button className="btn btn-primary inked" onClick={() => setUi({ levelUp: false })} style={{ minHeight: 44, minWidth: 140, marginTop: 6 }} autoFocus>Onward</button>
           </div>

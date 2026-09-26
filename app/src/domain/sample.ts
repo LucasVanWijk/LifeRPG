@@ -82,6 +82,7 @@ export function sampleData(today: string): Data {
       { id: 'gym', name: 'Gym', sub: 'Sportcentrum Olympos', icon: 'dumbbell', fields: [
         { k: 'Locker code', v: '4471' }, { k: 'Membership', v: 'Renews ' + longDay('2027-01-01') }] },
     ],
+    events: [],
     expedition: newExpedition(0),
   };
 }

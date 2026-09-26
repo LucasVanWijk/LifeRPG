@@ -6,6 +6,7 @@ import { Icon } from '../components/Icon';
 import { StepChecklist, stepCount } from '../components/Steps';
 import { CloseBtn, CompleteButton, DoneBanner, onEnter, questView, Seg, Sheet } from '../components/common';
 import { useStore } from '../state/store';
+import { isOverdue, RescheduleButtons } from '../components/Reschedule';
 
 const uid = () => Date.now() + Math.floor(Math.random() * 1000);
 
@@ -179,6 +180,12 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
         <>
           <h2 style={{ margin: '-4px 0 0', fontSize: 30, lineHeight: 1.12, textWrap: 'pretty' }}>{q.title}</h2>
           <RewardBadge q={q} />
+          {isOverdue(q, today) && (
+            <div className="overdue-box">
+              <span style={{ color: 'var(--q-wax)', fontSize: 13 }}>Overdue. Move it to:</span>
+              <RescheduleButtons q={q} />
+            </div>
+          )}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16, borderTop: '1px solid var(--q-rule)' }}>
             {[
               { k: 'Quadrant', v: QM[q.quad].name, color: QM[q.quad].color },
@@ -238,7 +245,10 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
         <>
           <QuestForm q={q} set={upd} isNew={false} onStatus={(s) => actions.setStatus(q.id, s)} />
           {finish}
-          <button className="danger-btn" onClick={remove}><Icon n="x" size={15} />Delete quest</button>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="btn btn-secondary" onClick={() => actions.duplicateQuest(q.id)} style={{ flex: 1, minHeight: 44 }}><Icon n="plus" size={15} />Duplicate</button>
+            <button className="danger-btn" onClick={remove} style={{ flex: 1 }}><Icon n="x" size={15} />Delete quest</button>
+          </div>
         </>
       )}
     </Sheet>

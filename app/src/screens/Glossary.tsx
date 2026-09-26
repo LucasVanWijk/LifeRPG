@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { dayDiff, dueLabel, MONL, nextAnnual, shortDate } from '../domain/dates';
+import { addDays, dayDiff, dueLabel, MONL, nextAnnual, shortDate, weekdayDate } from '../domain/dates';
+import { calendarItems } from '../domain/calendar';
 import { glossaryEvents } from '../domain/logic';
 import type { Companion, CodexEntry, CodexField, Data } from '../domain/model';
 import { CODEX_ICONS, QM } from '../domain/model';
@@ -267,7 +268,7 @@ function CompanionDetail({ c }: { c: Companion }) {
   const remove = () => actions.confirm({
     title: 'Remove ' + c.name + '?', body: 'Their notes and dates leave the Glossary and your week.', confirmLabel: 'Remove companion',
     onConfirm: () => {
-      actions.update((d) => ({ ...d, companions: d.companions.filter((x) => x.id !== c.id), quests: d.quests.map((q) => (q.companions.includes(c.id) ? { ...q, companions: q.companions.filter((x) => x !== c.id) } : q)) }));
+      actions.update((d) => ({ ...d, companions: d.companions.filter((x) => x.id !== c.id), quests: d.quests.map((q) => (q.companions.includes(c.id) ? { ...q, companions: q.companions.filter((x) => x !== c.id) } : q)), events: d.events.map((e) => (e.companions.includes(c.id) ? { ...e, companions: e.companions.filter((x) => x !== c.id) } : e)) }));
       setUi({ gDetail: null, gCat: 'companions' });
     },
   });
@@ -315,6 +316,7 @@ function CompanionDetail({ c }: { c: Companion }) {
         </div>
       </div>
       <CompanionQuests id={c.id} />
+      <CompanionEvents id={c.id} />
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 6 }}>
           <h3 style={{ fontSize: 23 }}>Notes</h3><span className="muted" style={{ fontSize: 12 }}>Dated notes appear on your week</span>
@@ -464,6 +466,31 @@ function CompanionQuests({ id }: { id: string }) {
           No open quests. Link one from a quest's edit screen, or type #name in quick add.
         </p>
       )}
+    </div>
+  );
+}
+
+/** The next few calendar events a companion is part of. */
+function CompanionEvents({ id }: { id: string }) {
+  const { data, today, actions } = useStore();
+  const upcoming = calendarItems({ ...data, quests: [] }, today, addDays(today, 365))
+    .filter((it) => it.kind === 'event' && it.companions?.includes(id) && (!it.span || it.span.day === 1))
+    .slice(0, 5);
+  if (!data.events.some((e) => e.companions.includes(id))) return null;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', paddingBottom: 6 }}>
+        <h3 style={{ fontSize: 23 }}>Upcoming</h3>
+      </div>
+      {upcoming.map((it, i) => (
+        <button key={i} className="row-btn" onClick={() => actions.openEvent(Number(it.target.split(':')[1]))} style={{ gap: 10, minHeight: 48, padding: '8px 0' }}>
+          <span className="muted tnum" style={{ width: 86, flex: 'none', fontSize: 12 }}>{weekdayDate(it.date)}</span>
+          <span className="heading" style={{ flex: 1, minWidth: 0, fontSize: 17 }}>{it.title}</span>
+          {it.time && <span className="muted tnum" style={{ fontSize: 12 }}>{it.time}</span>}
+          <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={16} /></span>
+        </button>
+      ))}
+      {!upcoming.length && <p className="muted" style={{ margin: 0, padding: '10px 0', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>No upcoming events.</p>}
     </div>
   );
 }

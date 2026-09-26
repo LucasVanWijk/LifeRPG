@@ -27,6 +27,7 @@ export function migrate(raw: unknown, today: string): Data | null {
     companions: d.companions ?? [],
     tomes: d.tomes ?? [],
     codex: d.codex ?? [],
+    events: Array.isArray(d.events) ? d.events : [],
     expedition: d.expedition
       ? { ...base.expedition, ...d.expedition, skills: { ...base.expedition.skills, ...d.expedition.skills } }
       : base.expedition,

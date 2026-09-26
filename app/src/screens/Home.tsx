@@ -1,6 +1,12 @@
 import { addDays, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
-import { checkedInToday, glossaryEvents, habitDone, habitProgress, habitStreak } from '../domain/logic';
-import { EVERY_NAME, habitReward, heroName, QM, reward, streakText } from '../domain/model';
+import { checkedInToday, habitDone, habitProgress, habitStreak } from '../domain/logic';
+import type { CalItem } from '../domain/calendar';
+import { calendarItems, KINDS } from '../domain/calendar';
+import { isOverdue, RescheduleButtons } from '../components/Reschedule';
+import { KindMark, Legend } from './Calendar';
+import { reviewDue, reviewWeek } from '../sheets/ReviewSheet';
+import { dismissIosWarning, iosAtRisk } from '../storage';
+import { EVERY_NAME, habitReward, heroName, QM, reward, streakText, titleFor } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { Portrait, questView, withNames } from '../components/common';
 import { stepCount } from '../components/Steps';
@@ -11,9 +17,10 @@ import { useStore } from '../state/store';
 
 export function Home() {
   const { data, ui, setUi, today, actions, showToast } = useStore();
+  const [moving, setMoving] = useState<number | null>(null);
+  const [iosNag, setIosNag] = useState(iosAtRisk);
   const [backupNag, setBackupNag] = useState(() => backupDue(data, today));
   const { hero } = data;
-  const active = data.quests.filter((q) => q.status !== 'done');
 
   const todayList = data.quests
     .filter((q) => (q.status !== 'done' && q.due && q.due <= today) || q.doneOn === today)
@@ -29,13 +36,19 @@ export function Home() {
 
   const dow = (parseDay(today).getDay() + 6) % 7;
   const mon = addDays(today, -dow + ui.weekOffset * 7), sun = addDays(mon, 6);
-  const events = glossaryEvents(data, today);
+  const weekItems = calendarItems(data, mon, sun);
+  const overdueCount = data.quests.filter((q) => isOverdue(q, today)).length;
   const m1 = parseDay(mon), m7 = parseDay(sun);
   const range = m1.getMonth() === m7.getMonth() ? m1.getDate() + ' – ' + m7.getDate() + ' ' + MON[m7.getMonth()] : shortDate(mon) + ' – ' + shortDate(sun);
   const weekTitle = ui.weekOffset === 0 ? 'This week' : ui.weekOffset === 1 ? 'Next week' : ui.weekOffset === -1 ? 'Last week' : 'Week of ' + shortDate(mon);
   const sd = parseDay(ui.selDay);
-  const agendaQuests = active.filter((q) => q.due === ui.selDay);
-  const agendaEvents = events.filter((e) => e.date === ui.selDay);
+  const agenda = weekItems.filter((i) => i.date === ui.selDay);
+  const openItem = (it: CalItem) => {
+    const [kind, id] = it.target.split(':');
+    if (kind === 'event') actions.openEvent(Number(id));
+    else if (kind === 'quest') actions.openQuest(Number(id));
+    else actions.goGlossary(it.target);
+  };
 
   return (
     <div className="screen">
@@ -55,6 +68,23 @@ export function Home() {
           </span>
         </div>
       )}
+      {iosNag && (
+        <div className="panel backup-nag" role="status">
+          <span style={{ color: 'var(--q-wax)' }}><Icon n="alert" size={18} /></span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>Safari deletes data from sites you haven't opened in 7 days. Add Questlog to your Home Screen (Share → Add to Home Screen) to keep your log.</span>
+          <button className="btn btn-ghost inked" onClick={() => { dismissIosWarning(); setIosNag(false); }}>Got it</button>
+        </div>
+      )}
+      {reviewDue(data, today) && (
+        <button className="panel review-card" onClick={() => setUi({ reviewOpen: true })}>
+          <span className="seal" style={{ width: 34, height: 34 }}><Icon n="scroll" size={16} /></span>
+          <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+            <span className="heading" style={{ display: 'block', fontSize: 19 }}>Your week in review</span>
+            <span className="muted tnum" style={{ fontSize: 13 }}>{shortDate(reviewWeek(today))} – {shortDate(addDays(reviewWeek(today), 6))} · what you did, and what's next</span>
+          </span>
+          <Icon n="chevron-right" size={17} />
+        </button>
+      )}
       <QuickAdd />
       <div className="home-grid">
         <section className="panel-framed hero-card">
@@ -62,7 +92,7 @@ export function Home() {
             <Portrait hero={hero} size={76} fontSize={38} />
             <span style={{ minWidth: 0, flex: 1 }}>
               <span className="heading" style={{ display: 'block', fontSize: 28, lineHeight: 1.05 }}>{heroName(hero)}</span>
-              <span className="muted" style={{ fontStyle: 'italic', fontSize: 15 }}>Level {hero.level} Wanderer</span>
+              <span className="muted" style={{ fontStyle: 'italic', fontSize: 15 }}>Level {hero.level} {titleFor(hero.level)}</span>
             </span>
             <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={18} /></span>
           </button>
@@ -104,7 +134,9 @@ export function Home() {
         <section className="panel today home-today">
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
             <h3 style={{ fontSize: 24 }}>Today's Quests</h3>
-            <span className="muted tnum" style={{ fontSize: 12 }}>{doneToday} of {todayList.length} done</span>
+            <span className="muted tnum" style={{ fontSize: 12 }}>
+              {overdueCount > 0 && <span style={{ color: 'var(--q-wax)' }}>{overdueCount} overdue · </span>}{doneToday} of {todayList.length} done
+            </span>
           </div>
           {todayList.map(({ q, checked }) => {
             const v = questView(q, today, data.camps);
@@ -123,7 +155,10 @@ export function Home() {
                     {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                   </div>
                 </div>
-                <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{v.xp} XP</span>
+                {isOverdue(q, today)
+                  ? <button className="btn btn-secondary" onClick={() => setMoving(moving === q.id ? null : q.id)} aria-expanded={moving === q.id} style={{ minHeight: 32, padding: '2px 10px', fontSize: 13 }}>Move</button>
+                  : <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{v.xp} XP</span>}
+                {moving === q.id && <div style={{ flexBasis: '100%', padding: '0 0 10px 34px' }}><RescheduleButtons q={q} compact /></div>}
               </div>
             );
           })}
@@ -211,41 +246,29 @@ export function Home() {
           <div className="week-days">
             {[0, 1, 2, 3, 4, 5, 6].map((i) => {
               const ds = addDays(mon, i), d = parseDay(ds);
-              const dots = active.filter((q) => q.due === ds).slice(0, 3);
-              const hasEvent = events.some((e) => e.date === ds);
+              const marks = weekItems.filter((i) => i.date === ds);
               return (
                 <button key={ds} className={'week-day' + (ds === today ? ' is-today' : '') + (ds === ui.selDay ? ' is-sel' : '')} onClick={() => setUi({ selDay: ds })} aria-pressed={ds === ui.selDay}>
                   <span style={{ fontSize: 10, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--color-accent-700)' }}>{WDL[d.getDay()].slice(0, 3)}</span>
                   <span className="num">{d.getDate()}</span>
                   <span className="week-marks">
-                    {dots.map((q) => <span key={q.id} className="ink-dot" />)}
-                    {hasEvent && <span className="diamond" style={{ marginLeft: 1 }} />}
+                    {marks.slice(0, 4).map((it, i) => <KindMark key={i} kind={it.kind} size={6} />)}
                   </span>
                 </button>
               );
             })}
           </div>
-          <div className="muted" style={{ display: 'flex', gap: 16, fontSize: 11 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span className="ink-dot" />Quest due</span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><span className="diamond" />From the Glossary</span>
-          </div>
+          <Legend />
           <div style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--q-rule)', paddingTop: 10 }}>
             <div className="label" style={{ paddingBottom: 4 }}>{WDL[sd.getDay()] + ' ' + sd.getDate() + ' ' + MONL[sd.getMonth()]}</div>
-            {agendaQuests.map((q) => (
-              <button key={'q' + q.id} className="agenda-row" onClick={() => actions.openQuest(q.id)}>
-                <span style={{ width: 26, display: 'grid', placeItems: 'center', color: 'var(--color-accent-800)' }}><Icon n="scroll" size={17} /></span>
-                <AgendaText title={q.title} sub={QM[q.quad].name + ' · +' + reward(q).xp + ' XP'} color={QM[q.quad].color} />
+            {agenda.map((it, k) => (
+              <button key={k} className="agenda-row" onClick={() => openItem(it)}>
+                <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><KindMark kind={it.kind} size={9} /></span>
+                <AgendaText title={it.title} sub={(it.allDay ? '' : (it.time ?? '') + (it.endTime ? '–' + it.endTime : '') + ' · ') + KINDS[it.kind].name + (it.kind === 'deadline' ? ' · +' + reward(data.quests.find((q) => 'quest:' + q.id === it.target)!).xp + ' XP' : '')} color="var(--color-accent-800)" />
                 <Icon n="chevron-right" size={15} />
               </button>
             ))}
-            {agendaEvents.map((e, i) => (
-              <button key={'e' + i} className="agenda-row" onClick={() => actions.goGlossary(e.target)}>
-                <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><span className="diamond" style={{ width: 9, height: 9 }} /></span>
-                <AgendaText title={e.label} sub={'Glossary · ' + e.kind} color="var(--color-accent-800)" />
-                <Icon n="chevron-right" size={15} />
-              </button>
-            ))}
-            {!agendaQuests.length && !agendaEvents.length && (
+            {!agenda.length && (
               <p className="muted" style={{ margin: 0, padding: '8px 0', fontStyle: 'italic', fontSize: 14 }}>A quiet day. Nothing planned.</p>
             )}
           </div>

@@ -55,7 +55,32 @@ export interface CodexEntry { id: string; name: string; sub: string; icon: IconN
  * portrait is a small JPEG data URL. An empty name means the welcome screen hasn't been completed.
  * points is the skill-point pool for Expeditions: every XP point earned also adds one.
  */
-export interface Hero { name: string; portrait?: string; xp: number; level: number; next: number; gold: number; points: number }
+export interface Hero {
+  name: string; portrait?: string; xp: number; level: number; next: number; gold: number; points: number;
+  /** Monday of the last week whose review was finished. */
+  reviewedWeek?: string;
+}
+
+export type Repeat = { every: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; until?: string };
+
+/** A calendar event. Dates are local days; `end` is inclusive, so a one-day event has end === start. */
+export interface CalEvent {
+  id: number;
+  /** From an imported .ics file, so importing the same file again skips it. */
+  uid?: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  startTime?: string;
+  endTime?: string;
+  repeat: Repeat | null;
+  /** Occurrences that were cancelled (EXDATE). */
+  except?: string[];
+  location: string;
+  notes: string;
+  companions: string[];
+}
 
 export interface Data {
   version: 2;
@@ -66,6 +91,7 @@ export interface Data {
   companions: Companion[];
   tomes: Tome[];
   codex: CodexEntry[];
+  events: CalEvent[];
   expedition: Expedition;
 }
 
@@ -133,5 +159,10 @@ export const emptyData = (): Data => ({
   companions: [],
   tomes: [],
   codex: [],
+  events: [],
   expedition: newExpedition(Date.now()),
 });
+
+/** Titles earned by level, lowest first. */
+export const TITLES: [number, string][] = [[1, 'Wanderer'], [3, 'Squire'], [5, 'Adventurer'], [8, 'Ranger'], [12, 'Knight'], [16, 'Champion'], [20, 'Hero'], [25, 'Legend']];
+export const titleFor = (level: number) => TITLES.reduce((t, [l, name]) => (level >= l ? name : t), TITLES[0][1]);

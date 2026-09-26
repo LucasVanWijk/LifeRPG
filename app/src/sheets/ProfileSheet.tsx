@@ -1,10 +1,12 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { exportBackup, lastExport } from '../backup';
+import type { StorageState } from '../storage';
+import { storageState } from '../storage';
 import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } from '../pwa';
 import { dayDiff, todayISO } from '../domain/dates';
 import { migrate } from '../domain/migrate';
 import type { Data } from '../domain/model';
-import { emptyData, heroName } from '../domain/model';
+import { emptyData, heroName, titleFor } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { CloseBtn, onEnter, Portrait, Sheet } from '../components/common';
 import { useStore } from '../state/store';
@@ -65,6 +67,8 @@ export function ProfileSheet() {
   const { data, setUi, today, actions, showToast } = useStore();
   const { hero } = data;
   const [lastExportDay, setLastExport] = useState(lastExport);
+  const [stored, setStored] = useState<StorageState>('unknown');
+  useEffect(() => { void storageState().then(setStored); }, []);
   const picker = useRef<HTMLInputElement>(null);
   const restore = useImport();
   const close = () => setUi({ profileOpen: false });
@@ -110,7 +114,7 @@ export function ProfileSheet() {
           onBlur={() => { if (!hero.name.trim()) actions.updateHero({ name: 'Adventurer' }); }} style={{ minHeight: 44, fontSize: 16 }} />
       </div>
       <div className="facts" style={{ gridTemplateColumns: 'repeat(4, 1fr)', borderTop: '1px solid var(--q-rule)', borderBottom: '1px solid var(--q-rule)' }}>
-        {[['Level', hero.level], ['Gold', hero.gold], ['Quests done', questsDone], ['Seals', seals]].map(([k, v]) => (
+        {[['Level', hero.level + ' · ' + titleFor(hero.level)], ['Gold', hero.gold], ['Quests done', questsDone], ['Seals', seals]].map(([k, v]) => (
           <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 0' }}>
             <span className="label" style={{ fontSize: 10 }}>{k}</span>
             <span className="heading tnum" style={{ fontSize: 22 }}>{v}</span>
@@ -122,6 +126,11 @@ export function ProfileSheet() {
         <h3 style={{ fontSize: 22 }}>Backup</h3>
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
           Your log is kept only in this browser. Clearing site data or switching devices loses it, so export a backup now and then. {backupNote}
+        </p>
+        <p className="tnum" style={{ margin: 0, fontSize: 13, color: stored === 'persisted' ? 'var(--q-moss)' : 'var(--color-accent-800)' }}>
+          <strong>Storage:</strong>{' '}
+          {stored === 'persisted' ? 'kept permanently by this browser.' : stored === 'best-effort' ? 'the browser may clear it when space runs low, so back up regularly.' : 'this browser does not say whether it keeps the log.'}
+          {isIos() && !isInstalled() && <span style={{ display: 'block', color: 'var(--q-wax)', marginTop: 4 }}>On iPhone, Safari deletes data from sites you haven't opened in 7 days. Add Questlog to your Home Screen to keep it.</span>}
         </p>
         <div className="two-col">
           <button className="btn btn-primary inked" onClick={exportLog} style={{ minHeight: 46 }}>Export backup</button>
