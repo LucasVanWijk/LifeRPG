@@ -3,13 +3,17 @@ import { todayISO } from '../domain/dates';
 import type { Outcome, Toast } from '../domain/logic';
 import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
-import type { Campaign, Data, Habit, Hero, QuadKey, Quest, Reward, Status } from '../domain/model';
+import type { CalEvent, Campaign, Data, Habit, Hero, QuadKey, Quest, Status } from '../domain/model';
+import type { Skill } from '../domain/expedition/content';
+import { ITEMS, SHOP, SKILL_NAME } from '../domain/expedition/content';
+import type { Activity, Summary } from '../domain/expedition/engine';
+import * as X from '../domain/expedition/engine';
 import { emptyData, QM } from '../domain/model';
 
 // v1 held the design's sample data; v2 starts every log empty. The data inside carries its own version (see migrate.ts).
 const STORAGE_KEY = 'questlog:v2';
 
-export type Tab = 'home' | 'quests' | 'glossary' | 'adventure';
+export type Tab = 'home' | 'quests' | 'calendar' | 'glossary' | 'adventure';
 export type QuestView = 'board' | 'campaign' | 'habits';
 export type GlossaryCat = 'companions' | 'tomes' | 'codex';
 export type { Toast };
@@ -29,13 +33,17 @@ export interface Ui {
   campSheet: string | null;
   profileOpen: boolean;
   chronicleOpen: boolean;
+  reviewOpen: boolean;
+  /** Calendar: the event being shown ('new' for the New event sheet), and the selected day. */
+  eventSheet: number | 'new' | null;
+  eventMode: 'view' | 'edit';
+  calDay: string;
   gCat: GlossaryCat;
   gSearch: string;
   gDetail: string | null;
   openTome: string | null;
   weekOffset: number;
   selDay: string;
-  buyId: number | null;
   levelUp: boolean;
   confirm: Confirm | null;
   dragId: number | null;
@@ -61,7 +69,7 @@ function initialUi(today: string): Ui {
   const pick = <T extends string>(k: string, allowed: readonly T[], def: T): T => (allowed.includes(p.get(k) as T) ? (p.get(k) as T) : def);
   const quest = Number(p.get('quest'));
   return {
-    tab: pick('screen', ['home', 'quests', 'glossary', 'adventure'] as const, 'home'),
+    tab: pick('screen', ['home', 'quests', 'calendar', 'glossary', 'adventure'] as const, 'home'),
     questView: pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
     campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
@@ -71,13 +79,16 @@ function initialUi(today: string): Ui {
     campSheet: null,
     profileOpen: false,
     chronicleOpen: false,
+    reviewOpen: false,
+    eventSheet: null,
+    eventMode: 'view',
+    calDay: today,
     gCat: pick('cat', ['companions', 'tomes', 'codex'] as const, 'companions'),
     gSearch: '',
     gDetail: p.get('detail'),
     openTome: null,
     weekOffset: 0,
     selDay: today,
-    buyId: null,
     levelUp: false,
     confirm: null,
     dragId: null,
@@ -97,6 +108,10 @@ function useLayout() {
 }
 
 const nextId = (xs: { id: number }[]) => Math.max(0, ...xs.map((x) => x.id)) + 1;
+
+/** Undo is still safe while the quest log and rewards are unchanged; Expeditions ticking alongside doesn't count. */
+const sameLog = (a: Data, b: Data) =>
+  a.quests === b.quests && a.habits === b.habits && a.camps === b.camps && a.hero.xp === b.hero.xp && a.hero.gold === b.hero.gold && a.hero.level === b.hero.level;
 
 function useStoreValue() {
   const [today, setToday] = useState(todayISO);
@@ -119,9 +134,29 @@ function useStoreValue() {
     return () => { document.removeEventListener('visibilitychange', on); window.clearInterval(t); };
   }, []);
 
+  // Saving is throttled (Expeditions changes data every second) and flushed when the app is hidden or closed.
+  const savedAt = useRef(0);
+  const saveTimer = useRef<number | undefined>(undefined);
+  const latest = useRef(data);
+  latest.current = data;
   useEffect(() => {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* quota or private mode */ }
+    const save = () => {
+      window.clearTimeout(saveTimer.current);
+      saveTimer.current = undefined;
+      savedAt.current = Date.now();
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(latest.current)); } catch { /* quota or private mode */ }
+    };
+    const wait = 5000 - (Date.now() - savedAt.current);
+    if (wait <= 0) save();
+    else if (saveTimer.current === undefined) saveTimer.current = window.setTimeout(save, wait);
   }, [data]);
+  useEffect(() => {
+    const flush = () => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(latest.current)); } catch { /* ignore */ } };
+    const onHide = () => { if (document.visibilityState === 'hidden') flush(); };
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('pagehide', flush);
+    return () => { document.removeEventListener('visibilitychange', onHide); window.removeEventListener('pagehide', flush); };
+  }, []);
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
@@ -203,8 +238,11 @@ function useStoreValue() {
         const u = undoRef.current;
         window.clearTimeout(toastTimer.current);
         toastQueue.current = [];
-        if (u && dataRef.current === u.after) {
-          commit(u.before);
+        if (u && sameLog(dataRef.current, u.after)) {
+          // Put the log back, but keep Expeditions as it is now and take the undone XP out of the skill-point pool.
+          const cur = dataRef.current;
+          const points = Math.max(0, cur.hero.points - (u.after.hero.points - u.before.hero.points));
+          commit({ ...u.before, expedition: cur.expedition, hero: { ...u.before.hero, points } });
           undoRef.current = null;
           setUi({ levelUp: false });
           showToast('Undone', 'Rewards put back as they were');
@@ -234,20 +272,68 @@ function useStoreValue() {
       updateHabit(id: number, patch: Partial<Habit>) { commit({ ...d(), habits: d().habits.map((h) => (h.id === id ? { ...h, ...patch } : h)) }); },
       deleteHabit(id: number) { commit({ ...d(), habits: d().habits.filter((h) => h.id !== id) }); },
 
-      // Tavern
-      buy(id: number) {
-        const cur = d(), r = cur.rewards.find((x) => x.id === id);
-        if (!r || r.price > cur.hero.gold) return;
-        commit({ ...cur, hero: { ...cur.hero, gold: cur.hero.gold - r.price } });
-        setUi({ buyId: null });
-        showToast('Enjoy: ' + r.title, '−' + r.price + ' gold');
+      /** Copies a quest (steps unticked, back to To Do) and opens the copy for editing. */
+      duplicateQuest(id: number) {
+        const cur = d(), q = cur.quests.find((x) => x.id === id);
+        if (!q) return;
+        const nid = nextId(cur.quests);
+        const copy: Quest = {
+          ...q, id: nid, title: q.title + ' (copy)', status: 'todo', doneOn: null, prevStatus: null,
+          steps: q.steps.map((st, i) => ({ ...st, id: Date.now() + i, done: false })), notes: q.notes.map((n, i) => ({ ...n, id: Date.now() + 100 + i })),
+        };
+        apply(settleCampaigns({ ...cur, quests: [...cur.quests, copy] }, today));
+        setUi({ openId: nid, sheetMode: 'edit' });
+        showToast('Quest duplicated', copy.title);
       },
-      addReward(title: string, price: number) {
-        commit({ ...d(), rewards: [...d().rewards, { id: nextId(d().rewards), title, price }] });
-        showToast('Added to the Tavern', title + ' · ' + price + ' gold');
+
+      // Calendar
+      createEvent(e: Omit<CalEvent, 'id'>) {
+        const cur = d(), id = nextId(cur.events);
+        commit({ ...cur, events: [...cur.events, { ...e, id }] });
+        setUi({ eventSheet: null, calDay: e.start });
+        showToast('Event added', e.title);
       },
-      updateReward(id: number, patch: Partial<Reward>) { commit({ ...d(), rewards: d().rewards.map((r) => (r.id === id ? { ...r, ...patch } : r)) }); },
-      deleteReward(id: number) { commit({ ...d(), rewards: d().rewards.filter((r) => r.id !== id) }); },
+      updateEvent(id: number, patch: Partial<CalEvent>) { commit({ ...d(), events: d().events.map((e) => (e.id === id ? { ...e, ...patch } : e)) }); },
+      deleteEvent(id: number) { commit({ ...d(), events: d().events.filter((e) => e.id !== id) }); setUi({ eventSheet: null }); },
+      /** Adds imported events, skipping any whose .ics UID is already in the calendar. Returns how many were added. */
+      importEvents(list: Omit<CalEvent, 'id'>[]): number {
+        const cur = d(), known = new Set(cur.events.map((e) => e.uid).filter(Boolean));
+        let id = nextId(cur.events);
+        const fresh = list.filter((e) => !e.uid || !known.has(e.uid)).map((e) => ({ ...e, id: id++ }));
+        commit({ ...cur, events: [...cur.events, ...fresh] });
+        return fresh.length;
+      },
+      markReviewed(monday: string) { commit({ ...d(), hero: { ...d().hero, reviewedWeek: monday } }); setUi({ reviewOpen: false }); },
+
+      // Expeditions
+      /** Plays out the time since the last tick; the screen calls this every second while open. */
+      expAdvance(now = Date.now()): Summary {
+        const r = X.advance(d().expedition, now);
+        commit({ ...d(), expedition: r.exp });
+        return r.summary;
+      },
+      expStart(kind: Activity['kind'], id: string) {
+        const now = Date.now();
+        const r = X.start(X.advance(d().expedition, now).exp, kind, id, now);
+        if (!r.ok) { showToast("Can't start", r.reason); return; }
+        commit({ ...d(), expedition: r.exp });
+      },
+      expStop() { const now = Date.now(); commit({ ...d(), expedition: X.stop(X.advance(d().expedition, now).exp, now) }); },
+      expBuy(shopId: string) {
+        const cur = d(), r = X.buy(cur.expedition, cur.hero.gold, shopId);
+        if (!r.ok) { showToast("Can't buy that", r.reason); return; }
+        commit({ ...cur, expedition: r.exp, hero: { ...cur.hero, gold: r.gold } });
+        showToast('Bought ' + SHOP.find((x) => x.id === shopId)!.name, '−' + (cur.hero.gold - r.gold) + ' gold');
+      },
+      expEquip(item: string) { commit({ ...d(), expedition: X.equip(d().expedition, item) }); showToast('Equipped', ITEMS[item].name); },
+      expTrain(skill: Skill) {
+        const cur = d(), before = X.level(cur.expedition, skill);
+        const r = X.train(cur.expedition, cur.hero.points, skill);
+        if (!r.used) return;
+        commit({ ...cur, expedition: r.exp, hero: { ...cur.hero, points: cur.hero.points - r.used } });
+        const after = X.level(r.exp, skill);
+        showToast(after > before ? SKILL_NAME[skill] + ' level ' + after : SKILL_NAME[skill] + ' trained', '−' + r.used + ' skill points');
+      },
 
       // Profile and backup
       updateHero(patch: Partial<Hero>) { commit({ ...d(), hero: { ...d().hero, ...patch } }); },
@@ -266,11 +352,12 @@ function useStoreValue() {
         setUi({ tab: 'glossary', gDetail: detail, gSearch: '', openId: null });
         if (scrollRef.current) scrollRef.current.scrollTop = 0;
       },
-      openQuest(id: number) { setUi({ openId: id, newOpen: false, campSheet: null, sheetMode: 'view' }); },
+      openQuest(id: number) { setUi({ openId: id, newOpen: false, campSheet: null, eventSheet: null, sheetMode: 'view' }); },
+      openEvent(id: number | 'new') { setUi({ eventSheet: id, eventMode: id === 'new' ? 'edit' : 'view', openId: null, newOpen: false }); },
     };
   }, [today, commit, apply, showToast, setUi]);
 
-  const canUndo = !!toast?.undo && !!undoRef.current && undoRef.current.after === data;
+  const canUndo = !!toast?.undo && !!undoRef.current && sameLog(data, undoRef.current.after);
   return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions };
 }
 

@@ -25,7 +25,7 @@ export function exportBackup(data: Data, today: string): string {
 }
 
 const hasContent = (d: Data) =>
-  d.quests.length + d.habits.length + Object.keys(d.camps).length + d.companions.length + d.tomes.length + d.codex.length + d.rewards.length > 0;
+  d.quests.length + d.habits.length + Object.keys(d.camps).length + d.companions.length + d.tomes.length + d.codex.length > 0;
 
 /** Days since the last backup when a reminder is due, or null when it isn't. */
 export function backupDue(data: Data, today: string): { days: number | null } | null {

@@ -1,4 +1,6 @@
 import type { IconName } from '../components/Icon';
+import type { Expedition } from './expedition/engine';
+import { newExpedition } from './expedition/engine';
 
 export type QuadKey = 'crisis' | 'main' | 'errand' | 'side';
 export type SizeKey = 'S' | 'M' | 'L';
@@ -20,6 +22,8 @@ export interface Quest {
   status: Status;
   notes: QuestNote[];
   steps: QuestStep[];
+  /** Ids of the companions this quest involves. */
+  companions: string[];
   /** Day the quest was completed (for Today's Quests + undo). */
   doneOn?: string | null;
   prevStatus?: Status | null;
@@ -47,10 +51,36 @@ export interface Tome { id: string; name: string; items: TomeItem[] }
 export interface CodexField { k: string; v: string; date?: string; label?: string }
 export interface CodexEntry { id: string; name: string; sub: string; icon: IconName; fields: CodexField[] }
 
-export interface Reward { id: number; title: string; price: number }
+/**
+ * portrait is a small JPEG data URL. An empty name means the welcome screen hasn't been completed.
+ * points is the skill-point pool for Expeditions: every XP point earned also adds one.
+ */
+export interface Hero {
+  name: string; portrait?: string; xp: number; level: number; next: number; gold: number; points: number;
+  /** Monday of the last week whose review was finished. */
+  reviewedWeek?: string;
+}
 
-/** portrait is a small JPEG data URL. An empty name means the welcome screen hasn't been completed. */
-export interface Hero { name: string; portrait?: string; xp: number; level: number; next: number; gold: number }
+export type Repeat = { every: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; until?: string };
+
+/** A calendar event. Dates are local days; `end` is inclusive, so a one-day event has end === start. */
+export interface CalEvent {
+  id: number;
+  /** From an imported .ics file, so importing the same file again skips it. */
+  uid?: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  startTime?: string;
+  endTime?: string;
+  repeat: Repeat | null;
+  /** Occurrences that were cancelled (EXDATE). */
+  except?: string[];
+  location: string;
+  notes: string;
+  companions: string[];
+}
 
 export interface Data {
   version: 2;
@@ -61,7 +91,8 @@ export interface Data {
   companions: Companion[];
   tomes: Tome[];
   codex: CodexEntry[];
-  rewards: Reward[];
+  events: CalEvent[];
+  expedition: Expedition;
 }
 
 export interface Quad { key: QuadKey; name: string; sub: string; icon: IconName; mult: number; color: string; light: string }
@@ -121,12 +152,17 @@ export const heroName = (h: Hero) => h.name || 'Adventurer';
 /** A fresh log: level 1, no gold, nothing written down yet. */
 export const emptyData = (): Data => ({
   version: 2,
-  hero: { name: '', xp: 0, level: 1, next: 100, gold: 0 },
+  hero: { name: '', xp: 0, level: 1, next: 100, gold: 0, points: 0 },
   quests: [],
   habits: [],
   camps: {},
   companions: [],
   tomes: [],
   codex: [],
-  rewards: [],
+  events: [],
+  expedition: newExpedition(Date.now()),
 });
+
+/** Titles earned by level, lowest first. */
+export const TITLES: [number, string][] = [[1, 'Wanderer'], [3, 'Squire'], [5, 'Adventurer'], [8, 'Ranger'], [12, 'Knight'], [16, 'Champion'], [20, 'Hero'], [25, 'Legend']];
+export const titleFor = (level: number) => TITLES.reduce((t, [l, name]) => (level >= l ? name : t), TITLES[0][1]);
