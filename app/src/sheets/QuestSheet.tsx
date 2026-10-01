@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { weekdayDate } from '../domain/dates';
 import type { QuadKey, Quest, QuestNote, QuestStep } from '../domain/model';
-import { QM, QUADS, reward, STATUS_NAME, STATUSES } from '../domain/model';
+import { campaignLocal, QM, QUADS, reward, STATUS_NAME, STATUSES } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { StepChecklist, stepCount } from '../components/Steps';
 import { CloseBtn, CompleteButton, DoneBanner, onEnter, questView, Seg, Sheet } from '../components/common';
@@ -92,7 +92,7 @@ function QuestForm({ q, set, isNew, onStatus }: { q: Omit<Quest, 'id'>; set: (pa
         </div>
       </div>
       <div className="field"><label htmlFor="q-camp">Campaign</label>
-        <select id="q-camp" className="input" value={q.campaign || ''} onChange={(e) => set({ campaign: e.target.value || null })} style={{ minHeight: 44 }}>
+        <select id="q-camp" className="input" value={q.campaign || ''} onChange={(e) => set(isNew ? { campaign: e.target.value || null, ...(e.target.value ? { local: campaignLocal(data.camps[e.target.value]) } : {}) } : { campaign: e.target.value || null })} style={{ minHeight: 44 }}>
           <option value="">None</option>
           {Object.entries(data.camps).map(([k, c]) => <option key={k} value={k}>{c.name}</option>)}
         </select>
@@ -128,7 +128,7 @@ export function NewQuestSheet() {
   const onCampaigns = ui.tab === 'quests' && ui.questView === 'campaign';
   const campKey = data.camps[ui.campaign] ? ui.campaign : Object.keys(data.camps)[0] ?? null;
   const [q, setQ] = useState<Omit<Quest, 'id'>>(() => ({
-    title: '', quad: (ui.tab === 'quests' && ui.questView === 'board' && ui.mobileZone) || 'side', due: null, size: 'M', local: ui.questView !== 'board' || ui.guild === 'local',
+    title: '', quad: (ui.tab === 'quests' && ui.questView === 'board' && ui.mobileZone) || 'side', due: null, size: 'M', local: onCampaigns ? campaignLocal(campKey ? data.camps[campKey] : null) : ui.questView !== 'board' || ui.guild === 'local',
     campaign: onCampaigns ? campKey : null, status: 'todo', notes: [], steps: [], companions: [],
   }));
   const close = () => setUi({ newOpen: false });

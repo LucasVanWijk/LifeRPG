@@ -88,12 +88,15 @@ function BoardNote({ q, wide, stretch = false, inPair = false, drag }: { q: Ques
       style={{ gap: 5, padding: '14px 10px 8px', gridColumn: inPair ? undefined : 'span ' + (wide ? 3 : 2), flex: stretch ? 1 : undefined, opacity: drag.dragId === q.id ? 0.35 : 1 }}>
       <span className="pin" />
       <div className="note-title"><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 16, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</span></div>
-      {(v.hasDue || stepCount(q)) && <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
-        {v.hasDue && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
-        {v.hasDue && stepCount(q) && <span style={{ color: 'var(--color-accent-500)' }}>·</span>}
-        {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
-      </div>}
-      {withNames(q, data.companions) && <div className="with-line"><Icon n="users" size={11} />with {withNames(q, data.companions)}</div>}
+      {(v.hasDue || stepCount(q) || withNames(q, data.companions)) && (
+        <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap', minWidth: 0 }}>
+          {v.hasDue && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor, flex: 'none' }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
+          {v.hasDue && stepCount(q) && <span style={{ color: 'var(--color-accent-500)' }}>·</span>}
+          {stepCount(q) && <span className="tnum" style={{ flex: 'none' }}>{stepCount(q)} steps</span>}
+          {(v.hasDue || stepCount(q)) && withNames(q, data.companions) && <span style={{ color: 'var(--color-accent-500)' }}>·</span>}
+          {withNames(q, data.companions) && <span className="ellipsis" style={{ display: 'inline-flex', alignItems: 'center', gap: 4, minWidth: 0 }} title={'with ' + withNames(q, data.companions)}><Icon n="users" size={11} /><span className="ellipsis">with {withNames(q, data.companions)}</span></span>}
+        </div>
+      )}
       <StepChecklist compact maxChars={wide ? 24 : 11} quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
       <div className="note-foot">
         <span>+{v.xp} XP</span>
