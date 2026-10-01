@@ -342,3 +342,6 @@ button { font: inherit; }
 .review-card:hover { background: color-mix(in srgb, var(--color-accent-300) 16%, transparent); }
 .today-row { flex-wrap: wrap; }
 .overdue-box { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border: 1px solid color-mix(in srgb, var(--q-wax) 40%, transparent); border-radius: var(--radius-md); }
+
+.check-box { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: 1.5px solid var(--color-accent-700); border-radius: 4px; color: var(--q-parch); }
+[aria-pressed='true'] > .check-box { background: var(--color-accent-700); }

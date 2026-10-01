@@ -1,8 +1,8 @@
 import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { addDays, shortDate } from '../domain/dates';
 import { bestStreak, checkedInToday, habitDone, habitProgress, habitStreak, habitTarget, periodOf } from '../domain/logic';
-import type { Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
-import { EVERY_NAME, habitReward, QUADS, STATUSES, streakText } from '../domain/model';
+import type { Every, Guild, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
+import { EVERY_NAME, habitReward, isLocal, QUADS, STATUSES, streakText } from '../domain/model';
 import { StepChecklist, stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
 import { Icon } from '../components/Icon';
@@ -20,6 +20,7 @@ export function Quests() {
           optStyle={{ minHeight: 40, padding: isDesk ? '8px 16px' : '8px 12px', fontSize: 14 }}
           options={[{ key: 'board', label: isDesk ? 'Quest Board' : 'Board' }, { key: 'campaign', label: 'Campaigns' }, { key: 'habits', label: 'Habits' }]} />
       </ScreenHead>
+      {ui.questView === 'board' && <GuildSwitch />}
       {ui.questView === 'board' && <QuickAdd />}
       {ui.questView === 'habits' ? <HabitsView /> : ui.questView === 'campaign' ? <CampaignView /> : isDesk ? <DeskBoard /> : ui.mobileZone ? <MobileZone zone={ui.mobileZone} /> : <MobileGrid />}
     </div>
@@ -43,7 +44,19 @@ const zoneStyle = (light: string) => ({ '--zone-light': light }) as CSSPropertie
 // Busy quests (long title, steps, people, campaign…) get a wide note; simple ones a compact one.
 const isWide = (q: Quest, hasDue: boolean, campaign?: string | null) =>
   !!stepCount(q) || q.title.length + (hasDue ? 12 : 0) + (campaign ? 10 : 0) + (q.companions.length ? 10 : 0) > 30;
-const activeIn = (quests: Quest[], quad: QuadKey) => quests.filter((q) => q.status !== 'done' && q.quad === quad).sort(byDue);
+const inGuild = (q: Quest, guild: Guild) => isLocal(q) === (guild === 'local');
+const activeIn = (quests: Quest[], quad: QuadKey, guild: Guild) => quests.filter((q) => q.status !== 'done' && q.quad === quad && inGuild(q, guild)).sort(byDue);
+
+/** Local Guild = short term, Global Guild = long term; each quest lives in exactly one. */
+function GuildSwitch() {
+  const { data, ui, setUi } = useStore();
+  const count = (g: Guild) => data.quests.filter((q) => q.status !== 'done' && inGuild(q, g)).length;
+  return (
+    <Seg name="guild" value={ui.guild} onChange={(v) => setUi({ guild: v, mobileZone: null })}
+      optStyle={{ minHeight: 40, padding: '8px 16px', fontSize: 14 }}
+      options={[{ key: 'local', label: 'Local Guild · ' + count('local') }, { key: 'global', label: 'Global Guild · ' + count('global') }]} />
+  );
+}
 
 function DeskBoard() {
   const { data, ui, setUi, today, actions } = useStore();
@@ -65,7 +78,7 @@ function DeskBoard() {
         </div>
         <div className="wood" style={{ gridColumn: '2 / 4', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: 14 }}>
           {QUADS.map((z) => {
-            const list = activeIn(data.quests, z.key);
+            const list = activeIn(data.quests, z.key, ui.guild);
             return (
               <div key={z.key} className={'zone' + (z.key === 'main' ? ' is-main' : '') + (ui.dragOver === z.key ? ' is-over' : '')} style={{ ...zoneStyle(z.light), minHeight: 250, display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 14px 18px' }}
                 onDragOver={(e) => drag.over(e, z.key)} onDrop={(e) => drop(e, z.key)}>
@@ -115,11 +128,11 @@ function DeskBoard() {
 }
 
 function MobileGrid() {
-  const { data, setUi } = useStore();
+  const { data, ui, setUi } = useStore();
   return (
     <div className="wood" style={{ flex: 1, minHeight: 480, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gridTemplateRows: 'minmax(0,1fr) minmax(0,1fr)', gap: 9, padding: 10 }}>
       {QUADS.map((z) => {
-        const list = activeIn(data.quests, z.key);
+        const list = activeIn(data.quests, z.key, ui.guild);
         return (
           <button key={z.key} className={'zone tile' + (z.key === 'main' ? ' is-main' : '')} style={zoneStyle(z.light)} onClick={() => setUi({ mobileZone: z.key })}>
             <span className="zone-head" style={{ gap: 5 }}>
@@ -140,10 +153,10 @@ function MobileGrid() {
 }
 
 function MobileZone({ zone }: { zone: QuadKey }) {
-  const { data, setUi, today, actions } = useStore();
+  const { data, ui, setUi, today, actions } = useStore();
   const touchX = useRef(0);
   const z = QUADS.find((x) => x.key === zone)!;
-  const list = activeIn(data.quests, zone);
+  const list = activeIn(data.quests, zone, ui.guild);
   const step = (dir: number) => {
     const i = QUADS.findIndex((q) => q.key === zone);
     setUi({ mobileZone: QUADS[(i + dir + 4) % 4].key });
@@ -157,7 +170,7 @@ function MobileZone({ zone }: { zone: QuadKey }) {
         {QUADS.map((c) => (
           <button key={c.key} className="chip" aria-pressed={c.key === zone} onClick={() => setUi({ mobileZone: c.key })} style={{ minHeight: 40, padding: '6px 12px', fontSize: 15 }}>
             <span className="dot" style={{ color: c.color }} />{c.name}
-            <span className="tnum" style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 12 }}>{activeIn(data.quests, c.key).length}</span>
+            <span className="tnum" style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 12 }}>{activeIn(data.quests, c.key, ui.guild).length}</span>
           </button>
         ))}
       </div>

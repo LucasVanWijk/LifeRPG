@@ -3,7 +3,7 @@ import { todayISO } from '../domain/dates';
 import type { Outcome, Toast } from '../domain/logic';
 import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
-import type { CalEvent, Campaign, Data, Habit, Hero, QuadKey, Quest, Status } from '../domain/model';
+import type { CalEvent, Campaign, Data, Guild, Habit, Hero, QuadKey, Quest, Status } from '../domain/model';
 import type { Skill } from '../domain/expedition/content';
 import { ITEMS, SHOP, SKILL_NAME } from '../domain/expedition/content';
 import type { Activity, Summary } from '../domain/expedition/engine';
@@ -24,6 +24,7 @@ export interface Confirm { title: string; body: string; confirmLabel: string; ca
 export interface Ui {
   tab: Tab;
   questView: QuestView;
+  guild: Guild;
   campaign: string;
   mobileZone: QuadKey | null;
   openId: number | null;
@@ -71,6 +72,7 @@ function initialUi(today: string): Ui {
   return {
     tab: pick('screen', ['home', 'quests', 'calendar', 'glossary', 'adventure'] as const, 'home'),
     questView: pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
+    guild: pick('guild', ['local', 'global'] as const, 'local'),
     campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
     openId: quest > 0 ? quest : null,

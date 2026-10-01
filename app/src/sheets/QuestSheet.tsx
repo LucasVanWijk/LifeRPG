@@ -77,6 +77,13 @@ function QuestForm({ q, set, isNew, onStatus }: { q: Omit<Quest, 'id'>; set: (pa
           ))}
         </div>
       </div>
+      <button type="button" className="opt-btn" role="checkbox" aria-checked={q.local !== false} aria-pressed={q.local !== false} onClick={() => set({ local: q.local === false })}>
+        <span className="check-box" aria-hidden>{q.local !== false && <Icon n="check" size={14} stroke={2.6} />}</span>
+        <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+          <span className="heading" style={{ fontSize: 16 }}>Local Guild</span>
+          <span className="muted" style={{ fontSize: 11 }}>{q.local !== false ? 'Short term: shown in the Local Guild' : 'Long term: shown in the Global Guild'}</span>
+        </span>
+      </button>
       <div className="two-col">
         <div className="field"><label htmlFor="q-due">Due date</label><input id="q-due" className="input" type="date" value={q.due || ''} onChange={(e) => set({ due: e.target.value || null })} style={{ minHeight: 44 }} /></div>
         <div className="field"><label>Size</label>
@@ -121,7 +128,7 @@ export function NewQuestSheet() {
   const onCampaigns = ui.tab === 'quests' && ui.questView === 'campaign';
   const campKey = data.camps[ui.campaign] ? ui.campaign : Object.keys(data.camps)[0] ?? null;
   const [q, setQ] = useState<Omit<Quest, 'id'>>(() => ({
-    title: '', quad: (ui.tab === 'quests' && ui.questView === 'board' && ui.mobileZone) || 'side', due: null, size: 'M',
+    title: '', quad: (ui.tab === 'quests' && ui.questView === 'board' && ui.mobileZone) || 'side', due: null, size: 'M', local: ui.questView !== 'board' || ui.guild === 'local',
     campaign: onCampaigns ? campKey : null, status: 'todo', notes: [], steps: [], companions: [],
   }));
   const close = () => setUi({ newOpen: false });
