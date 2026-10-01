@@ -43,7 +43,7 @@ function useDrag() {
 const zoneStyle = (light: string) => ({ '--zone-light': light }) as CSSProperties;
 // Busy quests (long title, steps, people, campaign…) get a wide note; simple ones a compact one.
 const isWide = (q: Quest, hasDue: boolean, campaign?: string | null) =>
-  !!stepCount(q) || q.title.length + (hasDue ? 12 : 0) + (campaign ? 10 : 0) + (q.companions.length ? 10 : 0) > 30;
+  !!stepCount(q) || q.title.length + (hasDue ? 12 : 0) + (campaign ? 10 : 0) + (q.companions.length ? 10 : 0) > 50;
 const inGuild = (q: Quest, guild: Guild) => isLocal(q) === (guild === 'local');
 const activeIn = (quests: Quest[], quad: QuadKey, guild: Guild) => quests.filter((q) => q.status !== 'done' && q.quad === quad && inGuild(q, guild)).sort(byDue);
 
