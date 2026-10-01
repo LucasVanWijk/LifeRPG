@@ -13,7 +13,7 @@ const HELP = [
 
 /** A one-line bar that pins a quest straight away: "Paint walls !main @study fri ~L #Sophie". */
 export function QuickAdd() {
-  const { data, today, actions } = useStore();
+  const { data, ui, today, actions } = useStore();
   const [text, setText] = useState('');
   const [help, setHelp] = useState(false);
   const parsed = parseQuickAdd(text, data, today);
@@ -21,7 +21,7 @@ export function QuickAdd() {
     if (!parsed.title) return;
     actions.createQuest({
       title: parsed.title, quad: parsed.quad ?? 'side', due: parsed.due ?? null, size: parsed.size ?? 'M',
-      campaign: parsed.campaign ?? null, status: 'todo', notes: [], steps: [], companions: parsed.companions,
+      campaign: parsed.campaign ?? null, local: ui.guild === 'local', status: 'todo', notes: [], steps: [], companions: parsed.companions,
     });
     setText('');
   };

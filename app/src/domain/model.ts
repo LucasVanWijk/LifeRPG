@@ -5,6 +5,7 @@ import { newExpedition } from './expedition/engine';
 export type QuadKey = 'crisis' | 'main' | 'errand' | 'side';
 export type SizeKey = 'S' | 'M' | 'L';
 export type Status = 'todo' | 'doing' | 'done';
+export type Guild = 'local' | 'global';
 export type Every = 'daily' | 'weekly';
 
 export interface QuestNote { id: number; t: string }
@@ -24,6 +25,8 @@ export interface Quest {
   steps: QuestStep[];
   /** Ids of the companions this quest involves. */
   companions: string[];
+  /** Local Guild (short term) when true or missing, Global Guild (long term) when false. */
+  local?: boolean;
   /** Day the quest was completed (for Today's Quests + undo). */
   doneOn?: string | null;
   prevStatus?: Status | null;
@@ -126,6 +129,8 @@ export const STATUS_NAME: Record<Status, string> = { todo: 'To Do', doing: 'Doin
 
 export const CAMP_ICONS: IconName[] = ['flag', 'compass', 'home', 'mountain', 'crown'];
 export const CODEX_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map'];
+
+export const isLocal = (q: Pick<Quest, 'local'>) => q.local !== false;
 
 /** XP scales with size and the quadrant multiplier (Main Quests ×1.5), rounded to 5; gold is a third of XP. */
 export const reward = (q: Pick<Quest, 'size' | 'quad'>) => {

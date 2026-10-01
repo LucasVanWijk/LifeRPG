@@ -27,12 +27,12 @@ export function Kicker({ children }: { children: ReactNode }) {
   return <span className="kicker">{children}</span>;
 }
 
-export function ScreenHead({ kicker, title, children }: { kicker: ReactNode; title: string; children?: ReactNode }) {
+export function ScreenHead({ kicker, title, count, children }: { kicker?: ReactNode; title: string; count?: ReactNode; children?: ReactNode }) {
   return (
     <header style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
       <div className="screen-head">
-        <Kicker>{kicker}</Kicker>
-        <h1>{title}</h1>
+        {kicker && <Kicker>{kicker}</Kicker>}
+        <h1>{title}{count && <span className="screen-count">{count}</span>}</h1>
       </div>
       {children}
     </header>
