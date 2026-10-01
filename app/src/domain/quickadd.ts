@@ -30,7 +30,7 @@ function nextDate(m: number, d: number, today: string): string {
 }
 
 /** Reads one date starting at token i; returns the date and how many tokens it used. */
-function readDate(words: string[], i: number, today: string): [string, number] | null {
+export function readDate(words: string[], i: number, today: string): [string, number] | null {
   const w = words[i].toLowerCase();
   if (w === 'today' || w === 'tod') return [today, 1];
   if (w === 'tomorrow' || w === 'tmr') return [addDays(today, 1), 1];

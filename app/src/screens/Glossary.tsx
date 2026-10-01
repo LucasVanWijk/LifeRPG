@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { addDays, dayDiff, dueLabel, MONL, nextAnnual, shortDate, weekdayDate } from '../domain/dates';
 import { calendarItems } from '../domain/calendar';
 import { glossaryEvents } from '../domain/logic';
+import { GlossaryAdd } from '../components/GlossaryAdd';
 import type { Companion, CodexEntry, CodexField, Data } from '../domain/model';
 import { CODEX_ICONS, QM } from '../domain/model';
 import { Icon, type IconName } from '../components/Icon';
@@ -37,6 +38,7 @@ export function Glossary() {
             options={([['companions', 'Companions', 'users'], ['tomes', 'Tomes', 'library'], ['codex', 'Codex', 'map']] as const).map(([k, n, ic]) => ({ key: k, label: <><Icon n={ic} size={15} />{n}</> }))} />
         )}
       </header>
+      {!query && <GlossaryAdd />}
       {query ? <SearchResults query={query} /> : ui.gCat === 'companions' ? <CompanionList /> : ui.gCat === 'tomes' ? <TomeList /> : <CodexList />}
     </div>
   );
