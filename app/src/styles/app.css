@@ -92,7 +92,7 @@ button { font: inherit; }
 .app-main { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
 .app-scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; padding: 18px 18px 110px; }
 .app-scroll.fill { padding-bottom: 18px; }
-.desk .app-scroll { padding: 36px 44px 96px; }
+.desk .app-scroll { padding: 24px 16px 96px; }
 
 .sidebar { width: 232px; flex: none; display: flex; flex-direction: column; gap: 28px; padding: 28px 16px 24px; border-right: 1px solid var(--q-rule); background: color-mix(in srgb, var(--color-accent-200) 25%, transparent); }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 8px; }
@@ -137,8 +137,9 @@ button { font: inherit; }
 .screen-head { display: flex; flex-direction: column; gap: 2px; }
 .screen-head h1 { font-size: 34px; font-weight: 600; }
 .screen-count { margin-left: 14px; font-family: var(--font-body); font-size: 14px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; color: var(--color-accent-700); }
-.desk .app-scroll:has(.screen-wide) { padding: 24px 12px 24px; }
-.screen-wide { max-width: none; }
+.desk .screen { max-width: none; }
+.desk .screen-narrow { max-width: 1100px; }
+.desk .app-scroll:has(.screen-wide) { padding-bottom: 24px; }
 
 /* Home */
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }

@@ -1,12 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { OFFLINE_CAP_MS, xpForLevel } from './content';
+import { OFFLINE_CAP_MS, TIME_SCALE, xpForLevel } from './content';
 import type { Expedition } from './engine';
 import { advance, affordable, armourClass, buy, equip, level, maxHp, newExpedition, start, train } from './engine';
 import { RECIPE } from './content';
 
 const T0 = 1_000_000;
 const withBank = (bank: Record<string, number>, patch: Partial<Expedition> = {}): Expedition => ({ ...newExpedition(T0), bank, ...patch });
-const MIN = 60_000;
+// Game time runs TIME_SCALE times slower, so a "minute" here is the amount of play the old minute held.
+const MIN = 60_000 * TIME_SCALE;
 
 describe('levels and training', () => {
   it('costs 50 × level to go up a level', () => {
@@ -55,7 +56,7 @@ describe('gathering and crafting', () => {
     if (!e.ok) throw new Error(e.reason);
     const { exp, summary } = advance(e.exp, T0 + 20 * 60 * MIN);
     expect(summary.capped).toBe(true);
-    expect(exp.bank.raw_shrimp).toBe(OFFLINE_CAP_MS / 6000);
+    expect(exp.bank.raw_shrimp).toBe(OFFLINE_CAP_MS / RECIPE.fish_shrimp.time);
   });
 
   it('uses every ingredient in a recipe', () => {
@@ -137,8 +138,8 @@ describe('shop', () => {
 });
 
 describe('resting', () => {
-  it('heals 1 HP per 10 s outside a dungeon', () => {
+  it('heals 1 HP per 5 minutes outside a dungeon', () => {
     const e = { ...newExpedition(T0), hp: 2 };
-    expect(advance(e, T0 + 50_000).exp.hp).toBe(7);
+    expect(advance(e, T0 + 25 * 60_000).exp.hp).toBe(7);
   });
 });

@@ -42,6 +42,8 @@ export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;
   /** Day every quest was done and the reward was paid. */
   completedOn?: string | null;
+  /** Where quests added to this campaign start: Local (or missing) or Global Guild. */
+  guild?: Guild;
 }
 
 export interface CompanionNote { t: string; date?: string; label?: string }
@@ -127,10 +129,12 @@ export const campSize = (c: Pick<Campaign, 'xp'>): SizeKey =>
 export const STATUSES: [Status, string][] = [['todo', 'To Do'], ['doing', 'Doing'], ['done', 'Done']];
 export const STATUS_NAME: Record<Status, string> = { todo: 'To Do', doing: 'Doing', done: 'Done' };
 
-export const CAMP_ICONS: IconName[] = ['flag', 'compass', 'home', 'mountain', 'crown'];
-export const CODEX_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map'];
+export const CAMP_ICONS: IconName[] = ['flag', 'compass', 'home', 'mountain', 'crown', 'star', 'trophy', 'sword', 'shield', 'flame', 'sparkles', 'heart', 'tree', 'plane', 'briefcase', 'graduation-cap', 'wrench', 'palette', 'music', 'gamepad', 'sun', 'moon', 'gift', 'feather'];
+export const CODEX_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map', 'gift', 'briefcase', 'music', 'coffee', 'plane', 'camera', 'gamepad', 'tree', 'graduation-cap', 'cart', 'palette', 'wrench', 'heart', 'star', 'cake', 'beer', 'calendar', 'clock', 'book-open', 'backpack', 'store', 'fish']
 
 export const isLocal = (q: Pick<Quest, 'local'>) => q.local !== false;
+/** Whether new quests in this campaign start in the Local Guild. */
+export const campaignLocal = (c?: Pick<Campaign, 'guild'> | null) => c?.guild !== 'global';
 
 /** XP scales with size and the quadrant multiplier (Main Quests ×1.5), rounded to 5; gold is a third of XP. */
 export const reward = (q: Pick<Quest, 'size' | 'quad'>) => {

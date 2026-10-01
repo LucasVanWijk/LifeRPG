@@ -23,10 +23,10 @@ export function Home() {
   const { hero } = data;
 
   const todayList = data.quests
-    .filter((q) => (q.status !== 'done' && q.due && q.due <= today) || q.doneOn === today)
-    .map((q) => ({ q, checked: q.doneOn === today }))
-    .sort((a, b) => Number(a.checked) - Number(b.checked) || (a.q.due || today).localeCompare(b.q.due || today));
-  const doneToday = todayList.filter((t) => t.checked).length;
+    .filter((q) => q.status !== 'done' && q.due && q.due <= today)
+    .map((q) => ({ q, checked: false }))
+    .sort((a, b) => (a.q.due || today).localeCompare(b.q.due || today));
+  const doneToday = data.quests.filter((q) => q.doneOn === today).length;
   const habitsDone = data.habits.filter((h) => habitDone(h, today)).length;
   const seals = Object.entries(data.camps).filter(([, c]) => c.completedOn);
   const todayIds = new Set(todayList.map((t) => t.q.id));
@@ -135,7 +135,7 @@ export function Home() {
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
             <h3 style={{ fontSize: 24 }}>Today's Quests</h3>
             <span className="muted tnum" style={{ fontSize: 12 }}>
-              {overdueCount > 0 && <span style={{ color: 'var(--q-wax)' }}>{overdueCount} overdue · </span>}{doneToday} of {todayList.length} done
+              {overdueCount > 0 && <span style={{ color: 'var(--q-wax)' }}>{overdueCount} overdue · </span>}{todayList.length} to do · {doneToday} done today
             </span>
           </div>
           {todayList.map(({ q, checked }) => {

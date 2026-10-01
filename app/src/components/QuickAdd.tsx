@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { campaignLocal } from '../domain/model';
 import { parseQuickAdd } from '../domain/quickadd';
 import { useStore } from '../state/store';
 import { Icon } from './Icon';
@@ -21,7 +22,7 @@ export function QuickAdd() {
     if (!parsed.title) return;
     actions.createQuest({
       title: parsed.title, quad: parsed.quad ?? 'side', due: parsed.due ?? null, size: parsed.size ?? 'M',
-      campaign: parsed.campaign ?? null, local: ui.guild === 'local', status: 'todo', notes: [], steps: [], companions: parsed.companions,
+      campaign: parsed.campaign ?? null, local: parsed.campaign ? campaignLocal(data.camps[parsed.campaign]) : ui.guild === 'local', status: 'todo', notes: [], steps: [], companions: parsed.companions,
     });
     setText('');
   };

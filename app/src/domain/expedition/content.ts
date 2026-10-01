@@ -22,8 +22,10 @@ export const xpForLevel = (level: number) => 25 * level * (level - 1);
 export const PRACTICE_XP = 0.2;
 /** Activities catch up at most this long while you are away. */
 export const OFFLINE_CAP_MS = 8 * 60 * 60 * 1000;
-export const ROUND_MS = 3000;
-export const HP_REGEN_MS = 10000;
+/** Everything takes this many times longer than the base numbers below. */
+export const TIME_SCALE = 30;
+export const ROUND_MS = 3000 * TIME_SCALE;
+export const HP_REGEN_MS = 10000 * TIME_SCALE;
 
 // ── Items ────────────────────────────────────────────────────
 
@@ -90,13 +92,13 @@ export const FISTS: Item = { name: 'Fists', kind: 'weapon', die: 3, dmg: 0, acc:
 export interface Recipe { id: string; skill: Skill; level: number; time: number; use: Record<string, number>; out: string; outN: number }
 
 const fish = (id: string, level: number): Recipe[] => [
-  { id: 'fish_' + id, skill: 'fishing', level, time: 6000, use: { bait: 1 }, out: 'raw_' + id, outN: 1 },
-  { id: 'cook_' + id, skill: 'cooking', level, time: 4000, use: { ['raw_' + id]: 1, firewood: 1 }, out: id, outN: 1 },
+  { id: 'fish_' + id, skill: 'fishing', level, time: 6000 * TIME_SCALE, use: { bait: 1 }, out: 'raw_' + id, outN: 1 },
+  { id: 'cook_' + id, skill: 'cooking', level, time: 4000 * TIME_SCALE, use: { ['raw_' + id]: 1, firewood: 1 }, out: id, outN: 1 },
 ];
-const ore = (id: string, level: number): Recipe => ({ id: 'mine_' + id, skill: 'mining', level, time: 6000, use: { lamp_oil: 1 }, out: id + '_ore', outN: 1 });
+const ore = (id: string, level: number): Recipe => ({ id: 'mine_' + id, skill: 'mining', level, time: 6000 * TIME_SCALE, use: { lamp_oil: 1 }, out: id + '_ore', outN: 1 });
 const smith = (metal: string, swordLevel: number, armourLevel: number, oreN: [number, number]): Recipe[] => [
-  { id: 'smith_' + metal + '_sword', skill: 'smithing', level: swordLevel, time: 8000, use: { [metal === 'bronze' ? 'copper_ore' : metal + '_ore']: oreN[0], coal: 1 }, out: metal + '_sword', outN: 1 },
-  { id: 'smith_' + metal + '_armour', skill: 'smithing', level: armourLevel, time: 10000, use: { [metal === 'bronze' ? 'copper_ore' : metal + '_ore']: oreN[1], coal: 2 }, out: metal + '_armour', outN: 1 },
+  { id: 'smith_' + metal + '_sword', skill: 'smithing', level: swordLevel, time: 8000 * TIME_SCALE, use: { [metal === 'bronze' ? 'copper_ore' : metal + '_ore']: oreN[0], coal: 1 }, out: metal + '_sword', outN: 1 },
+  { id: 'smith_' + metal + '_armour', skill: 'smithing', level: armourLevel, time: 10000 * TIME_SCALE, use: { [metal === 'bronze' ? 'copper_ore' : metal + '_ore']: oreN[1], coal: 2 }, out: metal + '_armour', outN: 1 },
 ];
 
 export const RECIPES: Recipe[] = [

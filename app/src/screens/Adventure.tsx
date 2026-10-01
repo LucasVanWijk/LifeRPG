@@ -37,7 +37,7 @@ export function Adventure() {
 
   const e = data.expedition;
   return (
-    <div className="screen screen-narrow" style={{ gap: 16 }}>
+    <div className="screen" style={{ gap: 16 }}>
       <ScreenHead kicker="Spend what you've earned" title="Expeditions">
         <span style={{ display: 'flex', gap: 8 }}>
           <span className="stat-pill" title="Gold from quests; spend it in the shop" aria-label={data.hero.gold + ' gold'}><Icon n="coins" size={16} /><span className="heading tnum">{data.hero.gold}</span></span>

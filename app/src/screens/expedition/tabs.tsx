@@ -4,7 +4,7 @@ import { DUNGEONS, ITEMS, MAX_LEVEL, RECIPES, SHOP, SKILLS, xpForLevel } from '.
 import { affordable, armourClass, damageBonus, level, maxHp, toHitBonus, weaponOf, xpToNext } from '../../domain/expedition/engine';
 import { Icon } from '../../components/Icon';
 import { useStore } from '../../state/store';
-import { Bar } from '../Adventure';
+import { Bar, duration } from '../Adventure';
 
 const GATHER: Skill[] = ['fishing', 'cooking', 'mining', 'smithing'];
 const uses = (r: Recipe) => Object.entries(r.use).map(([k, n]) => n + ' ' + ITEMS[k].name.toLowerCase()).join(' + ');
@@ -52,7 +52,7 @@ export function SkillsTab() {
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <div className="heading" style={{ fontSize: 16 }}>{ITEMS[r.out].name}{ITEMS[r.out].heals ? ' · heals ' + ITEMS[r.out].heals : ''}</div>
                         <div className="muted tnum" style={{ fontSize: 12 }}>
-                          {locked ? 'Level ' + r.level + ' · ' : ''}{r.time / 1000} s · uses {uses(r)} · enough for {can}
+                          {locked ? 'Level ' + r.level + ' · ' : ''}{duration(r.time)} · uses {uses(r)} · enough for {can}
                         </div>
                       </div>
                       {running
