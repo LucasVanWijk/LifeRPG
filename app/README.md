@@ -12,6 +12,16 @@ npm test           # domain logic (rewards, calendar, .ics import, Expeditions);
 npm run build      # typecheck + production build into dist/
 ```
 
+## Google Drive sync (optional)
+
+Profile → Google Drive saves the whole log to `questlog-backup.json` in your own Drive and loads it back, only when you press a button. The browser talks to Google directly with the `drive.file` scope (the app sees only files it created); there is no server. Set it up once:
+
+1. In Google Cloud Console create a project, enable the **Google Drive API**, configure the OAuth consent screen (External, add yourself as a test user, scope `.../auth/drive.file`).
+2. Create an **OAuth client ID** of type *Web application* with the authorised JavaScript origins `https://lucasvanwijk.github.io` and `http://localhost:5173`.
+3. Locally put `VITE_GOOGLE_CLIENT_ID=<client id>` in `app/.env.local` (git-ignored). For the live site add a repository secret named `GOOGLE_CLIENT_ID` (Settings → Secrets and variables → Actions); the deploy workflow passes it to the build.
+
+Without a client ID the Drive section is hidden. The ID is public by nature (it ships in the built JavaScript); the secret only keeps it out of the source.
+
 ## Layout
 
 The app switches between the mobile layout (bottom tab bar, bottom sheets) and the desktop layout (sidebar, side panel) at 900px width.

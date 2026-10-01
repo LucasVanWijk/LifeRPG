@@ -1,5 +1,6 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { exportBackup, lastExport } from '../backup';
+import { download, driveConfigured, driveHasNewer, findFile, getToken, lastSync, loadGis, recordSync, upload } from '../drive';
 import type { StorageState } from '../storage';
 import { storageState } from '../storage';
 import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } from '../pwa';
@@ -139,6 +140,8 @@ export function ProfileSheet() {
         {restore.field}
       </div>
 
+      <DriveSection />
+
       <InstallSection />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
@@ -170,6 +173,62 @@ export function Welcome() {
 }
 
 /** Offers "Install app" where the browser supports it, and explains Add to Home Screen on iPhone. */
+/** Manual sync with a file in the user's own Google Drive: nothing happens until a button is pressed. */
+function DriveSection() {
+  const { data, actions, showToast } = useStore();
+  const [busy, setBusy] = useState(false);
+  const [sync, setSync] = useState(lastSync);
+  useEffect(() => { if (driveConfigured) loadGis().catch(() => undefined); }, []);
+  if (!driveConfigured) return null;
+
+  const run = async (job: () => Promise<void>) => {
+    setBusy(true);
+    try { await job(); } catch (e) { showToast('Google Drive', e instanceof Error ? e.message : 'Something went wrong.'); } finally { setBusy(false); }
+  };
+  const save = () => run(async () => {
+    const tok = await getToken();
+    const remote = await findFile(tok);
+    const write = () => run(async () => {
+      const f = await upload(tok, JSON.stringify(data, null, 2), remote?.id);
+      setSync(recordSync(f));
+      showToast('Saved to Google Drive', heroName(data.hero) + ' · ' + summary(data));
+    });
+    if (remote && driveHasNewer(remote, lastSync())) {
+      actions.confirm({
+        title: 'Overwrite the Drive save?',
+        body: 'The save in Google Drive was changed since this device last loaded it (saved ' + new Date(remote.modifiedTime).toLocaleString() + '). Saving now replaces it with this device\'s log. Load it first if you want its changes.',
+        confirmLabel: 'Overwrite', onConfirm: write,
+      });
+    } else await write();
+  });
+  const load = () => run(async () => {
+    const tok = await getToken();
+    const remote = await findFile(tok);
+    if (!remote) { showToast('No save in Google Drive yet', 'Use Save to Drive first.'); return; }
+    const next = migrate(await download(tok, remote.id), todayISO());
+    if (!next) { showToast("That Drive file isn't a Questlog save", remote.id); return; }
+    actions.confirm({
+      title: 'Load the Drive save?',
+      body: 'It holds ' + summary(next) + ' (saved ' + new Date(remote.modifiedTime).toLocaleString() + '). It replaces everything in this browser.',
+      confirmLabel: 'Load save', tone: 'go',
+      onConfirm: () => { actions.replaceData(next); setSync(recordSync(remote)); showToast('Loaded from Google Drive', heroName(next.hero) + ' · level ' + next.hero.level); },
+    });
+  });
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h3 style={{ fontSize: 22 }}>Google Drive</h3>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+        Keep one save in your own Drive and move it between devices. Nothing syncs by itself: press Save to put this log there, Load to bring it here.
+        {sync ? ' Last synced ' + new Date(sync.at).toLocaleString() + '.' : ' Not synced from this browser yet.'}
+      </p>
+      <div className="two-col">
+        <button className="btn btn-primary inked" onClick={save} disabled={busy} style={{ minHeight: 46 }}>Save to Drive</button>
+        <button className="btn btn-secondary" onClick={load} disabled={busy} style={{ minHeight: 46 }}>Load from Drive</button>
+      </div>
+    </div>
+  );
+}
+
 function InstallSection() {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
   useEffect(() => onInstallChange(rerender), []);
