@@ -345,3 +345,8 @@ button { font: inherit; }
 
 .check-box { flex: none; display: grid; place-items: center; width: 20px; height: 20px; border: 1.5px solid var(--color-accent-700); border-radius: 4px; color: var(--q-parch); }
 [aria-pressed='true'] > .check-box { background: var(--color-accent-700); }
+
+.steps.side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 14px; }
+.steps.side li + li button { border-top: 0; }
+.steps.side:not(.compact) button { border-top: 1px solid var(--q-rule); }
+.steps.side .step-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

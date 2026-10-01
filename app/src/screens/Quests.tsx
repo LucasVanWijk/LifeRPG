@@ -1,7 +1,7 @@
 import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { addDays, shortDate } from '../domain/dates';
 import { bestStreak, checkedInToday, habitDone, habitProgress, habitStreak, habitTarget, periodOf } from '../domain/logic';
-import type { Every, Guild, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
+import type { Data, Every, Guild, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
 import { EVERY_NAME, habitReward, isLocal, QUADS, STATUSES, streakText } from '../domain/model';
 import { StepChecklist, stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
@@ -52,9 +52,57 @@ function GuildSwitch() {
   const { data, ui, setUi } = useStore();
   const count = (g: Guild) => data.quests.filter((q) => q.status !== 'done' && inGuild(q, g)).length;
   return (
-    <Seg name="guild" value={ui.guild} onChange={(v) => setUi({ guild: v, mobileZone: null })}
+    <Seg name="guild" value={ui.guild} onChange={(v) => setUi({ guild: v, mobileZone: null })} style={{ alignSelf: 'flex-start' }}
       optStyle={{ minHeight: 40, padding: '8px 16px', fontSize: 14 }}
       options={[{ key: 'local', label: 'Local Guild · ' + count('local') }, { key: 'global', label: 'Global Guild · ' + count('global') }]} />
+  );
+}
+
+type Cell = { kind: 'one'; q: Quest; wide: boolean } | { kind: 'pair'; tall: Quest; smalls: Quest[] };
+
+/**
+ * Lays notes out in order. A tall wide note (two or more steps) takes the next two compact
+ * notes and stacks them beside itself, so together they fill the same height.
+ */
+function boardCells(list: Quest[], today: string, camps: Data['camps']): Cell[] {
+  const wideOf = (q: Quest) => { const v = questView(q, today, camps); return isWide(q, v.hasDue, v.campaignName); };
+  const used = new Set<number>();
+  const cells: Cell[] = [];
+  list.forEach((q, i) => {
+    if (used.has(q.id)) return;
+    if (wideOf(q) && q.steps.length >= 2) {
+      const smalls = list.slice(i + 1).filter((o) => !used.has(o.id) && !wideOf(o)).slice(0, 2);
+      if (smalls.length === 2) { smalls.forEach((o) => used.add(o.id)); cells.push({ kind: 'pair', tall: q, smalls }); return; }
+    }
+    cells.push({ kind: 'one', q, wide: wideOf(q) });
+  });
+  return cells;
+}
+
+function BoardNote({ q, wide, stretch = false, inPair = false, drag }: { q: Quest; wide: boolean; stretch?: boolean; inPair?: boolean; drag: ReturnType<typeof useDrag> }) {
+  const { data, today, actions } = useStore();
+  const v = questView(q, today, data.camps);
+  return (
+    <div className="note" draggable onDragStart={(e) => drag.start(e, q.id)} onDragEnd={drag.end} onClick={() => actions.openQuest(q.id)}
+      role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
+      style={{ gap: 5, padding: '14px 10px 8px', gridColumn: inPair ? undefined : 'span ' + (wide ? 3 : 2), flex: stretch ? 1 : undefined, opacity: drag.dragId === q.id ? 0.35 : 1 }}>
+      <span className="pin" />
+      <div className="note-title"><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 16, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</span></div>
+      {(v.hasDue || stepCount(q)) && <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
+        {v.hasDue && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
+        {v.hasDue && stepCount(q) && <span style={{ color: 'var(--color-accent-500)' }}>·</span>}
+        {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+      </div>}
+      {withNames(q, data.companions) && <div className="with-line"><Icon n="users" size={11} />with {withNames(q, data.companions)}</div>}
+      <StepChecklist compact maxChars={wide ? 24 : 11} quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
+      <div className="note-foot">
+        <span>+{v.xp} XP</span>
+        <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
+          {v.campaignName && <span className="camp-tag" title={v.campaignName}><Icon n="flag" size={10} /><span className="ellipsis">{v.campaignName}</span></span>}
+        </span>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} aria-label={v.gold + ' gold'}>+{v.gold}<span style={{ color: 'var(--color-accent-600)' }}><Icon n="coins" size={12} /></span></span>
+      </div>
+    </div>
   );
 }
 
@@ -90,31 +138,16 @@ function DeskBoard() {
                   {z.key === 'main' && <span className="xp-mult">×1.5 XP</span>}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,minmax(0,1fr))', gridAutoFlow: 'row dense', gap: '14px', alignContent: 'start' }}>
-                  {list.map((q) => {
-                    const v = questView(q, today, data.camps);
-                    return (
-                      <div key={q.id} className="note" draggable onDragStart={(e) => drag.start(e, q.id)} onDragEnd={drag.end} onClick={() => actions.openQuest(q.id)}
-                        role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
-                        style={{ gap: 5, padding: '14px 10px 8px', gridColumn: 'span ' + (isWide(q, v.hasDue, v.campaignName) ? 3 : 2), opacity: drag.dragId === q.id ? 0.35 : 1 }}>
-                        <span className="pin" />
-                        <div className="note-title"><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 16, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</span></div>
-                        {(v.hasDue || stepCount(q)) && <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
-                          {v.hasDue && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
-                          {v.hasDue && stepCount(q) && <span style={{ color: 'var(--color-accent-500)' }}>·</span>}
-                          {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
-                        </div>}
-                        {withNames(q, data.companions) && <div className="with-line"><Icon n="users" size={11} />with {withNames(q, data.companions)}</div>}
-                        <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
-                        <div className="note-foot">
-                          <span>+{v.xp} XP</span>
-                          <span style={{ flex: 1, minWidth: 0, display: 'flex', justifyContent: 'center' }}>
-                            {v.campaignName && <span className="camp-tag" title={v.campaignName}><Icon n="flag" size={10} /><span className="ellipsis">{v.campaignName}</span></span>}
-                          </span>
-                          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} aria-label={v.gold + ' gold'}>+{v.gold}<span style={{ color: 'var(--color-accent-600)' }}><Icon n="coins" size={12} /></span></span>
+                  {boardCells(list, today, data.camps).map((c) => c.kind === 'pair'
+                    ? (
+                      <div key={c.tall.id} style={{ gridColumn: 'span 6', display: 'grid', gridTemplateColumns: 'repeat(2,minmax(0,1fr))', gap: 14 }}>
+                        <BoardNote q={c.tall} wide inPair drag={drag} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 14, minWidth: 0 }}>
+                          {c.smalls.map((q) => <BoardNote key={q.id} q={q} wide stretch inPair drag={drag} />)}
                         </div>
                       </div>
-                    );
-                  })}
+                    )
+                    : <BoardNote key={c.q.id} q={c.q} wide={c.wide} drag={drag} />)}
                 </div>
                 {!list.length && <p style={{ margin: 'auto 0', textAlign: 'center', fontStyle: 'italic', fontSize: 13, color: 'var(--color-accent-200)' }}>Drop a quest here</p>}
               </div>
