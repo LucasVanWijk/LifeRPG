@@ -18,9 +18,10 @@ export function Glossary() {
   if (companion) return <div className="screen screen-narrow" style={{ gap: 16 }}><CompanionDetail c={companion} /></div>;
   if (codex) return <div className="screen screen-narrow" style={{ gap: 16 }}><CodexDetail x={codex} /></div>;
 
+  const wideList = !query && ui.gCat === 'companions';
   return (
-    <div className="screen screen-narrow" style={{ gap: 16 }}>
-      <header style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div className={'screen' + (wideList ? '' : ' screen-narrow')} style={{ gap: 16 }}>
+      <header style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 760 }}>
         <div className="screen-head">
           <span className="kicker">Everything worth remembering</span>
           <h1>Glossary</h1>
@@ -97,9 +98,11 @@ function CompanionList() {
     return true;
   };
   return (
-    <div style={{ display: 'flex', flexDirection: 'column' }}>
+    <div>
       {!data.companions.length && <Empty>No companions yet. Add the people you want to remember things about.</Empty>}
-      {data.companions.map((c) => {
+      {/* As many columns as fit; A to Z reads across, then down. */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', columnGap: 28 }}>
+      {[...data.companions].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((c) => {
         const next = events.filter((e) => e.who === c.first && e.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
         return (
           <button key={c.id} className="row-btn" onClick={() => setUi({ gDetail: 'companion:' + c.id })} style={{ gap: 14, minHeight: 68, padding: '12px 0' }}>
@@ -113,6 +116,7 @@ function CompanionList() {
           </button>
         );
       })}
+      </div>
       <AddForm label="Add companion" onSave={add} invalid={!name.trim()} onCancel={() => { setName(''); setRel(''); setBday(''); }}>
         <div className="field"><label htmlFor="nc-name">Name</label><input id="nc-name" className="input" value={name} onChange={(e) => setName(e.target.value)} autoFocus style={{ minHeight: 44 }} /></div>
         <div className="two-col">
