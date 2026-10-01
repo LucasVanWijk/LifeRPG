@@ -136,6 +136,9 @@ button { font: inherit; }
 .screen-narrow { max-width: 760px; }
 .screen-head { display: flex; flex-direction: column; gap: 2px; }
 .screen-head h1 { font-size: 34px; font-weight: 600; }
+.screen-count { margin-left: 14px; font-family: var(--font-body); font-size: 14px; font-weight: 400; letter-spacing: .1em; text-transform: uppercase; color: var(--color-accent-700); }
+.desk .app-scroll:has(.screen-wide) { padding: 24px 12px 24px; }
+.screen-wide { max-width: none; }
 
 /* Home */
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }

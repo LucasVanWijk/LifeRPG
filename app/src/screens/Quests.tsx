@@ -14,8 +14,8 @@ export function Quests() {
   const activeCount = data.quests.filter((q) => q.status !== 'done').length;
   const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : activeCount + (activeCount === 1 ? ' open quest' : ' open quests');
   return (
-    <div className="screen" style={{ flex: 1, gap: 14 }}>
-      <ScreenHead kicker={kicker} title="Quests">
+    <div className={"screen" + (isDesk && ui.questView === "board" ? " screen-wide" : "")} style={{ flex: 1, gap: 14 }}>
+      <ScreenHead count={kicker} title="Quests">
         <Seg name="quest-view" value={ui.questView} onChange={(v) => setUi({ questView: v, mobileZone: null })}
           optStyle={{ minHeight: 40, padding: isDesk ? '8px 16px' : '8px 12px', fontSize: 14 }}
           options={[{ key: 'board', label: isDesk ? 'Quest Board' : 'Board' }, { key: 'campaign', label: 'Campaigns' }, { key: 'habits', label: 'Habits' }]} />
@@ -40,6 +40,9 @@ function useDrag() {
 }
 
 const zoneStyle = (light: string) => ({ '--zone-light': light }) as CSSProperties;
+// Busy quests (long title, steps, people, campaign…) get a wide note; simple ones a compact one.
+const isWide = (q: Quest, hasDue: boolean, campaign?: string | null) =>
+  !!stepCount(q) || q.title.length + (hasDue ? 12 : 0) + (campaign ? 10 : 0) + (q.companions.length ? 10 : 0) > 30;
 const activeIn = (quests: Quest[], quad: QuadKey) => quests.filter((q) => q.status !== 'done' && q.quad === quad).sort(byDue);
 
 function DeskBoard() {
@@ -73,13 +76,13 @@ function DeskBoard() {
                   <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-accent-200)', fontStyle: 'italic' }}>{z.sub}</span>
                   {z.key === 'main' && <span className="xp-mult">×1.5 XP</span>}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: '14px', alignContent: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6,minmax(0,1fr))', gridAutoFlow: 'row dense', gap: '14px', alignContent: 'start' }}>
                   {list.map((q) => {
                     const v = questView(q, today, data.camps);
                     return (
                       <div key={q.id} className="note" draggable onDragStart={(e) => drag.start(e, q.id)} onDragEnd={drag.end} onClick={() => actions.openQuest(q.id)}
                         role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
-                        style={{ gap: 5, padding: '14px 10px 8px', opacity: drag.dragId === q.id ? 0.35 : 1 }}>
+                        style={{ gap: 5, padding: '14px 10px 8px', gridColumn: 'span ' + (isWide(q, v.hasDue, v.campaignName) ? 3 : 2), opacity: drag.dragId === q.id ? 0.35 : 1 }}>
                         <span className="pin" />
                         <div className="note-title"><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 16, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</span></div>
                         {(v.hasDue || stepCount(q)) && <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
