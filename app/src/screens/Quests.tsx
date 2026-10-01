@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
 import { addDays, shortDate } from '../domain/dates';
 import { bestStreak, checkedInToday, habitDone, habitProgress, habitStreak, habitTarget, periodOf } from '../domain/logic';
 import type { Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
-import { EVERY_NAME, habitReward, noteRotation, QUADS, STATUSES, streakText } from '../domain/model';
+import { EVERY_NAME, habitReward, QUADS, STATUSES, streakText } from '../domain/model';
 import { StepChecklist, stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
 import { Icon } from '../components/Icon';
@@ -73,20 +73,20 @@ function DeskBoard() {
                   <span style={{ marginLeft: 'auto', fontSize: 11, color: 'var(--color-accent-200)', fontStyle: 'italic' }}>{z.sub}</span>
                   {z.key === 'main' && <span className="xp-mult">×1.5 XP</span>}
                 </div>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(170px,1fr))', gap: '18px 14px', alignContent: 'start' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill,minmax(150px,1fr))', gap: '14px', alignContent: 'start' }}>
                   {list.map((q) => {
                     const v = questView(q, today, data.camps);
                     return (
                       <div key={q.id} className="note" draggable onDragStart={(e) => drag.start(e, q.id)} onDragEnd={drag.end} onClick={() => actions.openQuest(q.id)}
                         role="button" tabIndex={0} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
-                        style={{ gap: 7, padding: '16px 13px 10px', transform: 'rotate(' + noteRotation(q.id) + ')', opacity: drag.dragId === q.id ? 0.35 : 1 }}>
+                        style={{ gap: 5, padding: '14px 10px 8px', opacity: drag.dragId === q.id ? 0.35 : 1 }}>
                         <span className="pin" />
-                        <div className="heading" style={{ fontSize: 18, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</div>
-                        <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
-                          {v.hasDue && <><span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span><span style={{ color: 'var(--color-accent-500)' }}>·</span></>}
-                          <span>{q.size}</span>
-                          {stepCount(q) && <><span style={{ color: 'var(--color-accent-500)' }}>·</span><span className="tnum">{stepCount(q)} steps</span></>}
-                        </div>
+                        <div className="note-title"><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 16, lineHeight: 1.15, textWrap: 'pretty' }}>{q.title}</span></div>
+                        {(v.hasDue || stepCount(q)) && <div className="muted" style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, whiteSpace: 'nowrap' }}>
+                          {v.hasDue && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
+                          {v.hasDue && stepCount(q) && <span style={{ color: 'var(--color-accent-500)' }}>·</span>}
+                          {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+                        </div>}
                         {withNames(q, data.companions) && <div className="with-line"><Icon n="users" size={11} />with {withNames(q, data.companions)}</div>}
                         <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
                         <div className="note-foot">
@@ -174,15 +174,14 @@ function MobileZone({ zone }: { zone: QuadKey }) {
           const v = questView(q, today, data.camps);
           return (
             <div key={q.id} className="note" role="button" tabIndex={0} onClick={() => actions.openQuest(q.id)} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
-              style={{ gap: 4, padding: '12px 12px 8px', border: 0, fontFamily: 'var(--font-body)', transform: 'rotate(' + noteRotation(q.id, 0.4, 2) + ')' }}>
+              style={{ gap: 4, padding: '12px 12px 8px', border: 0, fontFamily: 'var(--font-body)' }}>
               <span className="pin" />
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, width: '100%' }}>
-                <div className="heading" style={{ flex: 1, fontSize: 17, lineHeight: 1.15 }}>{q.title}</div>
+                <div className="note-title" style={{ flex: 1 }}><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 17, lineHeight: 1.15 }}>{q.title}</span></div>
                 <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{v.xp} XP · +{v.gold}g</span>
               </div>
               <div className="meta" style={{ gap: '6px 10px' }}>
                 {v.hasDue && <span style={{ color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
-                <span>{q.size}</span>
                 {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
                 {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                 {v.campaignName && <span className="camp-tag" title={v.campaignName} style={{ gap: 4, padding: '1px 7px', maxWidth: 180 }}><Icon n="flag" size={10} /><span className="ellipsis">{v.campaignName}</span></span>}
