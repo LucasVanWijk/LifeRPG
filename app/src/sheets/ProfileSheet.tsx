@@ -11,6 +11,7 @@ import { emptyData, heroName, titleFor } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { CloseBtn, onEnter, Portrait, Sheet } from '../components/common';
 import { useStore } from '../state/store';
+import { BOARD_THEMES, loadBoardTheme, saveBoardTheme, type BoardTheme } from '../theme';
 
 
 /** Center-crops an image file to a small square JPEG, so the portrait stays light in storage. */
@@ -62,6 +63,30 @@ export function useImport() {
   };
   const field = <input ref={input} type="file" accept="application/json,.json" hidden onChange={(e) => onFile(e.target.files?.[0])} />;
   return { open: () => input.current?.click(), field };
+}
+
+function ThemeSection() {
+  const [theme, setTheme] = useState<BoardTheme>(loadBoardTheme);
+  const pick = (t: BoardTheme) => { setTheme(t); saveBoardTheme(t); };
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }} role="radiogroup" aria-label="Board theme">
+      <h3 style={{ fontSize: 22 }}>Theme</h3>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>The wooden board and notes on the Quests screen.</p>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 8 }}>
+        {BOARD_THEMES.map((t) => (
+          <button key={t.key} type="button" role="radio" aria-checked={theme === t.key} onClick={() => pick(t.key)} className="opt-btn" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 6, minHeight: 44, outline: theme === t.key ? '2px solid var(--color-accent-700)' : undefined }}>
+            <span style={{ display: 'flex', alignSelf: 'stretch', height: 22, borderRadius: 3, overflow: 'hidden', border: '1px solid var(--q-rule)' }}>
+              {t.swatch.map((c) => <i key={c} style={{ flex: 1, background: c }} />)}
+            </span>
+            <span style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2, textAlign: 'left' }}>
+              <span className="heading" style={{ fontSize: 16 }}>{t.name}{theme === t.key ? ' ✓' : ''}</span>
+              <span className="muted" style={{ fontSize: 11 }}>{t.blurb}</span>
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 export function ProfileSheet() {
@@ -139,6 +164,8 @@ export function ProfileSheet() {
         </div>
         {restore.field}
       </div>
+
+      <ThemeSection />
 
       <DriveSection />
 

@@ -217,7 +217,7 @@ function MobileZone({ zone }: { zone: QuadKey }) {
         ))}
       </div>
       <div className={'wood zone' + (zone === 'main' ? ' is-main' : '')}
-        style={{ ...zoneStyle(z.light), flex: 1, display: 'flex', flexDirection: 'column', gap: 11, padding: '12px 12px 18px', minHeight: 480, borderRadius: 6, backgroundColor: 'var(--color-accent-800)', backgroundImage: 'var(--q-wood)' }}>
+        style={{ ...zoneStyle(z.light), flex: 1, display: 'flex', flexDirection: 'column', gap: 11, padding: '12px 12px 18px', minHeight: 480 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div className="zone-head">
             <Icon n={z.icon} size={18} />
