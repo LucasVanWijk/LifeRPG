@@ -202,8 +202,9 @@ export interface LedgerEntry {
   notable: boolean;
 }
 
-export interface Building { id: string; type: BuildingId; level: number }
-export interface Construction { id: string; type: BuildingId; /** The building being upgraded, or null for a new one. */ target: string | null; level: number; left: number; total: number }
+/** `plot` is an index into the town's plots (see plots.ts); the Hall, Garden and Hall of Heroes have none. */
+export interface Building { id: string; type: BuildingId; level: number; plot?: number }
+export interface Construction { id: string; type: BuildingId; /** The building being upgraded, or null for a new one. */ target: string | null; level: number; left: number; total: number; /** The plot a new building has reserved. */ plot?: number }
 
 export interface Monument { id: string; camp: string; name: string; seal: string; icon: string; size: 'S' | 'M' | 'L'; date: string; bearer: string | null; at: GameMs }
 export interface Era { n: number; name: string; hero: string | null; from: number; to: number; joined: number; fell: number; retired: number; built: number; quests: number; habits: number }

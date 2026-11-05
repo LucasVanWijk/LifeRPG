@@ -19,7 +19,7 @@ import type { Ctx } from './resolve';
 import { resolve, snapshot } from './resolve';
 import { rngFor } from './rng';
 import {
-  boardSize, buildProblem, costOf, hallLevel, happyTalent, isLegend, legendBonus, levelOf, outLimit, production, rosterLimit, seasonCount,
+  boardSize, buildProblem, costOf, freePlots, hallLevel, pickPlot, happyTalent, isLegend, legendBonus, levelOf, outLimit, production, rosterLimit, seasonCount,
   seasonIndex, staffMult, staffOf, staffSlots, stoneCut, storageCap, tavernSize, tierLimit, value, dayOf,
 } from './town';
 import { active, byId, champion, log, nextId } from './util';
@@ -53,7 +53,7 @@ export function found(f: Founding, now: number): Guild {
     armoury: [], heirlooms: [], potions: [], market: { season: -1, stock: [] }, sold: { week: -1, gold: 0 }, regions: emptyRegions(), monuments: [], eras: [], streaks: {},
     bestHaul: { gold: 0, name: '' },
   };
-  for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1 });
+  for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1, plot: BUILDINGS[type].noPlot ? undefined : pickPlot(g, type) });
   const dps: ClassId = rngFor(f.seed, 'starter-dps').pick(['ranger', 'arcanist', 'blademaster'] as ClassId[]);
   (['guardian', 'cleric', dps] as ClassId[]).forEach((cls, i) => {
     g.adventurers.push(makeAdventurer(rngFor(f.seed, 'starter', i), nextId(g, 'a'), 0, { cls }));
@@ -70,6 +70,7 @@ export function upgradeGuild(raw: Guild): Guild {
   g.holiday ??= null;
   g.construction ??= [];
   if (!g.buildings?.length) { g.buildings = []; for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1 }); }
+  for (const b of [...g.buildings].sort((x, y) => x.id.localeCompare(y.id))) if (b.plot === undefined && !BUILDINGS[b.type].noPlot) b.plot = pickPlot(g, b.type);
   g.armoury ??= []; g.heirlooms ??= []; g.potions ??= [];
   g.market ??= { season: -1, stock: [] };
   g.sold ??= { week: -1, gold: 0 };
@@ -171,7 +172,7 @@ function phaseTick(g: Guild, p: number) {
     c.left -= crewSpeed;
     if (c.left > 0) continue;
     g.construction = g.construction.filter((x) => x.id !== c.id);
-    if (c.target) { const b = g.buildings.find((x) => x.id === c.target); if (b) b.level = c.level; } else g.buildings.push({ id: nextId(g, 'b'), type: c.type, level: 1 });
+    if (c.target) { const b = g.buildings.find((x) => x.id === c.target); if (b) b.level = c.level; } else g.buildings.push({ id: nextId(g, 'b'), type: c.type, level: 1, plot: c.plot });
     log(g, c.type === 'hall' ? { k: 'hall', v: c.level } : { k: c.target ? 'upgraded' : 'built', t: c.type, v: c.level });
   }
   const made = production(g), cap = storageCap(g);
@@ -703,12 +704,17 @@ export function skipTime(g: Guild, ms: number): Guild { return { ...g, founded: 
 
 const pay = (g: Guild, c: ReturnType<typeof costOf>) => { g.gold -= c.gold; g.stock.wood -= c.wood; g.stock.stone -= c.stone; g.stock.iron -= c.iron; };
 
-export function build(g0: Guild, type: BuildingId): Result {
+/** Starts a new building, on the chosen plot or the one it prefers. */
+export function build(g0: Guild, type: BuildingId, plot?: number): Result {
   const problem = buildProblem(g0, type);
   if (problem) return fail(problem);
+  let p: number | undefined;
+  if (!BUILDINGS[type].noPlot) {
+    if (plot !== undefined) { if (!freePlots(g0).includes(plot)) return fail('That plot is not free'); p = plot; } else p = pickPlot(g0, type);
+  }
   const g = draft(g0), c = costOf(g, type, 1);
   pay(g, c);
-  g.construction.push({ id: nextId(g, 'c'), type, target: null, level: 1, left: c.phases, total: c.phases });
+  g.construction.push({ id: nextId(g, 'c'), type, target: null, level: 1, left: c.phases, total: c.phases, plot: p });
   return { ok: true, guild: g };
 }
 

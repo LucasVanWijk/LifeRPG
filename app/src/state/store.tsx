@@ -54,6 +54,8 @@ export interface Ui {
   reportSheet: string | null;
   /** A building's id (or 'hall'), or 'new' for the list of things to build. */
   buildSheet: string | null;
+  /** The plot chosen on the map for a new building. */
+  buildPlot: number | null;
   /** What happened while the app was closed. */
   away: Entry[] | null;
   confirm: Confirm | null;
@@ -115,6 +117,7 @@ function initialUi(today: string): Ui {
     offerSheet: null,
     reportSheet: null,
     buildSheet: null,
+    buildPlot: null,
     away: null,
     confirm: null,
     dragId: null,
@@ -394,7 +397,7 @@ function useStoreValue() {
         return guildDo((g) => G.send(g, offerId, party, stance), () => { setUi({ offerSheet: null }); showToast('They set out', 'Check the Roster to follow them'); });
       },
       // Town
-      build(type: BuildingId) { guildDo((g) => G.build(g, type), () => { setUi({ buildSheet: null }); showToast('Work begins', 'A crew has started on it'); }); },
+      build(type: BuildingId, plot?: number) { guildDo((g) => G.build(g, type, plot), () => { setUi({ buildSheet: null, buildPlot: null }); showToast('Work begins', 'A crew has started on it'); }); },
       upgrade(id: string) { guildDo((g) => G.upgrade(g, id), () => showToast('Work begins', 'A crew has started on it')); },
       demolish(id: string) { guildDo((g) => G.demolish(g, id), () => setUi({ buildSheet: null })); },
       assignStaff(advId: string, buildingId: string | null) { guildDo((g) => G.assignStaff(g, advId, buildingId)); },

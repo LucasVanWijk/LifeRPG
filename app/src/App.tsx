@@ -31,7 +31,7 @@ export function App() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, away: null }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, buildPlot: null, away: null }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);

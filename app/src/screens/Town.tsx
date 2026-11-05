@@ -4,6 +4,9 @@ import { bld, buildProblem, capacity, CAP_KEYS, capLabel, costOf, costText, crew
 import type { Building, Guild as GuildT } from '../domain/guild/types';
 import { Icon } from '../components/Icon';
 import { Bar } from '../components/guildParts';
+import { useState } from 'react';
+import { Seg } from '../components/common';
+import { TownMap } from '../components/TownMap';
 import { useStore } from '../state/store';
 import { Section } from './Guild';
 
@@ -14,8 +17,14 @@ const CAP_HINT: Record<string, string> = {
   order: 'Surplus lets the board offer more (every 5 adds an expedition).',
 };
 
+const VIEW_KEY = 'questlog:townview';
+type View = 'map' | 'list';
+const loadView = (): View => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'map'; } catch { return 'map'; } };
+
 export function Town({ g }: { g: GuildT }) {
   const { setUi } = useStore();
+  const [view, setViewState] = useState<View>(loadView);
+  const setView = (v: View) => { setViewState(v); try { localStorage.setItem(VIEW_KEY, v); } catch { /* private mode */ } };
   const hall = bld(g, 'hall')!;
   const level = hallLevel(g);
   const cap = capacity(g);
@@ -24,9 +33,18 @@ export function Town({ g }: { g: GuildT }) {
   const upgrading = g.construction.find((c) => c.type === 'hall');
   const nextHall = level < MAX_HALL ? costOf(g, 'hall', level + 1) : null;
   const buildings = g.buildings.filter((b) => b.type !== 'hall').sort((a, b) => BUILDINGS[a.type].name.localeCompare(BUILDINGS[b.type].name) || b.level - a.level);
+  const map = view === 'map';
   return (
     <>
-      <button className="panel-framed" onClick={() => setUi({ buildSheet: hall.id })} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
+      <Seg<View> name="town-view" value={view} onChange={setView} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr' }} optStyle={{ justifyContent: 'center', minHeight: 38, fontSize: 14 }}
+        options={[{ key: 'map', label: 'Map' }, { key: 'list', label: 'List' }]} />
+      {map && (
+        <section className="panel" style={{ padding: 6 }}>
+          <TownMap g={g} onBuilding={(id) => setUi({ buildSheet: id })} onPlot={(plot) => setUi({ buildSheet: 'new', buildPlot: plot })} />
+          <p className="muted" style={{ margin: '6px 8px 4px', fontSize: 12 }}>Tap a building to open it, an empty plot to build there, and the Guild Hall to raise it. A green arrow means it can be raised now.</p>
+        </section>
+      )}
+      {!map && <button className="panel-framed" onClick={() => setUi({ buildSheet: hall.id })} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
         <span className="seal heading tnum" style={{ width: 54, height: 54, fontSize: 26, flex: 'none' }}>{level}</span>
         <span style={{ flex: 1, minWidth: 0 }}>
           <span className="kicker">{hallRank(level)} rank · {crews(g)} {crews(g) === 1 ? 'crew' : 'crews'}</span>
@@ -37,7 +55,7 @@ export function Town({ g }: { g: GuildT }) {
           </span>
         </span>
         <Icon n="chevron-right" size={18} />
-      </button>
+      </button>}
 
       <Section title="The town" sub={plotsUsed(g) + ' of ' + plotsFor(level) + ' plots'}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', paddingTop: 4 }}>
@@ -89,12 +107,13 @@ export function Town({ g }: { g: GuildT }) {
         </Section>
       )}
 
-      <Section title="Buildings" sub={buildings.length + ' built'}>
+      {map && <button className="dashed-btn" onClick={() => setUi({ buildSheet: 'new', buildPlot: null })} style={{ gap: 8, minHeight: 48, fontSize: 17 }}><Icon n="plus" size={17} />Build something</button>}
+      {!map && <Section title="Buildings" sub={buildings.length + ' built'}>
         {buildings.map((b) => <BuildingRow key={b.id} g={g} b={b} />)}
-        <button className="dashed-btn" onClick={() => setUi({ buildSheet: 'new' })} style={{ gap: 8, minHeight: 48, marginTop: 10, fontSize: 17 }}>
+        <button className="dashed-btn" onClick={() => setUi({ buildSheet: 'new', buildPlot: null })} style={{ gap: 8, minHeight: 48, marginTop: 10, fontSize: 17 }}>
           <Icon n="plus" size={17} />Build something
         </button>
-      </Section>
+      </Section>}
     </>
   );
 }

@@ -4,6 +4,7 @@ import {
   BUILDINGS, BUILDING_IDS, buildingCap, CLASSES, crewsFor, DAYS_PER_SEASON, DAYS_PER_YEAR, HALL_STEPS, LEGEND_CAP_PER_LEVEL, LEGEND_LEVEL, LEGEND_STAT,
   MAX_BUILDING_LEVEL, MAX_HALL, maxOutFor, maxTierFor, OUTPOST_SLOTS, PHASES_PER_DAY, plotsFor, SEASON_COST, SINGLE, STONE_BONUS, STONE_MAX, workersFor,
 } from './content';
+import { PLOTS, PREFERRED } from './plots';
 import type { Building, Guild } from './types';
 
 // ── Looking things up ────────────────────────────────────────
@@ -157,4 +158,21 @@ export function production(g: Guild): Record<StockKey, number> {
     if (b) out[key] += Math.round(BUILDINGS[type].values[b.level - 1] * staffMult(g, type));
   }
   return out;
+}
+
+// ── Plots ────────────────────────────────────────────────────
+
+/** Plots the Guild Hall has opened so far. */
+export const openPlots = (g: Guild) => PLOTS.slice(0, plotsFor(hallLevel(g)));
+const taken = (g: Guild) => new Set<number>([...g.buildings.map((b) => b.plot), ...g.construction.map((c) => c.plot)].filter((n): n is number => n !== undefined));
+/** Indexes of open plots with nothing built or being built on them. */
+export function freePlots(g: Guild): number[] {
+  const used = taken(g);
+  return openPlots(g).flatMap((_, i) => (used.has(i) ? [] : [i]));
+}
+/** The plot a new building takes when the player doesn't choose: the lowest free one in the zone it prefers, else the lowest free one. */
+export function pickPlot(g: Guild, type: BuildingId): number | undefined {
+  const free = freePlots(g);
+  const zone = PREFERRED[type];
+  return free.find((i) => PLOTS[i].zone === zone) ?? free[0];
 }

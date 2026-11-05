@@ -1,6 +1,6 @@
 # The paper map: implementation plan
 
-Status: plan, nothing built. Goal from the design (section 14, stage 5): the town drawn as a paper map you watch grow. Tap a building to open it, tap an empty plot to build on it, tap the Guild Hall to raise it.
+Status: **built (steps 1 to 4, and part of step 5)**; see section 11 for what differs from this plan. Goal from the design (section 14, stage 5): the town drawn as a paper map you watch grow. Tap a building to open it, tap an empty plot to build on it, tap the Guild Hall to raise it.
 
 ## 1. What exists, and the gap
 
@@ -107,3 +107,18 @@ Rough size: steps 1 and 3 are each about a tenth of stage 2; step 2 about a thir
 2. **How much life?** Smoke and a flag are cheap; walking figures and retirees on benches cost more. Recommendation: ship without them, add in step 5.
 3. **Does the map replace the list, or sit beside it?** Recommendation: a switch, defaulting to the map on phones, remembered per device.
 4. **Style:** a warm hand-inked parchment map (matches the app), or a bolder illustrated one? Recommendation: hand-inked, two accent colours.
+
+## 11. As built
+
+Done: steps 1 to 4 and the calm parts of step 5.
+
+- **Plots** are in the data (`Building.plot`, `Construction.plot`), laid out as 36 plots in three rings (8 core, 12 fields, 16 wild) rather than 40, because 36 is the most that keeps every plot at least 50 px from its neighbours and inside the scene, and the Hall never opens more than 30. Older saves are given plots on load. The layout, spacing and placement rules are tested (`plots.test.ts`).
+- **The map** (`TownMap.tsx`, `mapArt.tsx`, `domain/guild/map.ts`) draws every building with level detail (chimney, banner, fence, lit windows, flags), the Hall growing towers, the Garden's monuments as standing stones, the Hall of Heroes, scaffolding and a progress ring while a crew works, a green arrow on anything that can be raised now, a "−20%" tag on buildings that are cheaper this season, season tint and margin decoration, retirees on the green, and a row for the five regions (freed, charted or locked).
+- **Interaction:** tap a building to open its sheet, tap an open plot to build there (the build list then places the building on that plot), tap the Hall to raise it. "Build something" from the list or the map places it on the zone it prefers. Every building and plot is a keyboard-focusable button with a label, and the Map / List switch is remembered on the device.
+- **Motion:** chimney smoke on staffed buildings and a gentle pulse on the work ring, both off under reduced motion.
+
+Not built, and why:
+- **The unrolling animation, the pop-in on completion, and the walking figures.** They need the screen to notice what changed since it last drew, which wants a small piece of state I left out. Nothing depends on them.
+- **The long-press menu.** The arrow on raisable buildings and the sheet are one tap away already, and a hidden gesture is poor on a phone.
+- **A pinch-and-pan scene.** The whole map fits the screen width, so nothing needs it.
+- **Distinct drawings for every building.** The 22 types share seven shapes (house, barn, tower, crops, pond, grove, rock), told apart by roof colour and the emblem on the front. Replacing a shape for one type is a change to one function in `mapArt.tsx`.

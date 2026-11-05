@@ -219,15 +219,16 @@ function Stillroom({ g }: { g: Guild }) {
 }
 
 export function NewBuildingSheet() {
-  const { data, setUi, actions } = useStore();
+  const { data, ui, setUi, actions } = useStore();
   const g = data.guild!;
-  const close = () => setUi({ buildSheet: null });
+  const close = () => setUi({ buildSheet: null, buildPlot: null });
+  const plot = ui.buildPlot;
   const list = BUILDING_IDS.filter((t) => !(SINGLE.has(t) && (g.buildings.some((b) => b.type === t) || g.construction.some((c) => c.type === t))))
     .sort((a, b) => BUILDINGS[a].hall - BUILDINGS[b].hall || BUILDINGS[a].name.localeCompare(BUILDINGS[b].name));
   return (
     <Sheet onClose={close} label="Build something">
       <Head title="Build something" onClose={close} />
-      <p className="muted" style={{ margin: '-4px 0 0', fontSize: 13 }}>Guild Hall level {hallLevel(g)}. Costs shown are for this season.</p>
+      <p className="muted" style={{ margin: '-4px 0 0', fontSize: 13 }}>{plot !== null ? 'Building on the plot you chose. ' : 'It goes on the plot it prefers. '}Guild Hall level {hallLevel(g)}. Costs shown are for this season.</p>
       {list.map((t) => {
         const d = BUILDINGS[t], c = costOf(g, t, 1), problem = buildProblem(g, t);
         return (
@@ -239,7 +240,7 @@ export function NewBuildingSheet() {
               <span className="tnum" style={{ display: 'block', fontSize: 12 }}>{costText(c)} · {c.phases} phases{d.workers ? ' · ' + d.workers + ' workers' : ''}</span>
               {problem && <span style={{ fontSize: 12, color: 'var(--q-wax)' }}>{problem}</span>}
             </span>
-            <button className="btn btn-primary inked" disabled={!!problem} onClick={() => actions.build(t)} style={{ minHeight: 40 }}>Build</button>
+            <button className="btn btn-primary inked" disabled={!!problem} onClick={() => actions.build(t, plot ?? undefined)} style={{ minHeight: 40 }}>Build</button>
           </div>
         );
       })}
