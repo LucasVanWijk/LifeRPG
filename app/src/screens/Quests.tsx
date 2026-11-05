@@ -1,8 +1,8 @@
-import { useRef, useState, type CSSProperties, type DragEvent } from 'react';
+import { useState, type CSSProperties, type DragEvent } from 'react';
 import { addDays, shortDate } from '../domain/dates';
 import { bestStreak, checkedInToday, habitDone, habitProgress, habitStreak, habitTarget, periodOf } from '../domain/logic';
-import type { Data, Every, Guild, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
-import { EVERY_NAME, habitReward, isLocal, QUADS, STATUSES, streakText } from '../domain/model';
+import type { Data, Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
+import { EVERY_NAME, habitReward, QUADS, STATUSES, streakText } from '../domain/model';
 import { StepChecklist, stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
 import { Icon } from '../components/Icon';
@@ -20,7 +20,7 @@ export function Quests() {
           optStyle={{ minHeight: 40, padding: isDesk ? '8px 16px' : '8px 12px', fontSize: 14 }}
           options={[{ key: 'board', label: isDesk ? 'Quest Board' : 'Board' }, { key: 'campaign', label: 'Campaigns' }, { key: 'habits', label: 'Habits' }]} />
       </ScreenHead>
-      {ui.questView === 'board' && <GuildSwitch />}
+      {ui.questView === 'board' && <CampaignFilter />}
       {ui.questView === 'board' && <QuickAdd />}
       {ui.questView === 'habits' ? <HabitsView /> : ui.questView === 'campaign' ? <CampaignView /> : isDesk ? <DeskBoard /> : ui.mobileZone ? <MobileZone zone={ui.mobileZone} /> : <MobileGrid />}
     </div>
@@ -44,17 +44,28 @@ const zoneStyle = (light: string) => ({ '--zone-light': light }) as CSSPropertie
 // Busy quests (long title, steps, people, campaign…) get a wide note; simple ones a compact one.
 const isWide = (q: Quest, hasDue: boolean, campaign?: string | null) =>
   !!stepCount(q) || q.title.length + (hasDue ? 12 : 0) + (campaign ? 10 : 0) + (q.companions.length ? 10 : 0) > 50;
-const inGuild = (q: Quest, guild: Guild) => isLocal(q) === (guild === 'local');
-const activeIn = (quests: Quest[], quad: QuadKey, guild: Guild) => quests.filter((q) => q.status !== 'done' && q.quad === quad && inGuild(q, guild)).sort(byDue);
+/** Campaign keys hidden by the filter; '' stands for quests without a campaign. */
+const shown = (q: Quest, hidden: string[]) => !hidden.includes(q.campaign || '');
+const activeIn = (quests: Quest[], quad: QuadKey, hidden: string[]) => quests.filter((q) => q.status !== 'done' && q.quad === quad && shown(q, hidden)).sort(byDue);
 
-/** Local Guild = short term, Global Guild = long term; each quest lives in exactly one. */
-function GuildSwitch() {
+/** Choose which campaigns' quests the board displays. */
+function CampaignFilter() {
   const { data, ui, setUi } = useStore();
-  const count = (g: Guild) => data.quests.filter((q) => q.status !== 'done' && inGuild(q, g)).length;
+  const keys = Object.keys(data.camps);
+  if (!keys.length) return null;
+  const open = data.quests.filter((q) => q.status !== 'done');
+  const toggle = (k: string) => setUi({ hiddenCamps: ui.hiddenCamps.includes(k) ? ui.hiddenCamps.filter((x) => x !== k) : [...ui.hiddenCamps, k], mobileZone: null });
+  const items = [...keys.map((k) => ({ k, name: data.camps[k].name })), { k: '', name: 'No campaign' }];
   return (
-    <Seg name="guild" value={ui.guild} onChange={(v) => setUi({ guild: v, mobileZone: null })} style={{ alignSelf: 'flex-start' }}
-      optStyle={{ minHeight: 40, padding: '8px 16px', fontSize: 14 }}
-      options={[{ key: 'local', label: 'Local Guild · ' + count('local') }, { key: 'global', label: 'Global Guild · ' + count('global') }]} />
+    <div className="hscroll" style={{ gap: 6, alignItems: 'center' }} role="group" aria-label="Filter by campaign">
+      <span className="label" style={{ flex: 'none' }}>Show</span>
+      {items.map(({ k, name }) => (
+        <button key={k || 'none'} className="chip" aria-pressed={!ui.hiddenCamps.includes(k)} onClick={() => toggle(k)} style={{ minHeight: 40, padding: '6px 12px', fontSize: 14 }}>
+          {name}
+          <span className="tnum" style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 12 }}>{open.filter((q) => (q.campaign || '') === k).length}</span>
+        </button>
+      ))}
+    </div>
   );
 }
 
@@ -129,7 +140,7 @@ function DeskBoard() {
         </div>
         <div className="wood" style={{ gridColumn: '2 / 4', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: 14 }}>
           {QUADS.map((z) => {
-            const list = activeIn(data.quests, z.key, ui.guild);
+            const list = activeIn(data.quests, z.key, ui.hiddenCamps);
             return (
               <div key={z.key} className={'zone' + (z.key === 'main' ? ' is-main' : '') + (ui.dragOver === z.key ? ' is-over' : '')} style={{ ...zoneStyle(z.light), minHeight: 250, display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 14px 18px' }}
                 onDragOver={(e) => drag.over(e, z.key)} onDrop={(e) => drop(e, z.key)}>
@@ -168,7 +179,7 @@ function MobileGrid() {
   return (
     <div className="wood" style={{ flex: 1, minHeight: 480, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gridTemplateRows: 'minmax(0,1fr) minmax(0,1fr)', gap: 9, padding: 10 }}>
       {QUADS.map((z) => {
-        const list = activeIn(data.quests, z.key, ui.guild);
+        const list = activeIn(data.quests, z.key, ui.hiddenCamps);
         return (
           <button key={z.key} className={'zone tile' + (z.key === 'main' ? ' is-main' : '')} style={zoneStyle(z.light)} onClick={() => setUi({ mobileZone: z.key })}>
             <span className="zone-head" style={{ gap: 5 }}>
@@ -190,13 +201,8 @@ function MobileGrid() {
 
 function MobileZone({ zone }: { zone: QuadKey }) {
   const { data, ui, setUi, today, actions } = useStore();
-  const touchX = useRef(0);
   const z = QUADS.find((x) => x.key === zone)!;
-  const list = activeIn(data.quests, zone, ui.guild);
-  const step = (dir: number) => {
-    const i = QUADS.findIndex((q) => q.key === zone);
-    setUi({ mobileZone: QUADS[(i + dir + 4) % 4].key });
-  };
+  const list = activeIn(data.quests, zone, ui.hiddenCamps);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="hscroll" style={{ gap: 6, margin: '0 -18px', padding: '0 18px 2px' }}>
@@ -206,21 +212,19 @@ function MobileZone({ zone }: { zone: QuadKey }) {
         {QUADS.map((c) => (
           <button key={c.key} className="chip" aria-pressed={c.key === zone} onClick={() => setUi({ mobileZone: c.key })} style={{ minHeight: 40, padding: '6px 12px', fontSize: 15 }}>
             <span className="dot" style={{ color: c.color }} />{c.name}
-            <span className="tnum" style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 12 }}>{activeIn(data.quests, c.key, ui.guild).length}</span>
+            <span className="tnum" style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 12 }}>{activeIn(data.quests, c.key, ui.hiddenCamps).length}</span>
           </button>
         ))}
       </div>
       <div className={'wood zone' + (zone === 'main' ? ' is-main' : '')}
-        style={{ ...zoneStyle(z.light), flex: 1, display: 'flex', flexDirection: 'column', gap: 11, padding: '12px 12px 18px', minHeight: 480, borderRadius: 6, backgroundColor: 'var(--color-accent-800)', backgroundImage: 'var(--q-wood)' }}
-        onTouchStart={(e) => { touchX.current = e.touches[0].clientX; }}
-        onTouchEnd={(e) => { const dx = e.changedTouches[0].clientX - touchX.current; if (Math.abs(dx) >= 50) step(dx < 0 ? 1 : -1); }}>
+        style={{ ...zoneStyle(z.light), flex: 1, display: 'flex', flexDirection: 'column', gap: 11, padding: '12px 12px 18px', minHeight: 480, borderRadius: 6, backgroundColor: 'var(--color-accent-800)', backgroundImage: 'var(--q-wood)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <div className="zone-head">
             <Icon n={z.icon} size={18} />
             <span className="heading" style={{ fontSize: 23, whiteSpace: 'nowrap' }}>{z.name}</span>
             {zone === 'main' && <span className="xp-mult" style={{ marginLeft: 'auto' }}>×1.5 XP</span>}
           </div>
-          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--color-accent-200)' }}>{z.sub} · swipe to switch zones</span>
+          <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--color-accent-200)' }}>{z.sub}</span>
         </div>
         {list.map((q) => {
           const v = questView(q, today, data.camps);
@@ -228,10 +232,7 @@ function MobileZone({ zone }: { zone: QuadKey }) {
             <div key={q.id} className="note" role="button" tabIndex={0} onClick={() => actions.openQuest(q.id)} onKeyDown={(e) => e.key === 'Enter' && actions.openQuest(q.id)}
               style={{ gap: 4, padding: '12px 12px 8px', border: 0, fontFamily: 'var(--font-body)' }}>
               <span className="pin" />
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, width: '100%' }}>
-                <div className="note-title" style={{ flex: 1 }}><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 17, lineHeight: 1.15 }}>{q.title}</span></div>
-                <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{v.xp} XP · +{v.gold}g</span>
-              </div>
+              <div className="note-title"><span className={'size-dot size-' + q.size} title={'Size ' + q.size}>{q.size}</span><span className="heading" style={{ fontSize: 17, lineHeight: 1.15 }}>{q.title}</span></div>
               <div className="meta" style={{ gap: '6px 10px' }}>
                 {v.hasDue && <span style={{ color: v.dueColor }}><Icon n="calendar" size={12} />{v.dueLabel}</span>}
                 {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
@@ -239,6 +240,10 @@ function MobileZone({ zone }: { zone: QuadKey }) {
                 {v.campaignName && <span className="camp-tag" title={v.campaignName} style={{ gap: 4, padding: '1px 7px', maxWidth: 180 }}><Icon n="flag" size={10} /><span className="ellipsis">{v.campaignName}</span></span>}
               </div>
               <StepChecklist compact quest={q} onToggle={(sid) => actions.toggleStep(q.id, sid)} />
+              <div className="note-foot">
+                <span>+{v.xp} XP</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }} aria-label={v.gold + ' gold'}>+{v.gold}<span style={{ color: 'var(--color-accent-600)' }}><Icon n="coins" size={12} /></span></span>
+              </div>
             </div>
           );
         })}

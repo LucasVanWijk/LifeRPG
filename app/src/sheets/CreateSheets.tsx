@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { Guild, SizeKey } from '../domain/model';
+import type { SizeKey } from '../domain/model';
 import { CAMP_ICONS, campSize, CSIZE } from '../domain/model';
 import { Icon, type IconName } from '../components/Icon';
 import { CloseBtn, Seg, Sheet } from '../components/common';
@@ -16,14 +16,13 @@ export function CampaignSheet({ campKey }: { campKey: string | null }) {
   const [seal, setSeal] = useState(existing?.seal ?? '');
   const [icon, setIcon] = useState<IconName>(existing?.icon ?? 'flag');
   const [size, setSize] = useState<SizeKey>(existing ? campSize(existing) : 'M');
-  const [guild, setGuild] = useState<Guild>(existing?.guild ?? 'local');
   const close = () => setUi({ campSheet: null });
   const title = existing ? 'Edit Campaign' : 'New Campaign';
   const save = () => {
     const n = name.trim();
     if (!n) return;
     const sz = CSIZE[size];
-    const c = { name: n, short: n.split(' ')[0], desc: desc.trim() || 'A new campaign.', xp: sz.xp, gold: sz.gold, seal: seal.trim() || n + ' seal', icon, guild };
+    const c = { name: n, short: n.split(' ')[0], desc: desc.trim() || 'A new campaign.', xp: sz.xp, gold: sz.gold, seal: seal.trim() || n + ' seal', icon };
     if (campKey && existing) {
       // A campaign already won keeps the reward it paid.
       actions.updateCampaign(campKey, existing.completedOn ? { ...c, xp: existing.xp, gold: existing.gold } : c);
@@ -55,11 +54,6 @@ export function CampaignSheet({ campKey }: { campKey: string | null }) {
         </div>
       </div>
       <div className="field"><label htmlFor="nc-seal">Reward title</label><input id="nc-seal" className="input" value={seal} onChange={(e) => setSeal(e.target.value)} placeholder="e.g. Explorer's seal" style={{ minHeight: 44 }} /></div>
-      <div className="field"><label>New quests start in</label>
-        <Seg name="nc-guild" value={guild} onChange={setGuild} style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', width: '100%' }}
-          optStyle={{ justifyContent: 'center', minHeight: 42, padding: '6px 4px' }}
-          options={[{ key: 'local', label: 'Local Guild' }, { key: 'global', label: 'Global Guild' }]} />
-      </div>
       {!existing?.completedOn && (
         <div className="field"><label>Size</label>
           <Seg name="nc-size" value={size} onChange={setSize} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', width: '100%' }}
