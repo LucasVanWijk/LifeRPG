@@ -8,10 +8,17 @@
   --q-wax-hi: oklch(0.6 0.15 30);
   --q-moss: oklch(0.45 0.08 148);
   --q-tint: color-mix(in srgb, var(--color-accent-300) 35%, transparent);
+  /* Board theme tokens (see theme.ts); walnut is the default. */
+  --board-wood: var(--color-accent-800);
+  --board-edge: var(--color-accent-900);
+  --board-zone: rgba(0,0,0,.16);
+  --note-bg: var(--q-parch);
   --q-wood: repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 64px),
     repeating-linear-gradient(88deg, rgba(0,0,0,.07) 0 2px, transparent 2px 11px),
     linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.18));
 }
+[data-board-theme='oak'] { --board-wood: #6b4423; --board-edge: #4a2e16; --board-zone: #553419; --note-bg: #f3dfb8; }
+[data-board-theme='honey'] { --board-wood: #7a5a30; --board-edge: #5a4020; --board-zone: #614522; --note-bg: #f6e6c0; }
 html, body, #root { margin: 0; height: 100%; }
 body { background: var(--q-parch); overscroll-behavior: none; }
 a { color: var(--color-accent-700); }
@@ -170,17 +177,17 @@ button { font: inherit; }
 
 /* Quest board */
 .wood {
-  border-radius: 6px; background-color: var(--color-accent-800); background-image: var(--q-wood);
-  box-shadow: inset 0 0 0 3px var(--color-accent-900), inset 0 2px 14px rgba(0,0,0,.45), var(--shadow-md);
+  border-radius: 6px; background-color: var(--board-wood); background-image: var(--q-wood);
+  box-shadow: inset 0 0 0 3px var(--board-edge), inset 0 2px 14px rgba(0,0,0,.45), var(--shadow-md);
 }
-.zone { border-radius: 4px; border: 1.5px solid color-mix(in srgb, var(--color-accent-200) 20%, transparent); border-top: 3px solid var(--zone-light); background: rgba(0,0,0,.16); transition: background .15s; }
-.zone.is-main { border-color: var(--color-accent-400); border-top-color: var(--zone-light); background: rgba(255,215,150,.09); }
-.zone.is-over { border-color: var(--color-accent-300); border-top-color: var(--zone-light); background: rgba(255,236,205,.16); }
+.zone { border-radius: 4px; border: 1.5px solid color-mix(in srgb, var(--color-accent-200) 20%, transparent); border-top: 3px solid var(--zone-light); background: var(--board-zone); transition: background .15s; }
+.zone.is-main { border-color: var(--color-accent-400); border-top-color: var(--zone-light); background: linear-gradient(rgba(255,215,150,.09), rgba(255,215,150,.09)), var(--board-zone); }
+.zone.is-over { border-color: var(--color-accent-300); border-top-color: var(--zone-light); background: linear-gradient(rgba(255,236,205,.16), rgba(255,236,205,.16)), var(--board-zone); }
 .zone-head { display: flex; align-items: center; gap: 8px; color: var(--zone-light); }
 .axis { text-align: center; font-size: 11px; letter-spacing: .16em; text-transform: uppercase; color: var(--color-accent-700); }
 .axis-v { writing-mode: vertical-rl; transform: rotate(180deg); }
 .note {
-  position: relative; display: flex; flex-direction: column; background-color: var(--q-parch);
+  position: relative; display: flex; flex-direction: column; background-color: var(--note-bg);
   background-image: linear-gradient(170deg, rgba(255,255,255,.5), transparent 40%), radial-gradient(ellipse at 100% 100%, color-mix(in srgb, var(--color-accent-300) 50%, transparent), transparent 70%);
   border-radius: 2px; box-shadow: 0 1px 0 rgba(0,0,0,.08), 0 4px 9px rgba(20,8,0,.4); color: var(--q-ink); cursor: pointer; text-align: left;
 }
@@ -194,7 +201,7 @@ button { font: inherit; }
 .note-foot { display: flex; align-items: center; gap: 6px; border-top: 1px dashed var(--q-rule); padding-top: 6px; font-size: 11px; color: var(--color-accent-700); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .camp-tag { display: inline-flex; align-items: center; gap: 3px; min-width: 0; max-width: 100%; padding: 0 6px; border: 1px solid var(--q-rule); border-radius: 3px; color: var(--color-accent-800); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile { display: flex; flex-direction: column; align-items: stretch; gap: 7px; min-height: 0; overflow: hidden; padding: 10px 9px; text-align: left; cursor: pointer; color: var(--color-accent-100); font-family: var(--font-body); }
-.tile-note { padding: 5px 7px; background: var(--q-parch); color: var(--q-ink); border-radius: 2px; font-size: 12px; line-height: 1.3; box-shadow: 0 2px 4px rgba(0,0,0,.35); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.tile-note { padding: 4px 0; color: var(--color-accent-100); border-bottom: 1px solid rgba(255,235,200,.14); font-size: 14px; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Campaigns */
 .camp-card-note {

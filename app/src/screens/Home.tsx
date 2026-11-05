@@ -1,7 +1,7 @@
 import { addDays, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
 import { checkedInToday, habitDone, habitProgress, habitStreak } from '../domain/logic';
 import type { CalItem } from '../domain/calendar';
-import { calendarItems, KINDS } from '../domain/calendar';
+import { calendarItems, kindText } from '../domain/calendar';
 import { isOverdue, RescheduleButtons } from '../components/Reschedule';
 import { KindMark, Legend } from './Calendar';
 import { reviewDue, reviewWeek } from '../sheets/ReviewSheet';
@@ -264,7 +264,7 @@ export function Home() {
             {agenda.map((it, k) => (
               <button key={k} className="agenda-row" onClick={() => openItem(it)}>
                 <span style={{ width: 26, display: 'grid', placeItems: 'center' }}><KindMark kind={it.kind} size={9} /></span>
-                <AgendaText title={it.title} sub={(it.allDay ? '' : (it.time ?? '') + (it.endTime ? '–' + it.endTime : '') + ' · ') + KINDS[it.kind].name + (it.kind === 'deadline' ? ' · +' + reward(data.quests.find((q) => 'quest:' + q.id === it.target)!).xp + ' XP' : '')} color="var(--color-accent-800)" />
+                <AgendaText title={it.title} sub={(it.allDay ? '' : (it.time ?? '') + (it.endTime ? '–' + it.endTime : '') + ' · ') + kindText(it) + (it.kind === 'deadline' ? ' · +' + reward(data.quests.find((q) => 'quest:' + q.id === it.target)!).xp + ' XP' : '')} color="var(--color-accent-800)" />
                 <Icon n="chevron-right" size={15} />
               </button>
             ))}

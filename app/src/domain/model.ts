@@ -5,7 +5,6 @@ import { newExpedition } from './expedition/engine';
 export type QuadKey = 'crisis' | 'main' | 'errand' | 'side';
 export type SizeKey = 'S' | 'M' | 'L';
 export type Status = 'todo' | 'doing' | 'done';
-export type Guild = 'local' | 'global';
 export type Every = 'daily' | 'weekly';
 
 export interface QuestNote { id: number; t: string }
@@ -25,8 +24,6 @@ export interface Quest {
   steps: QuestStep[];
   /** Ids of the companions this quest involves. */
   companions: string[];
-  /** Local Guild (short term) when true or missing, Global Guild (long term) when false. */
-  local?: boolean;
   /** Day the quest was completed (for Today's Quests + undo). */
   doneOn?: string | null;
   prevStatus?: Status | null;
@@ -42,8 +39,6 @@ export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;
   /** Day every quest was done and the reward was paid. */
   completedOn?: string | null;
-  /** Where quests added to this campaign start: Local (or missing) or Global Guild. */
-  guild?: Guild;
 }
 
 export interface CompanionNote { t: string; date?: string; label?: string }
@@ -132,9 +127,6 @@ export const STATUS_NAME: Record<Status, string> = { todo: 'To Do', doing: 'Doin
 export const CAMP_ICONS: IconName[] = ['flag', 'compass', 'home', 'mountain', 'crown', 'star', 'trophy', 'sword', 'shield', 'flame', 'sparkles', 'heart', 'tree', 'plane', 'briefcase', 'graduation-cap', 'wrench', 'palette', 'music', 'gamepad', 'sun', 'moon', 'gift', 'feather'];
 export const CODEX_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map', 'gift', 'briefcase', 'music', 'coffee', 'plane', 'camera', 'gamepad', 'tree', 'graduation-cap', 'cart', 'palette', 'wrench', 'heart', 'star', 'cake', 'beer', 'calendar', 'clock', 'book-open', 'backpack', 'store', 'fish']
 
-export const isLocal = (q: Pick<Quest, 'local'>) => q.local !== false;
-/** Whether new quests in this campaign start in the Local Guild. */
-export const campaignLocal = (c?: Pick<Campaign, 'guild'> | null) => c?.guild !== 'global';
 
 /** XP scales with size and the quadrant multiplier (Main Quests ×1.5), rounded to 5; gold is a third of XP. */
 export const reward = (q: Pick<Quest, 'size' | 'quad'>) => {

@@ -1,5 +1,5 @@
 import { addDays, parseDay, shortDate } from '../domain/dates';
-import { calendarItems, KINDS } from '../domain/calendar';
+import { calendarItems, kindText } from '../domain/calendar';
 import { chronicle, habitStreak, habitTarget, periodOf } from '../domain/logic';
 import { EVERY_NAME, streakText } from '../domain/model';
 import type { Data } from '../domain/model';
@@ -91,7 +91,7 @@ export function ReviewSheet() {
             <span className="muted tnum" style={{ width: 54, flex: 'none', fontSize: 12 }}>{shortDate(it.date)}</span>
             <KindMark kind={it.kind} />
             <span style={{ flex: 1, minWidth: 0 }} className="ellipsis">{it.title}</span>
-            <span className="muted" style={{ fontSize: 11 }}>{it.time ?? KINDS[it.kind].name}</span>
+            <span className="muted" style={{ fontSize: 11 }}>{it.time ?? kindText(it)}</span>
           </div>
         ))}
         {!coming.length && <p className="muted" style={{ margin: 0, padding: '8px 0', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>A quiet week ahead.</p>}
