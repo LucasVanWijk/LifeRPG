@@ -64,6 +64,14 @@ function loadData(): Data {
   return emptyData();
 }
 
+const HIDDEN_CAMPS_KEY = 'liferpg-hidden-campaigns';
+function loadHiddenCamps(): string[] {
+  try {
+    const v = JSON.parse(localStorage.getItem(HIDDEN_CAMPS_KEY) ?? '[]');
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch { return []; }
+}
+
 /** Initial screen can be deep-linked, e.g. ?screen=quests&zone=main or ?quest=4&mode=edit. */
 function initialUi(today: string): Ui {
   const p = new URLSearchParams(window.location.search);
@@ -72,7 +80,7 @@ function initialUi(today: string): Ui {
   return {
     tab: pick('screen', ['home', 'quests', 'calendar', 'glossary', 'adventure'] as const, 'home'),
     questView: pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
-    hiddenCamps: [],
+    hiddenCamps: loadHiddenCamps(),
     campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
     openId: quest > 0 ? quest : null,
@@ -162,6 +170,9 @@ function useStoreValue() {
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
 
+  useEffect(() => {
+    try { localStorage.setItem(HIDDEN_CAMPS_KEY, JSON.stringify(ui.hiddenCamps)); } catch { /* private mode */ }
+  }, [ui.hiddenCamps]);
   const setUi = useCallback((patch: Partial<Ui> | ((u: Ui) => Partial<Ui>)) =>
     setUiState((u) => ({ ...u, ...(typeof patch === 'function' ? patch(u) : patch) })), []);
 

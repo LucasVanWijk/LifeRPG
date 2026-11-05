@@ -17,6 +17,8 @@ export const KINDS: Record<CalKind, { name: string; color: string; shape: 'circl
   birthday: { name: 'Birthday', color: '#c94f9c', shape: 'triangle' },
   glossary: { name: 'Glossary date', color: '#1a8a55', shape: 'diamond' },
 };
+/** "Glossary date [Sophie]": the kind's name, plus where a Glossary date comes from. */
+export const kindText = (it: Pick<CalItem, 'kind' | 'source'>) => KINDS[it.kind].name + (it.kind === 'glossary' && it.source ? ' [' + it.source + ']' : '');
 const KIND_ORDER: CalKind[] = ['deadline', 'event', 'birthday', 'glossary'];
 
 export interface CalItem {
@@ -30,6 +32,8 @@ export interface CalItem {
   companions?: string[];
   /** 'event:3', 'quest:12', or a Glossary target like 'companion:sophie'. */
   target: string;
+  /** For Glossary dates: the companion or codex entry they come from. */
+  source?: string;
   /** For multi-day events: which day of how many. */
   span?: { day: number; of: number };
 }
@@ -91,7 +95,7 @@ export function calendarItems(data: Pick<Data, 'events' | 'quests' | 'companions
   for (const g of glossaryEvents(data as Data, from)) {
     if (g.date < from || g.date > to) continue;
     const birthday = g.label.endsWith("'s birthday");
-    items.push({ date: g.date, kind: birthday ? 'birthday' : 'glossary', title: g.label, allDay: true, target: g.target });
+    items.push({ date: g.date, kind: birthday ? 'birthday' : 'glossary', title: g.label, allDay: true, target: g.target, source: birthday ? undefined : g.source });
   }
   return items.sort((a, b) =>
     a.date.localeCompare(b.date) ||

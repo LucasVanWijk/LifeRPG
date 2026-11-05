@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import { addDays, addMonths, MONL, parseDay, weekdayDate, WDL } from '../domain/dates';
 import type { CalItem, CalKind } from '../domain/calendar';
-import { calendarItems, KINDS } from '../domain/calendar';
+import { calendarItems, KINDS, kindText } from '../domain/calendar';
 import { parseIcs } from '../domain/ics';
 import { Icon } from '../components/Icon';
 import { ScreenHead } from '../components/common';
@@ -141,7 +141,7 @@ export function DayAgenda({ day, items }: { day: string; items: CalItem[] }) {
           <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
             <span className="heading" style={{ fontSize: 17, lineHeight: 1.2 }}>{it.title}</span>
             <span className="meta">
-              <span style={{ gap: 5 }}><KindMark kind={it.kind} size={7} />{KINDS[it.kind].name}{it.span ? ' · day ' + it.span.day + ' of ' + it.span.of : ''}</span>
+              <span style={{ gap: 5 }}><KindMark kind={it.kind} size={7} />{kindText(it)}{it.span ? ' · day ' + it.span.day + ' of ' + it.span.of : ''}</span>
               {it.location && <span style={{ gap: 4 }}><Icon n="pin" size={11} />{it.location}</span>}
               {names(it.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />with {names(it.companions)}</span>}
             </span>
