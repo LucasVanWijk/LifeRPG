@@ -9,7 +9,9 @@ import {
   WORK_CREW_BONUS, WORK_CREW_MAX, realGoldMult, STONE_LEVEL, GRADE_DURABILITY,
 } from './content';
 import { addXp, canGoOut, dayOfPhase, hasRole, injured, isActive, makeAdventurer, phaseAt } from './adventurer';
-import { backstory, pickTraits, traitFx } from './traits';
+import { backstory, pickTraits } from './traits';
+import type { VowKind } from './vows';
+import { fxFor, makeVow, pickConviction } from './vows';
 import { makeExpedition, makeOddJob, makeOdyssey, makeRecovery, tutorialJob } from './board';
 import { better, itemIron, itemValue, makeDraft } from './gear';
 import { births, closeEra, comeOfAge, kin, pairUp } from './legacy';
@@ -77,11 +79,14 @@ export function upgradeGuild(raw: Guild): Guild {
   for (const a of g.adventurers) {
     a.gear ??= {}; a.autoBuy ??= true; a.staffAt ??= null; a.shared ??= {}; a.clears5 ??= 0; a.liberated ??= 0;
     if (!a.traitIds?.length) { const r = rngFor(g.seed, 'traits', a.id); a.traitIds = pickTraits(r); a.backstory = backstory(r, a.race, a.traitIds); }
+    if (!a.conviction && a.state === 'active') { const r = rngFor(g.seed, 'vow', a.id); a.conviction = pickConviction(r); a.vow = makeVow(r, a.level); }
   }
   for (const o of [...g.board, ...g.outings.map((x) => x.offer)]) { o.region ??= 'hearth'; o.conditions ??= []; }
   for (const o of g.outings) { if (Array.isArray(o.potions)) o.potions = {}; o.potions ??= {}; o.phase ??= 0; }
   for (const e of g.ledger) { e.at ??= 0; e.renown ??= 0; }
-  for (const r of g.recruits) { if (!r.adv.traitIds?.length) { const rr = rngFor(g.seed, 'traits', r.adv.id); r.adv.traitIds = pickTraits(rr); r.adv.backstory = backstory(rr, r.adv.race, r.adv.traitIds); } r.adv.gear ??= {}; r.adv.autoBuy ??= true; r.adv.staffAt ??= null; r.adv.shared ??= {}; r.adv.clears5 ??= 0; r.adv.liberated ??= 0; }
+  for (const r of g.recruits) { if (!r.adv.traitIds?.length) { const rr = rngFor(g.seed, 'traits', r.adv.id); r.adv.traitIds = pickTraits(rr); r.adv.backstory = backstory(rr, r.adv.race, r.adv.traitIds); }
+    if (!r.adv.conviction) { const rr = rngFor(g.seed, 'vow', r.adv.id); r.adv.conviction = pickConviction(rr); r.adv.vow = makeVow(rr, r.adv.level); }
+    r.adv.gear ??= {}; r.adv.autoBuy ??= true; r.adv.staffAt ??= null; r.adv.shared ??= {}; r.adv.clears5 ??= 0; r.adv.liberated ??= 0; }
   return g;
 }
 
@@ -145,7 +150,7 @@ function phaseTick(g: Guild, p: number) {
     if (a.injury && a.injury.until <= p) a.injury = null;
     const duty = duties.get(a.id) ?? 'rest';
     const k = duty === 'rest' ? REST_MULT : 1;
-    const tf = traitFx(a.traitIds ?? []);
+    const tf = fxFor(a);
     a.health = Math.min(100, a.health + HEALTH_REGEN * k * infirm * Math.max(0.2, 1 + tf.rec));
     a.fatigue = Math.max(0, a.fatigue - FATIGUE_REGEN * k * (1 + (infirm - 1) / 3));
     if (duty === 'train') {
@@ -247,9 +252,20 @@ function refreshMarket(g: Guild) {
   };
 }
 
+/** Counts progress towards an adventurer's vow, and keeps it when the target is reached. */
+export function vowStep(g: Guild, a: Adventurer, kind: VowKind, n = 1, region?: string) {
+  const v = a.vow;
+  if (!v || v.done || v.kind !== kind || (kind === 'region' && v.region !== region)) return;
+  v.progress = kind === 'level' ? n : v.progress + n;
+  if (v.progress >= v.target) { v.done = true; log(g, { k: 'vowkept', a: a.id, t: v.kind, v: v.target, b: v.region }); }
+}
+const breakVow = (g: Guild, a: Adventurer) => {
+  if (a.vow && !a.vow.done) log(g, { k: 'vowbroken', a: a.id, t: a.vow.kind, v: a.vow.target, b: a.vow.region });
+};
+
 function gainXp(g: Guild, a: Adventurer, xp: number) {
   const up = addXp(a, xp);
-  if (up) log(g, { k: 'level', a: a.id, v: a.level });
+  if (up) { log(g, { k: 'level', a: a.id, v: a.level }); vowStep(g, a, 'level', a.level); }
   return up;
 }
 
@@ -349,6 +365,7 @@ function gearHome(g: Guild, a: Adventurer, heirloom: boolean) {
 }
 
 function retire(g: Guild, a: Adventurer, p: number) {
+  breakVow(g, a);
   a.state = 'retired';
   a.endedPhase = p;
   const pension = a.purse;
@@ -376,6 +393,7 @@ function fall(g: Guild, o: Outing, stage: number) {
   const a = byId(g, id);
   if (!a || (a.state !== 'active' && !a.lastJob)) return;
   const wasLast = !!a.lastJob;
+  if (a.state === 'active') breakVow(g, a);
   const paid = wasLast ? 0 : insurance(a.level, a.talent);
   const lost = Object.values(a.gear).filter((x): x is Item => !!x);
   for (const i of lost) if (i.heirloom) g.heirlooms.push(i);
@@ -464,6 +482,21 @@ function returnHome(g: Guild, o: Outing) {
       lost.lostGear = [];
       log(g, { k: 'tomb', a: lost.id });
     }
+  }
+  // Vows.
+  const bossDown = o.result.stages.some((st, i) => o.offer.stages[i].kind === 'boss' && st.outcome !== 'fail');
+  const noDeaths = o.party.every((id) => !o.result.members[id]?.died);
+  const freed = o.offer.scale === 'odyssey' && g.regions[o.offer.region].liberated && survivors.some((a) => a.liberated > 0);
+  if (real) for (const a of survivors) {
+    if (a.state !== 'active') continue;
+    if (full && o.offer.scale === 'expedition' && !o.offer.recover) { vowStep(g, a, 'clears'); if (o.offer.tier >= 3) vowStep(g, a, 'high'); }
+    if (noDeaths && o.offer.tier >= 2) vowStep(g, a, 'home');
+    if (bossDown) vowStep(g, a, 'bosses');
+    vowStep(g, a, 'region', 1, o.offer.region);
+    vowStep(g, a, 'gold', gold);
+    if (o.offer.scale === 'odyssey' && finished) vowStep(g, a, 'odyssey');
+    if (freed) vowStep(g, a, 'free');
+    if (o.offer.recover && finished) vowStep(g, a, 'rescue');
   }
   if (o.offer.tutorial) g.tutorialDone = true;
   log(g, { k: 'back', o: o.id, v: gold });
@@ -610,7 +643,7 @@ function buildCtx(g: Guild, offer: Offer, party: string[], stance: Stance, plan:
     }),
     conditions: conds,
     lootMult: fx.loot * (g.regions[offer.region].liberated ? LIBERATED.loot : 1),
-    goldMult: (g.charter === 'mercantile' ? 1.15 : 1) * (1 + legendBonus(g, 'rogue')) * (1 + party.reduce((n, id) => n + traitFx(byId(g, id)?.traitIds ?? []).g, 0) / Math.max(1, party.length)),
+    goldMult: (g.charter === 'mercantile' ? 1.15 : 1) * (1 + legendBonus(g, 'rogue')) * (1 + party.reduce((n, id) => n + (byId(g, id) ? fxFor(byId(g, id)!).g : 0), 0) / Math.max(1, party.length)),
     phase: departure(g, offer).phase,
     matMult: 1 + legendBonus(g, 'ranger'),
     xpMult: (g.charter === 'martial' ? 1.15 : 1) * library * (1 + legendBonus(g, 'arcanist')),

@@ -8,6 +8,7 @@ import { offerMinutes } from '../domain/guild/board';
 import { active, champion, condView, expeditionsOut } from '../domain/guild/engine';
 import { partyNames } from '../domain/guild/text';
 import { TRAIT } from '../domain/guild/traits';
+import { CONVICTION, vowText } from '../domain/guild/vows';
 import { hallLevel, outLimit, rosterLimit, tierLimit } from '../domain/guild/town';
 import type { Guild as GuildT, Offer, Outing } from '../domain/guild/types';
 import { Crest } from '../components/Crest';
@@ -259,6 +260,7 @@ function Tavern({ g }: { g: GuildT }) {
                   <span>{advSub(a)}</span><Stars n={a.talent} /><span>Rating {ratingShown(a)}</span>
                 </div>
                 <div style={{ fontSize: 13 }}>{a.traitIds.map((id) => TRAIT[id]?.name).filter(Boolean).join(' · ')}</div>
+                {a.vow && <div className="muted" style={{ fontSize: 13 }}>{CONVICTION[a.conviction ?? '']?.name ? CONVICTION[a.conviction!].name + ' · ' : ''}Vow: {vowText(a.vow).toLowerCase()}.</div>}
                 <div className="muted" style={{ fontSize: 13 }}>
                   Age {ageYears(a, phase)} · would serve {a.career} years · {RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}. {CLASSES[a.cls].blurb}
                 </div>

@@ -10,7 +10,8 @@ import {
 import type { Stance } from './content';
 import { rating, role, rolesOf } from './adventurer';
 import type { TraitFx } from './traits';
-import { KIND_KEY, traitFx } from './traits';
+import { KIND_KEY } from './traits';
+import { fxFor } from './vows';
 import { dropGrade, itemInjuryCut, makeDraft } from './gear';
 import type { Rng } from './rng';
 import { rng } from './rng';
@@ -39,7 +40,7 @@ export interface SnapshotOpts { ward?: boolean; heal?: boolean; penalty?: number
 export const snapshot = (a: Adventurer, o: SnapshotOpts = {}): Member => {
   const trinket = a.gear.trinket?.counters;
   const cut = a.gear.armour ? itemInjuryCut(a.gear.armour) : 0;
-  const fx = traitFx(a.traitIds ?? []);
+  const fx = fxFor(a);
   return {
     id: a.id, role: role(a), roles: rolesOf(a), fx, rating: rating(a) - (o.penalty ?? 0), health: o.heal ? Math.min(100, a.health + 40) : a.health, fatigue: a.fatigue,
     injuryMult: RACES[a.race].injuryMult * (1 - cut), xpMult: RACES[a.race].xpMult * (1 + fx.x), lucky: a.race === 'halfling' && !a.luckUsed, elf: a.race === 'elf',

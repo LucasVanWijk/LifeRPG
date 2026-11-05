@@ -106,11 +106,10 @@ export const TRAITS: Trait[] = [
 ];
 export const TRAIT = Object.fromEntries(TRAITS.map((x) => [x.id, x])) as Record<string, Trait>;
 
-/** The sum of what a set of traits does. */
-export function traitFx(ids: string[]): Required<Omit<Fx, 'cnt'>> & { cnt: ConditionId[] } {
+/** The sum of what a set of traits (and any extra effects) does. */
+export function traitFx(ids: string[], extra: Fx[] = []) {
   const out = { r: 0, c: 0, h: 0, t: 0, e: 0, b: 0, d: 0, i: 0, f: 0, rec: 0, x: 0, g: 0, tr: 0, bold: 0, caut: 0, solo: 0, team: 0, eve: 0, morn: 0, cnt: [] as ConditionId[] };
-  for (const id of ids) {
-    const fx = TRAIT[id]?.fx;
+  for (const fx of [...ids.map((id) => TRAIT[id]?.fx), ...extra]) {
     if (!fx) continue;
     for (const k of Object.keys(out) as (keyof typeof out)[]) {
       if (k === 'cnt') out.cnt.push(...(fx.cnt ?? []));

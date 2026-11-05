@@ -17,6 +17,7 @@ export function pairUp(g: Guild, season: number) {
     if (!rngFor(g.seed, 'pair', season, a.id, b.id).chance(COUPLE_CHANCE)) continue;
     a.partnerId = b.id; b.partnerId = a.id;
     log(g, { k: 'pair', a: a.id, b: b.id });
+    for (const x of [a, b]) if (x.vow?.kind === 'love' && !x.vow.done) { x.vow.done = true; x.vow.progress = 1; log(g, { k: 'vowkept', a: x.id, t: 'love', v: 1 }); }
   }
 }
 

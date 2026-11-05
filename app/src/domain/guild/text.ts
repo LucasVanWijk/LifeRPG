@@ -6,6 +6,8 @@ import { BUILDINGS, CLASSES, hallRank, PHASES_PER_YEAR, REGIONS } from './conten
 import { fullName } from './adventurer';
 import { byId } from './engine';
 import { hash } from './rng';
+import type { VowKind } from './vows';
+import { vowText } from './vows';
 import type { Entry, Guild, Outing } from './types';
 
 const nameOf = (g: Guild, id: string | undefined) => { const a = byId(g, id); return a ? fullName(a) : 'Someone'; };
@@ -59,6 +61,8 @@ export function entryText(g: Guild, e: Entry): EntryView {
     case 'heirloom': return { text: e.a ? who + '’s ' + e.t + ' was kept as an heirloom.' : 'A new heirloom was forged: ' + e.t + '.', icon: 'star', tone: 'good' };
     case 'tomb': return { text: who + ' was brought home and laid to rest.', icon: 'skull', tone: 'good' };
     case 'legend': return { text: who + ' is remembered as a legend.', icon: 'trophy', tone: 'good' };
+    case 'vowkept': return { text: who + ' kept their vow: ' + vowText({ kind: e.t as VowKind, target: e.v ?? 1, region: e.b as RegionId }).toLowerCase() + '.', icon: 'check', tone: 'good' };
+    case 'vowbroken': return { text: who + '’s vow was never kept: ' + vowText({ kind: e.t as VowKind, target: e.v ?? 1, region: e.b as RegionId }).toLowerCase() + '.', icon: 'feather', tone: 'plain' };
     case 'region': return { text: (REGIONS[e.t as RegionId]?.name ?? 'A region') + ' was charted.', icon: 'map', tone: 'good' };
   }
 }

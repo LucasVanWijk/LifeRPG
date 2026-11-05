@@ -1,3 +1,4 @@
+import type { Vow } from './vows';
 import type { Attr, BuildingId, CharterId, ClassId, ConditionId, LootKind, PotionKind, RaceId, RegionId, Role, Slot, StageKind, Stance, StockKey } from './content';
 
 /** Times are game time: milliseconds since the guild was founded (holiday mode takes its time off the clock). */
@@ -74,6 +75,9 @@ export interface Adventurer {
   traitIds: string[];
   /** A few sentences of where they came from. */
   backstory?: string;
+  /** What they believe, and the one thing they mean to do. */
+  conviction?: string;
+  vow?: Vow;
   gear: Partial<Record<Slot, Item>>;
   autoBuy: boolean;
   /** Retirees: the building they work in. */
@@ -174,7 +178,7 @@ export interface Outing {
 export type EntryKind =
   | 'found' | 'hire' | 'leave' | 'back' | 'fell' | 'hurt' | 'scar' | 'retire' | 'level' | 'champion' | 'notice' | 'year'
   | 'built' | 'upgraded' | 'hall' | 'demolish' | 'broke' | 'forged' | 'pair' | 'birth' | 'adult' | 'pass' | 'kin' | 'era' | 'liberated'
-  | 'monument' | 'heirloom' | 'tomb' | 'legend' | 'region' | 'season';
+  | 'monument' | 'heirloom' | 'tomb' | 'legend' | 'region' | 'season' | 'vowkept' | 'vowbroken';
 /** A structured chronicle line, rendered as text when shown. */
 export interface Entry { at: GameMs; k: EntryKind; a?: string; o?: string; t?: string; v?: number; b?: string }
 

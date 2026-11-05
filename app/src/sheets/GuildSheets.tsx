@@ -6,6 +6,7 @@ import {
 } from '../domain/guild/content';
 import { ageYears, canGoOut, fullName, injured, phaseAt, rating, ratingShown, realDuration, rolesOf, shortClock, yearsLeft } from '../domain/guild/adventurer';
 import { TRAIT } from '../domain/guild/traits';
+import { CONVICTION, VOW_REWARD_TEXT, vowText } from '../domain/guild/vows';
 import { byId, ctxFor, departure, found, sendProblem } from '../domain/guild/engine';
 import { oddsRange } from '../domain/guild/resolve';
 import { hash } from '../domain/guild/rng';
@@ -113,6 +114,27 @@ export function AdventurerSheet({ id }: { id: string }) {
             </div>
           ))}
           {a.backstory && <p style={{ margin: '2px 0 0', fontSize: 14, fontStyle: 'italic' }}>{a.backstory}</p>}
+        </div>
+      )}
+      {a.conviction && CONVICTION[a.conviction] && (
+        <div className="panel" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <div>
+            <span className="label">Conviction</span>
+            <div style={{ fontSize: 15 }}><strong>{CONVICTION[a.conviction].name}.</strong> <span className="muted">{CONVICTION[a.conviction].text}</span></div>
+          </div>
+          {a.vow && (
+            <div>
+              <span className="label">Vow{a.vow.done ? ' · kept' : a.state === 'active' ? '' : ' · unfulfilled'}</span>
+              <div style={{ fontSize: 15 }}>{vowText(a.vow)}.</div>
+              {a.vow.kind !== 'love' && a.vow.kind !== 'rescue' && a.vow.kind !== 'odyssey' && a.vow.kind !== 'free' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <div style={{ flex: 1 }}><Bar value={Math.min(a.vow.progress, a.vow.target)} max={a.vow.target} color={a.vow.done ? 'var(--q-moss)' : 'var(--color-accent-500)'} label="Vow progress" height={6} /></div>
+                  <span className="muted tnum" style={{ fontSize: 12 }}>{Math.min(a.vow.progress, a.vow.target)} / {a.vow.target}</span>
+                </div>
+              )}
+              <div className="muted" style={{ fontSize: 12 }}>{a.vow.done ? 'Kept for good: ' : 'Keeping it earns ' }{VOW_REWARD_TEXT[a.vow.kind]}{a.vow.done ? '.' : ', for good. They have until their service ends.'}</div>
+            </div>
+          )}
         </div>
       )}
       {!live && a.state !== 'child' && (
@@ -485,7 +507,8 @@ export function Founding() {
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
                   <span className="heading" style={{ fontSize: 18 }}>{fullName(a)}</span>
                   <span className="meta" style={{ marginTop: 0 }}><span>{advSub(a)}</span><Stars n={a.talent} /></span>
-                  <span style={{ fontSize: 12 }}>{a.traitIds.map((id) => TRAIT[id]?.name).filter(Boolean).join(' · ')}</span>
+                  <span style={{ fontSize: 12 }}>{a.traitIds.map((id) => TRAIT[id]?.name).filter(Boolean).join(' · ')}{a.conviction ? ' · ' + CONVICTION[a.conviction]?.name : ''}</span>
+                  {a.vow && <span className="muted" style={{ fontSize: 12 }}>Vow: {vowText(a.vow).toLowerCase()}.</span>}
                   <span className="muted" style={{ fontSize: 12 }}>{CLASSES[a.cls].blurb} Age {ageYears(a, 0)}, sworn {a.career} years. {RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}.</span>
                 </span>
               </button>

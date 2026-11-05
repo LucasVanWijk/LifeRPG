@@ -6,6 +6,7 @@ import {
 } from './content';
 import { itemRating } from './gear';
 import { backstory, pickTraits } from './traits';
+import { makeVow, pickConviction } from './vows';
 import type { Rng } from './rng';
 import { hash, rng } from './rng';
 import type { Adventurer, GameMs } from './types';
@@ -120,5 +121,6 @@ export function makeAdventurer(r: Rng, id: string, phase: number, opts: RecruitO
     gear: {}, autoBuy: true, staffAt: null, shared: {}, clears5: 0, liberated: 0,
   };
   const traitIds = pickTraits(r);
-  return { ...base, traitIds, backstory: backstory(r, race, traitIds) };
+  const story = backstory(r, race, traitIds);
+  return { ...base, traitIds, backstory: story, conviction: pickConviction(r), vow: makeVow(r, level) };
 }
