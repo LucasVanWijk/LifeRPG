@@ -1,6 +1,5 @@
 import { addDays, dayDiff, MONL, parseDay, shortDate } from './dates';
 import type { Data, Quest } from './model';
-import { newExpedition } from './expedition/engine';
 
 /** The day the sample data was written against; every sample date is shifted so it stays relative to today. */
 const BASE = '2026-09-25';
@@ -22,8 +21,9 @@ export function sampleData(today: string): Data {
     ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes), steps: [], companions: [] });
 
   return {
-    version: 2,
-    hero: { name: 'Rowan', xp: 340, level: 7, next: 500, gold: 425, points: 340 },
+    version: 3,
+    profile: {},
+    guild: null,
     quests: [
       q(1, 'Renew passport', 'crisis', '2026-09-25', 'M', 'ireland', 'doing', 'Current one expires in November. Bring two photos and the old passport to the town hall.'),
       q(2, 'Book dentist appointment', 'errand', '2026-09-23', 'S', null, 'todo', 'Six-month check-up. Number is in the Codex.'),
@@ -83,6 +83,5 @@ export function sampleData(today: string): Data {
         { k: 'Locker code', v: '4471' }, { k: 'Membership', v: 'Renews ' + longDay('2027-01-01') }] },
     ],
     events: [],
-    expedition: newExpedition(0),
   };
 }

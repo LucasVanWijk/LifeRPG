@@ -8,7 +8,7 @@ React + Vite + TypeScript, installable as a PWA that works offline. Data lives i
 ```sh
 npm install
 npm run dev        # http://localhost:5173
-npm test           # domain logic (rewards, calendar, .ics import, Expeditions); runs in UTC
+npm test           # domain logic (rewards, calendar, .ics import, the guild); runs in UTC
 npm run build      # typecheck + production build into dist/
 ```
 
@@ -32,7 +32,7 @@ The app switches between the mobile layout (bottom tab bar, bottom sheets) and t
 | `src/domain/migrate.ts` | Upgrades saved data and imported backups to the current format |
 | `src/domain/quickadd.ts` | The quick-add shorthand parser |
 | `src/domain/calendar.ts`, `src/domain/ics.ts` | Calendar items (repeats, deadlines, Glossary dates) and the .ics importer |
-| `src/domain/expedition/` | Expeditions content tables and the idle/combat engine |
+| `src/domain/guild/` | The guild: content tables, the engine (time, outings, real-life payments), the resolver and exact odds |
 | `src/state/store.tsx` | Persisted data + UI state and all actions, shared through a React context |
 | `src/screens/` | Home, Quests (desktop board, mobile 2×2 grid, opened zone, campaigns), Glossary, Adventure |
 | `src/sheets/` | Quest detail, and one form for New Quest / Edit quest (with steps), New/Edit Campaign, Profile (name, portrait, backup, install), Welcome |
@@ -53,7 +53,7 @@ The first screen can be picked with query parameters, matching the frames in the
 | 1e Quest detail / 1o Edit quest | `?screen=quests&quest=<id>` / `&mode=edit` |
 | 1g Tomes · 1h Codex | `?screen=glossary&cat=tomes` · `&cat=codex` |
 | 1i / 1j Glossary detail | `?screen=glossary&detail=companion:<id>` · `detail=codex:<id>` |
-| 1k Tavern | `?screen=adventure` |
+| Guild | `?screen=guild` · `&gtab=board` / `tavern` / `chronicle` |
 
 `?layout=mobile` or `?layout=desktop` forces a layout regardless of width.
 
@@ -61,14 +61,14 @@ The first screen can be picked with query parameters, matching the frames in the
 
 - To start over, clear the site's `localStorage`.
 - **Quests and habits are separate.** Quests are one-off tasks on the board, optionally with a checklist of steps; ticking the last step offers to complete the quest. Habits repeat daily, or weekly with a target of 1–7 days a week; they are checked in on Home and pay half a quest of the same size. A streak counts periods in a row that met the target.
-- **Home** shows Today's Quests, Up next (open Main Quests that aren't due today), habits, the week, and a reminder when the last backup is more than 14 days old. History (from the character card) lists everything completed by week.
+- **Home** shows Today's Quests, Up next (open Main Quests that aren't due today), habits, the week, and a reminder when the last backup is more than 14 days old. History (from the Champion card) lists everything completed by week. The wrench in the corner opens Settings and backup.
 - **Quick add:** the bar on Home and the Quest Board pins a quest from one line, e.g. `Paint walls !main @study fri ~L #Sophie`. `!c/!m/!e/!s` (or `!crisis`…) sets the zone, `@word` a campaign (any word of its name), `~S/~M/~L` the size, `#name` a companion (repeat for more), and `today`, `tomorrow`, `mon`–`sun`, `3 oct`, `+3d`, `+2w` or `2026-10-03` the due date. Everything else is the title.
 - **Companions on quests:** a quest can involve several companions; they show on its card, and each companion's page lists their quests.
-- **Expeditions** (Adventure tab) is a small idle game in the spirit of Melvor Idle, and replaces the Tavern. Quest gold buys supplies and starter gear in the shop, and gold only flows one way: nothing in Expeditions earns gold. Every XP point from quests and habits also adds a skill point, which trains Attack, Strength, Defence, Hitpoints, Fishing, Cooking, Mining and Smithing (going from level L to L+1 costs 50 × L); doing an activity adds a little practice XP too. Fishing, mining, cooking and smithing use a supply per action and run until it runs out. Dungeons use a torch per run and fight D&D-style: a d20 plus bonuses against armour class, then damage dice, eating food automatically. Activities keep running while the app is closed, for up to 8 hours. All numbers live in `src/domain/expedition/content.ts`.
+- **The guild** (Guild tab) replaces the old Hero and Expeditions; the full design is in [`docs/guild-redesign.md`](../docs/guild-redesign.md). You found a guild, pick a Champion, and real-life quests, habits and campaigns pay the Champion (or a campaign's Standard-bearer) XP and attribute practice and 25% of the gold, and the guild 75%. Adventurers are hired at the Tavern, go on odd jobs and expeditions you send them on, and get injured, scarred, die or retire after a 3–15 year career. One phase (Morning, Noon, Evening) is one real hour, so a game year is 8 real days. Every outing is decided when the party leaves and revealed stage by stage; the odds shown before sending are exact. The clock keeps running while the app is closed, and a summary shows what happened. Add `?dev` to the address for a time-skip in Settings. All numbers live in `src/domain/guild/content.ts`. The Town tab draws the town as a paper map (with a List view) where you tap a building or an empty plot, and builds and raises 22 buildings (food, housing, happiness and order must keep up), the Legacy tab holds the Hall of Heroes, Garden of Valor, records and eras, and Settings has holiday mode. Adventurers have two traits each (75 exist, all in `src/domain/guild/traits.ts`) a generated backstory, a conviction and a vow (all in `src/domain/guild/vows.ts`); Paladins, Druids and Bards fill two roles.
 - **Calendar** (its own tab): the whole month, with your events plus quest deadlines, birthdays and dated Glossary notes filled in automatically. Each kind has a fixed colour and marker shape (event ● blue, quest deadline ■ red, birthday ▲ pink, Glossary date ◆ green). Events can be all-day, timed or span several days, repeat daily/weekly/monthly/yearly (every N, optional end date), and have a location, notes and companions. Changes to a repeating event apply to the whole series. There are no reminders. **Import** reads an `.ics` file once (e.g. Google Calendar → Settings → Import & export → Export); re-importing the same file skips events already imported. Repeat rules Questlog can't express (e.g. several weekdays) are imported as simpler repeats and counted.
 - **Weekly review:** from Sunday, Home offers a review of the week (done quests, habit results, overdue quests to reschedule, the next 7 days); it is also in History.
-- **Overdue quests** can be moved to tomorrow, next week or no date from Home or the quest sheet. **Duplicate** in Edit quest copies a quest with its steps unticked. **Titles** rise with your level (Wanderer, Squire, Adventurer, Ranger, Knight, Champion, Hero, Legend).
-- **Keeping data:** the app asks the browser to keep its storage permanently and shows the result in Profile. On iPhone, Safari clears data from sites you haven't opened in 7 days unless Questlog is added to the Home Screen; the app warns about this.
+- **Overdue quests** can be moved to tomorrow, next week or no date from Home or the quest sheet. **Duplicate** in Edit quest copies a quest with its steps unticked.
+- **Keeping data:** the app asks the browser to keep its storage permanently and shows the result in Settings. On iPhone, Safari clears data from sites you haven't opened in 7 days unless Questlog is added to the Home Screen; the app warns about this.
 - **Undo:** completing a quest, checking in a habit or deleting a quest shows an Undo button on the message for five seconds.
 - **Campaign rewards** are paid when the campaign's last quest is done, and the seal shows on Home. Reopening or adding a quest the same day takes the reward back; after that the seal is kept.
 - **Undoing** a completion takes its XP and gold back but never removes a level.

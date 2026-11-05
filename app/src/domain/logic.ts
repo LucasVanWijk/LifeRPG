@@ -1,31 +1,35 @@
 import { addDays, nextAnnual, parseDay } from './dates';
-import type { Data, Every, Habit, Hero, Quest, Status } from './model';
-import { habitReward, reward, streakText } from './model';
+import type { Data, Every, Habit, Quest, Status } from './model';
+import { campSize, habitReward, reward, streakText } from './model';
+import type { Pay } from './guild/engine';
+import { awardStreak, payReal, refund } from './guild/engine';
+import { ATTR_NAME, QUAD_ATTR } from './guild/content';
 
 /** undo: the toast offers to reverse the action that produced it. */
 export interface Toast { text: string; sub: string; undo?: boolean }
+export interface LevelUp { name: string; level: number }
 /** The result of anything that pays out: new data, what to announce, and whether to show the level-up screen. */
-export interface Outcome { data: Data; toasts: Toast[]; leveledUp: boolean }
+export interface Outcome { data: Data; toasts: Toast[]; levelUp: LevelUp | null }
 
-const none = (data: Data): Outcome => ({ data, toasts: [], leveledUp: false });
-const merge = (a: Outcome, b: Outcome): Outcome => ({ data: b.data, toasts: [...a.toasts, ...b.toasts], leveledUp: a.leveledUp || b.leveledUp });
+const none = (data: Data): Outcome => ({ data, toasts: [], levelUp: null });
+const merge = (a: Outcome, b: Outcome): Outcome => ({ data: b.data, toasts: [...a.toasts, ...b.toasts], levelUp: b.levelUp ?? a.levelUp });
 
-export function gain(hero: Hero, xpGain: number, goldGain: number): { hero: Hero; leveledUp: boolean } {
-  let { xp, level, next } = hero;
-  xp += xpGain;
-  let leveledUp = false;
-  while (xp >= next) {
-    xp -= next;
-    level++;
-    next += 100;
-    leveledUp = true;
-  }
-  return { hero: { ...hero, xp, level, next, gold: hero.gold + goldGain, points: (hero.points ?? 0) + xpGain }, leveledUp };
+/**
+ * Pays a real-life reward into the guild: XP to the campaign's Standard-bearer or the Champion
+ * (banked when there is neither), 25% of the gold to their purse, 75% to the guild.
+ */
+function pay(data: Data, p: Pay, sub: string): Outcome {
+  if (!data.guild) return { data, toasts: [{ text: '+' + p.xp + ' XP · +' + p.gold + ' gold', sub, undo: true }], levelUp: null };
+  const r = payReal(data.guild, p);
+  const e = r.entry;
+  const extra = e.points ? ' · ' + ATTR_NAME[e.attr] + ' +' + e.points : '';
+  const toast: Toast = r.to
+    ? { text: '+' + e.xp + ' XP to ' + r.to.first + ' · +' + e.guild + 'g', sub: sub + ' · +' + e.purse + 'g to their purse' + extra, undo: true }
+    : { text: '+' + e.xp + ' XP banked · +' + e.guild + 'g', sub: sub + ' · no Champion to receive it yet', undo: true };
+  const to = r.to ? r.guild.adventurers.find((a) => a.id === r.to!.id)! : null;
+  return { data: { ...data, guild: r.guild }, toasts: [toast], levelUp: to && r.levels ? { name: to.first, level: to.level } : null };
 }
-
-/** Takes a reward back. Levels are never lost; XP, gold and skill points stop at zero. */
-export const lose = (hero: Hero, xp: number, gold: number): Hero =>
-  ({ ...hero, xp: Math.max(0, hero.xp - xp), gold: Math.max(0, hero.gold - gold), points: Math.max(0, (hero.points ?? 0) - xp) });
+const takeBack = (data: Data, key: string): Data => (data.guild ? { ...data, guild: refund(data.guild, key) } : data);
 
 export const patchQuest = (data: Data, id: number, patch: Partial<Quest>): Data => ({
   ...data,
@@ -44,14 +48,12 @@ export function settleCampaigns(data: Data, today: string): Outcome {
     const complete = qs.length > 0 && qs.every((q) => q.status === 'done');
     const d = out.data;
     if (complete && !c.completedOn) {
-      const g = gain(d.hero, c.xp, c.gold);
-      out = merge(out, {
-        data: { ...d, hero: g.hero, camps: { ...d.camps, [key]: { ...c, completedOn: today } } },
-        toasts: [{ text: 'Campaign complete · ' + c.name, sub: c.seal + ' · +' + c.xp + ' XP · +' + c.gold + ' gold', undo: true }],
-        leveledUp: g.leveledUp,
-      });
+      const paid = pay({ ...d, camps: { ...d.camps, [key]: { ...c, completedOn: today } } },
+        { key: 'c:' + key, xp: c.xp, gold: c.gold, kind: 'campaign', title: c.name, date: today, attr: 'main', notable: false, bearerId: c.bearerId, monument: { camp: key, size: campSize(c), seal: c.seal, icon: c.icon } }, c.seal);
+      paid.toasts[0] = { ...paid.toasts[0], text: 'Campaign complete · ' + c.name, sub: paid.toasts[0].text + ' · ' + paid.toasts[0].sub };
+      out = merge(out, paid);
     } else if (c.completedOn === today && qs.some((q) => q.status !== 'done')) {
-      out = merge(out, none({ ...d, hero: lose(d.hero, c.xp, c.gold), camps: { ...d.camps, [key]: { ...c, completedOn: null } } }));
+      out = merge(out, none({ ...takeBack(d, 'c:' + key), camps: { ...d.camps, [key]: { ...c, completedOn: null } } }));
     }
   }
   return out;
@@ -62,12 +64,11 @@ export function completeQuest(data: Data, id: number, today: string): Outcome | 
   const q = data.quests.find((x) => x.id === id);
   if (!q || q.status === 'done') return null;
   const r = reward(q);
-  const g = gain(data.hero, r.xp, r.gold);
-  const paid: Outcome = {
-    data: { ...patchQuest(data, id, { status: 'done', doneOn: today, prevStatus: q.status }), hero: g.hero },
-    toasts: [{ text: '+' + r.xp + ' XP · +' + r.gold + ' gold', sub: q.title, undo: true }],
-    leveledUp: g.leveledUp,
-  };
+  const camp = q.campaign ? data.camps[q.campaign] : undefined;
+  const paid = pay(patchQuest(data, id, { status: 'done', doneOn: today, prevStatus: q.status }), {
+    key: 'q:' + id, xp: r.xp, gold: r.gold, kind: 'quest', title: q.title, date: today, attr: QUAD_ATTR[q.quad],
+    notable: q.quad === 'main' || q.size === 'L', bearerId: camp?.bearerId,
+  }, q.title);
   return merge(paid, settleCampaigns(paid.data, today));
 }
 
@@ -75,9 +76,8 @@ export function completeQuest(data: Data, id: number, today: string): Outcome | 
 export function undoQuest(data: Data, id: number, today: string): Outcome {
   const q = data.quests.find((x) => x.id === id);
   if (!q || q.status !== 'done') return none(data);
-  const r = reward(q);
   const reopened = patchQuest(data, id, { status: q.prevStatus && q.prevStatus !== 'done' ? q.prevStatus : 'todo', doneOn: null });
-  return settleCampaigns({ ...reopened, hero: lose(data.hero, r.xp, r.gold) }, today);
+  return settleCampaigns(takeBack(reopened, 'q:' + id), today);
 }
 
 /** Moving to Done pays out; moving out of Done takes the reward back first. */
@@ -166,19 +166,22 @@ export function toggleHabit(data: Data, id: number, today: string): Outcome {
   const setLog = (log: string[]) => data.habits.map((x) => (x.id === id ? { ...x, log } : x));
   if (target === 1 ? habitDone(h, today) : checkedInToday(h, today)) {
     const log = target === 1 ? h.log.filter((d) => periodOf(d, h.every) !== cur) : h.log.filter((d) => d !== today);
-    const removed = h.log.length - log.length;
-    return none({ ...data, hero: lose(data.hero, r.xp * removed, r.gold * removed), habits: setLog(log) });
+    const removed = h.log.filter((d) => !log.includes(d));
+    let d = { ...data, habits: setLog(log) };
+    for (const day of removed) d = takeBack(d, 'h:' + id + ':' + day);
+    return none(d);
   }
   if (habitDone(h, today)) return none(data);
-  const g = gain(data.hero, r.xp, r.gold);
   const next = { ...h, log: [...h.log, today] };
   const prog = habitProgress(next, today);
   const sub = prog.count < prog.target ? prog.count + ' of ' + prog.target + ' this week' : streakText(habitStreak(next, today), h.every);
-  return {
-    data: { ...data, hero: g.hero, habits: setLog(next.log) },
-    toasts: [{ text: '+' + r.xp + ' XP · +' + r.gold + ' gold', sub: h.title + ' · ' + sub, undo: true }],
-    leveledUp: g.leveledUp,
-  };
+  const paid = pay({ ...data, habits: setLog(next.log) }, {
+    key: 'h:' + id + ':' + today, xp: r.xp, gold: r.gold, kind: 'habit', title: h.title, date: today, attr: 'main', notable: false,
+  }, h.title + ' · ' + sub);
+  // A streak milestone forges an heirloom, and it stays even if the streak breaks later.
+  const forged = paid.data.guild ? awardStreak(paid.data.guild, id, h.title, habitStreak(next, today), h.every) : null;
+  if (forged) return { ...paid, data: { ...paid.data, guild: forged }, toasts: [...paid.toasts, { text: 'Heirloom forged', sub: h.title + ' · see the Hall of Heroes' }] };
+  return paid;
 }
 
 // ── Chronicle ───────────────────────────────────────────────

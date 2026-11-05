@@ -1,6 +1,6 @@
 # LifeRPG
 
-Questlog: a parchment quest log for everyday life. Quests on an Eisenhower board, campaigns, a Glossary of people and things worth remembering, and a Tavern to spend the gold you earn.
+Questlog: a parchment quest log for everyday life. Quests on an Eisenhower board, campaigns, a Glossary of people and things worth remembering, and a guild of adventurers that your real-life quests level up and pay for.
 
 **Live:** https://lucasvanwijk.github.io/LifeRPG/ (open it on your phone and use Install app, or Share → Add to Home Screen on iPhone).
 

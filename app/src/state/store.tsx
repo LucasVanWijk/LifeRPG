@@ -1,19 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { todayISO } from '../domain/dates';
-import type { Outcome, Toast } from '../domain/logic';
+import type { LevelUp, Outcome, Toast } from '../domain/logic';
 import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
-import type { CalEvent, Campaign, Data, Habit, Hero, QuadKey, Quest, Status } from '../domain/model';
-import type { Skill } from '../domain/expedition/content';
-import { ITEMS, SHOP, SKILL_NAME } from '../domain/expedition/content';
-import type { Activity, Summary } from '../domain/expedition/engine';
-import * as X from '../domain/expedition/engine';
+import type { CalEvent, Campaign, Data, Habit, QuadKey, Quest, Status } from '../domain/model';
 import { emptyData, QM } from '../domain/model';
+import type { BuildingId, ClassId, PotionKind, Slot, Stance } from '../domain/guild/content';
+import { AWAY_SUMMARY_MS } from '../domain/guild/content';
+import * as G from '../domain/guild/engine';
+import type { Duty, Entry, Guild } from '../domain/guild/types';
 
 // v1 held the design's sample data; v2 starts every log empty. The data inside carries its own version (see migrate.ts).
 const STORAGE_KEY = 'questlog:v2';
 
-export type Tab = 'home' | 'quests' | 'calendar' | 'glossary' | 'adventure';
+export type Tab = 'home' | 'quests' | 'calendar' | 'glossary' | 'guild';
+export type GuildTab = 'roster' | 'board' | 'town' | 'tavern' | 'legacy';
 export type QuestView = 'board' | 'campaign' | 'habits';
 export type GlossaryCat = 'companions' | 'tomes' | 'codex';
 export type { Toast };
@@ -45,7 +46,18 @@ export interface Ui {
   openTome: string | null;
   weekOffset: number;
   selDay: string;
-  levelUp: boolean;
+  levelUp: LevelUp | null;
+  guildTab: GuildTab;
+  /** The adventurer, board offer or outing report being shown. */
+  advSheet: string | null;
+  offerSheet: string | null;
+  reportSheet: string | null;
+  /** A building's id (or 'hall'), or 'new' for the list of things to build. */
+  buildSheet: string | null;
+  /** The plot chosen on the map for a new building. */
+  buildPlot: number | null;
+  /** What happened while the app was closed. */
+  away: Entry[] | null;
   confirm: Confirm | null;
   dragId: number | null;
   dragOver: string | null;
@@ -78,7 +90,7 @@ function initialUi(today: string): Ui {
   const pick = <T extends string>(k: string, allowed: readonly T[], def: T): T => (allowed.includes(p.get(k) as T) ? (p.get(k) as T) : def);
   const quest = Number(p.get('quest'));
   return {
-    tab: pick('screen', ['home', 'quests', 'calendar', 'glossary', 'adventure'] as const, 'home'),
+    tab: pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
     questView: pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
     hiddenCamps: loadHiddenCamps(),
     campaign: p.get('campaign') || '',
@@ -99,7 +111,14 @@ function initialUi(today: string): Ui {
     openTome: null,
     weekOffset: 0,
     selDay: today,
-    levelUp: false,
+    levelUp: null,
+    guildTab: pick('gtab', ['roster', 'board', 'town', 'tavern', 'legacy'] as const, 'roster'),
+    advSheet: null,
+    offerSheet: null,
+    reportSheet: null,
+    buildSheet: null,
+    buildPlot: null,
+    away: null,
     confirm: null,
     dragId: null,
     dragOver: null,
@@ -119,9 +138,9 @@ function useLayout() {
 
 const nextId = (xs: { id: number }[]) => Math.max(0, ...xs.map((x) => x.id)) + 1;
 
-/** Undo is still safe while the quest log and rewards are unchanged; Expeditions ticking alongside doesn't count. */
+/** Undo is still safe while the quest log and real-life payments are unchanged; the guild's clock ticking alongside doesn't count. */
 const sameLog = (a: Data, b: Data) =>
-  a.quests === b.quests && a.habits === b.habits && a.camps === b.camps && a.hero.xp === b.hero.xp && a.hero.gold === b.hero.gold && a.hero.level === b.hero.level;
+  a.quests === b.quests && a.habits === b.habits && a.camps === b.camps && a.guild?.ledger === b.guild?.ledger;
 
 function useStoreValue() {
   const [today, setToday] = useState(todayISO);
@@ -144,7 +163,7 @@ function useStoreValue() {
     return () => { document.removeEventListener('visibilitychange', on); window.clearInterval(t); };
   }, []);
 
-  // Saving is throttled (Expeditions changes data every second) and flushed when the app is hidden or closed.
+  // Saving is throttled (the guild's clock changes data while the app is open) and flushed when the app is hidden or closed.
   const savedAt = useRef(0);
   const saveTimer = useRef<number | undefined>(undefined);
   const latest = useRef(data);
@@ -202,11 +221,41 @@ function useStoreValue() {
     commit(o.data);
     if (o.toasts.some((t) => t.undo)) undoRef.current = { before, after: o.data };
     showToasts(o.toasts);
-    if (o.leveledUp) setUi({ levelUp: true });
+    if (o.levelUp) setUi({ levelUp: o.levelUp });
   }, [commit, showToasts, setUi]);
 
+  /** Brings the guild up to now. Returns the data as it is afterwards. */
+  const tick = useCallback((summary = false): Data => {
+    const cur = dataRef.current;
+    if (!cur.guild) return cur;
+    const r = G.advance(cur.guild, Date.now());
+    if (r.guild === cur.guild) return cur;
+    const next = { ...cur, guild: r.guild };
+    commit(next);
+    if (summary && r.elapsed >= AWAY_SUMMARY_MS && r.entries.length) setUi({ away: r.entries });
+    return next;
+  }, [commit, setUi]);
+  // Catch up on opening and on coming back to the app, and keep ticking while it is open.
+  useEffect(() => {
+    tick(true);
+    const onVis = () => { if (document.visibilityState === 'visible') tick(true); };
+    document.addEventListener('visibilitychange', onVis);
+    const t = window.setInterval(() => tick(false), 15_000);
+    return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); };
+  }, [tick]);
+
   const actions = useMemo(() => {
-    const d = () => dataRef.current;
+    // Every action starts from the guild as it is now.
+    const d = () => tick();
+    const guildDo = (fn: (g: Guild) => G.Result, done?: (g: Guild) => void) => {
+      const cur = d();
+      if (!cur.guild) return false;
+      const r = fn(cur.guild);
+      if (!r.ok) { showToast("Can't do that", r.reason); return false; }
+      commit({ ...cur, guild: r.guild });
+      done?.(r.guild);
+      return true;
+    };
     return {
       // Quests
       complete(id: number) { apply(completeQuest(d(), id, today)); },
@@ -219,7 +268,7 @@ function useStoreValue() {
       updateQuest(id: number, patch: Partial<Quest>) {
         const next = patchQuest(d(), id, patch);
         // Only a change of campaign can finish or unfinish one.
-        apply('campaign' in patch ? settleCampaigns(next, today) : { data: next, toasts: [], leveledUp: false });
+        apply('campaign' in patch ? settleCampaigns(next, today) : { data: next, toasts: [], levelUp: null });
       },
       createQuest(q: Omit<Quest, 'id'>) {
         const cur = d();
@@ -255,12 +304,16 @@ function useStoreValue() {
         window.clearTimeout(toastTimer.current);
         toastQueue.current = [];
         if (u && sameLog(dataRef.current, u.after)) {
-          // Put the log back, but keep Expeditions as it is now and take the undone XP out of the skill-point pool.
+          // Put the log back, and take back exactly what was paid since, keeping the guild's clock where it is now.
           const cur = dataRef.current;
-          const points = Math.max(0, cur.hero.points - (u.after.hero.points - u.before.hero.points));
-          commit({ ...u.before, expedition: cur.expedition, hero: { ...u.before.hero, points } });
+          let guild = cur.guild;
+          if (guild) {
+            const had = new Set(u.before.guild?.ledger ?? []);
+            for (const e of (u.after.guild?.ledger ?? []).filter((x) => !had.has(x)).reverse()) guild = G.refund(guild, e.key);
+          }
+          commit({ ...u.before, guild });
           undoRef.current = null;
-          setUi({ levelUp: false });
+          setUi({ levelUp: null });
           showToast('Undone', 'Rewards put back as they were');
         } else setToast(null);
       },
@@ -319,40 +372,62 @@ function useStoreValue() {
         commit({ ...cur, events: [...cur.events, ...fresh] });
         return fresh.length;
       },
-      markReviewed(monday: string) { commit({ ...d(), hero: { ...d().hero, reviewedWeek: monday } }); setUi({ reviewOpen: false }); },
+      markReviewed(monday: string) { const cur = d(); commit({ ...cur, profile: { ...cur.profile, reviewedWeek: monday } }); setUi({ reviewOpen: false }); },
 
-      // Expeditions
-      /** Plays out the time since the last tick; the screen calls this every second while open. */
-      expAdvance(now = Date.now()): Summary {
-        const r = X.advance(d().expedition, now);
-        commit({ ...d(), expedition: r.exp });
-        return r.summary;
+      // Guild
+      found(f: G.Founding, championId: string) {
+        const g = G.found(f, Date.now());
+        const c = G.setChampion(g, championId);
+        commit({ ...dataRef.current, guild: c.ok ? c.guild : g });
+        setUi({ tab: 'guild', guildTab: 'board' });
       },
-      expStart(kind: Activity['kind'], id: string) {
-        const now = Date.now();
-        const r = X.start(X.advance(d().expedition, now).exp, kind, id, now);
-        if (!r.ok) { showToast("Can't start", r.reason); return; }
-        commit({ ...d(), expedition: r.exp });
+      hire(id: string) { guildDo((g) => G.hire(g, id), (g) => showToast('Welcome to the guild', g.adventurers.at(-1)!.first + ' signs the roster')); },
+      release(id: string) { guildDo((g) => G.release(g, id), () => setUi({ advSheet: null })); },
+      setChampion(id: string) {
+        let levels = 0;
+        guildDo((g) => { const r = G.setChampion(g, id); if (r.ok) levels = r.levels ?? 0; return r; }, (g) => {
+          const a = G.byId(g, id)!;
+          showToast(a.first + ' is your Champion', 'Real-life XP and practice go to them now');
+          if (levels) setUi({ levelUp: { name: a.first, level: a.level } });
+        });
       },
-      expStop() { const now = Date.now(); commit({ ...d(), expedition: X.stop(X.advance(d().expedition, now).exp, now) }); },
-      expBuy(shopId: string) {
-        const cur = d(), r = X.buy(cur.expedition, cur.hero.gold, shopId);
-        if (!r.ok) { showToast("Can't buy that", r.reason); return; }
-        commit({ ...cur, expedition: r.exp, hero: { ...cur.hero, gold: r.gold } });
-        showToast('Bought ' + SHOP.find((x) => x.id === shopId)!.name, '−' + (cur.hero.gold - r.gold) + ' gold');
+      setDuty(id: string, duty: Duty) { const cur = d(); if (cur.guild) commit({ ...cur, guild: G.setDuty(cur.guild, id, duty) }); },
+      postNotice(cls: ClassId) { guildDo((g) => G.postNotice(g, cls), () => showToast('Notice posted', 'Someone will answer it at the next tavern day')); },
+      send(offerId: string, party: string[], stance: Stance) {
+        return guildDo((g) => G.send(g, offerId, party, stance), () => { setUi({ offerSheet: null }); showToast('They set out', 'Check the Roster to follow them'); });
       },
-      expEquip(item: string) { commit({ ...d(), expedition: X.equip(d().expedition, item) }); showToast('Equipped', ITEMS[item].name); },
-      expTrain(skill: Skill) {
-        const cur = d(), before = X.level(cur.expedition, skill);
-        const r = X.train(cur.expedition, cur.hero.points, skill);
-        if (!r.used) return;
-        commit({ ...cur, expedition: r.exp, hero: { ...cur.hero, points: cur.hero.points - r.used } });
-        const after = X.level(r.exp, skill);
-        showToast(after > before ? SKILL_NAME[skill] + ' level ' + after : SKILL_NAME[skill] + ' trained', '−' + r.used + ' skill points');
+      // Town
+      build(type: BuildingId, plot?: number) { guildDo((g) => G.build(g, type, plot), () => { setUi({ buildSheet: null, buildPlot: null }); showToast('Work begins', 'A crew has started on it'); }); },
+      upgrade(id: string) { guildDo((g) => G.upgrade(g, id), () => showToast('Work begins', 'A crew has started on it')); },
+      demolish(id: string) { guildDo((g) => G.demolish(g, id), () => setUi({ buildSheet: null })); },
+      assignStaff(advId: string, buildingId: string | null) { guildDo((g) => G.assignStaff(g, advId, buildingId)); },
+      sell(s: G.Sale) { guildDo((g) => G.sell(g, s), () => showToast('Sold', 'The Merchant House paid in gold')); },
+      buyMarket(id: string) { guildDo((g) => G.buyMarket(g, id), () => showToast('Bought', 'It is on the racks')); },
+      forge(slot: Slot, grade: number) { guildDo((g) => G.forge(g, slot, grade), () => showToast('Forged', 'It is on the racks')); },
+      reforge(id: string) { guildDo((g) => G.reforge(g, id), () => showToast('Reforged', 'As good as new')); },
+      salvage(id: string) { guildDo((g) => G.salvage(g, id)); },
+      lockItem(id: string) { const cur = d(); if (cur.guild) commit({ ...cur, guild: G.lockItem(cur.guild, id) }); },
+      brew(kind: PotionKind) { guildDo((g) => G.brew(g, kind), () => showToast('Brewed', 'It is on the shelf')); },
+      equip(advId: string, itemId: string) { guildDo((g) => G.equip(g, advId, itemId)); },
+      unequip(advId: string, slot: Slot) { guildDo((g) => G.unequip(g, advId, slot)); },
+      setAutoBuy(id: string, on: boolean) { const cur = d(); if (cur.guild) commit({ ...cur, guild: G.setAutoBuy(cur.guild, id, on) }); },
+      holiday(on: boolean) {
+        const cur = d();
+        if (!cur.guild) return;
+        commit({ ...cur, guild: G.setHoliday(cur.guild, on, Date.now()) });
+        showToast(on ? 'On holiday' : 'Welcome back', on ? 'The guild’s clock is stopped' : 'The guild’s clock is running again');
+      },
+      markRead(id: string) { const cur = d(); if (cur.guild) { const g = G.markRead(cur.guild, id); if (g !== cur.guild) commit({ ...cur, guild: g }); } },
+      /** Testing aid (?dev): moves the guild's clock forward. */
+      skip(ms: number) {
+        const cur = d();
+        if (!cur.guild) return;
+        commit({ ...cur, guild: G.skipTime(cur.guild, ms) });
+        setUi({ profileOpen: false });
+        tick(true);
       },
 
-      // Profile and backup
-      updateHero(patch: Partial<Hero>) { commit({ ...d(), hero: { ...d().hero, ...patch } }); },
+      // Backup
       replaceData(next: Data) { commit(next); setUi({ openId: null, gDetail: null, campaign: '', profileOpen: false }); },
 
       /** Generic edit for Glossary data that never pays out. */
@@ -371,7 +446,7 @@ function useStoreValue() {
       openQuest(id: number) { setUi({ openId: id, newOpen: false, campSheet: null, eventSheet: null, sheetMode: 'view' }); },
       openEvent(id: number | 'new') { setUi({ eventSheet: id, eventMode: id === 'new' ? 'edit' : 'view', openId: null, newOpen: false }); },
     };
-  }, [today, commit, apply, showToast, setUi]);
+  }, [today, commit, apply, showToast, setUi, tick]);
 
   const canUndo = !!toast?.undo && !!undoRef.current && sameLog(data, undoRef.current.after);
   return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions };

@@ -6,9 +6,14 @@ import { isOverdue, RescheduleButtons } from '../components/Reschedule';
 import { KindMark, Legend } from './Calendar';
 import { reviewDue, reviewWeek } from '../sheets/ReviewSheet';
 import { dismissIosWarning, iosAtRisk } from '../storage';
-import { EVERY_NAME, habitReward, heroName, QM, reward, streakText, titleFor } from '../domain/model';
+import { EVERY_NAME, habitReward, QM, reward, streakText } from '../domain/model';
+import { champion } from '../domain/guild/engine';
+import { CLASSES, xpToNext } from '../domain/guild/content';
+import { realDuration } from '../domain/guild/adventurer';
+import { AdvCrest } from '../components/guildParts';
+import { Crest } from '../components/Crest';
 import { Icon } from '../components/Icon';
-import { Portrait, questView, withNames } from '../components/common';
+import { questView, withNames } from '../components/common';
 import { stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
 import { useState } from 'react';
@@ -20,7 +25,9 @@ export function Home() {
   const [moving, setMoving] = useState<number | null>(null);
   const [iosNag, setIosNag] = useState(iosAtRisk);
   const [backupNag, setBackupNag] = useState(() => backupDue(data, today));
-  const { hero } = data;
+  const g = data.guild;
+  const champ = g ? champion(g) : undefined;
+  const nextBack = g?.outings.filter((o) => !o.done).sort((a, b) => a.returnAt - b.returnAt)[0];
 
   const todayList = data.quests
     .filter((q) => q.status !== 'done' && q.due && q.due <= today)
@@ -52,9 +59,14 @@ export function Home() {
 
   return (
     <div className="screen">
-      <header className="screen-head">
-        <span className="kicker">Questlog</span>
-        <h1>{longDate(today)}</h1>
+      <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+        <div className="screen-head">
+          <span className="kicker">Questlog</span>
+          <h1>{longDate(today)}</h1>
+        </div>
+        <button className="btn btn-icon btn-ghost inked" onClick={() => setUi({ profileOpen: true })} aria-label="Settings and backup" title="Settings and backup" style={{ width: 44, height: 44 }}>
+          <Icon n="wrench" size={19} />
+        </button>
       </header>
       {backupNag && (
         <div className="panel backup-nag" role="status">
@@ -88,33 +100,36 @@ export function Home() {
       <QuickAdd />
       <div className="home-grid">
         <section className="panel-framed hero-card">
-          <button className="hero-btn" onClick={() => setUi({ profileOpen: true })} aria-label="Open your profile">
-            <Portrait hero={hero} size={76} fontSize={38} />
+          <button className="hero-btn" onClick={() => champ ? setUi({ tab: 'guild', advSheet: champ.id }) : actions.goTab('guild')} aria-label={champ ? 'Open ' + champ.first : 'Open the guild'}>
+            {champ ? <AdvCrest a={champ} size={64} /> : g ? <Crest seed={g.crestSeed} size={64} /> : null}
             <span style={{ minWidth: 0, flex: 1 }}>
-              <span className="heading" style={{ display: 'block', fontSize: 28, lineHeight: 1.05 }}>{heroName(hero)}</span>
-              <span className="muted" style={{ fontStyle: 'italic', fontSize: 15 }}>Level {hero.level} {titleFor(hero.level)}</span>
+              <span className="kicker">{champ ? 'Champion of ' + g!.name : g ? g.name : 'Your guild'}</span>
+              <span className="heading" style={{ display: 'block', fontSize: 28, lineHeight: 1.05 }}>{champ ? champ.first + ' ' + champ.family : 'No Champion'}</span>
+              <span className="muted" style={{ fontStyle: 'italic', fontSize: 15 }}>{champ ? 'Level ' + champ.level + ' ' + CLASSES[champ.cls].name : 'Real-life XP is banked until you choose one'}</span>
             </span>
             <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={18} /></span>
           </button>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-              <span style={{ letterSpacing: '.12em', textTransform: 'uppercase', fontSize: 11 }}>Experience</span>
-              <span>{hero.xp} / {hero.next} XP</span>
+          {champ && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
+                <span style={{ letterSpacing: '.12em', textTransform: 'uppercase', fontSize: 11 }}>Experience</span>
+                <span>{Math.floor(champ.xp)} / {xpToNext(champ.level)} XP</span>
+              </div>
+              <div className="bar" role="progressbar" aria-valuenow={Math.floor(champ.xp)} aria-valuemax={xpToNext(champ.level)} aria-label="Experience">
+                <div style={{ width: Math.round((champ.xp / xpToNext(champ.level)) * 100) + '%' }} />
+              </div>
+              <div style={{ fontSize: 12, color: 'var(--color-accent-700)' }}>{Math.ceil(xpToNext(champ.level) - champ.xp)} XP to level {champ.level + 1}{champ.awayOn ? ' · away on an expedition' : ''}</div>
             </div>
-            <div className="bar" role="progressbar" aria-valuenow={hero.xp} aria-valuemax={hero.next} aria-label="Experience">
-              <div style={{ width: Math.round((hero.xp / hero.next) * 100) + '%' }} />
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--color-accent-700)' }}>{hero.next - hero.xp} XP to level {hero.level + 1}</div>
-          </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-accent-700)' }}>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-accent-700)', minWidth: 0 }}>
               <Icon n="coins" size={20} />
-              <span className="heading tnum" style={{ fontSize: 24, color: 'var(--q-ink)' }}>{hero.gold}</span>
-              <span className="muted" style={{ fontSize: 13 }}>gold</span>
+              <span className="heading tnum" style={{ fontSize: 24, color: 'var(--q-ink)' }}>{g?.gold ?? 0}</span>
+              <span className="muted ellipsis" style={{ fontSize: 13 }}>{nextBack ? 'next back in ' + realDuration(nextBack.returnAt - (Date.now() - g!.founded)) : 'guild gold'}</span>
             </span>
             <span style={{ display: 'flex', gap: 2 }}>
               <button className="btn btn-ghost" onClick={() => setUi({ chronicleOpen: true })} style={{ color: 'var(--color-accent-700)' }}>History</button>
-              <button className="btn btn-ghost" onClick={() => actions.goTab('adventure')} style={{ color: 'var(--color-accent-700)' }}>Expeditions</button>
+              <button className="btn btn-ghost" onClick={() => actions.goTab('guild')} style={{ color: 'var(--color-accent-700)' }}>Guild</button>
             </span>
           </div>
           {seals.length > 0 && (

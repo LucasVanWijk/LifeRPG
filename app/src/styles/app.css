@@ -364,3 +364,17 @@ button { font: inherit; }
 .qa-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: 4px 10px; border: 0; border-radius: 3px; background: transparent; text-align: left; cursor: pointer; color: var(--q-ink); font: inherit; font-size: 14px; }
 .qa-menu button:hover, .qa-menu li:first-child button { background: var(--q-tint); }
 .qa-menu .muted { margin-left: auto; font-size: 12px; font-style: italic; }
+
+/* Guild: choice buttons in a column keep their height and full width. */
+.choice-list { display: flex; flex-direction: column; gap: 8px; }
+.choice-list > .opt-btn, .found-box > * { flex-shrink: 0; }
+.choice-list > .opt-btn { width: 100%; }
+
+/* The town map: smoke, work rings and focus, all calm and optional. */
+@keyframes map-smoke { 0% { transform: translate(0, 0) scale(.6); opacity: .0; } 20% { opacity: .35; } 100% { transform: translate(5px, -16px) scale(1.6); opacity: 0; } }
+.map-smoke circle { transform-box: fill-box; transform-origin: center; animation: map-smoke 2.8s ease-out infinite; }
+@keyframes map-work { 50% { opacity: .45; } }
+.map-work { animation: map-work 1.8s ease-in-out infinite; }
+.map-hit:focus-visible { outline: none; }
+.map-hit:focus-visible > rect:last-child { stroke: var(--color-accent-700); stroke-width: 2; stroke-dasharray: 4 3; }
+@media (prefers-reduced-motion: reduce) { .map-smoke circle, .map-work { animation: none; } .map-smoke circle { opacity: .25; } }

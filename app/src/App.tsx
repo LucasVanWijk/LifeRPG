@@ -1,7 +1,11 @@
 import { useEffect } from 'react';
 import { Icon, type IconName } from './components/Icon';
-import { heroName, titleFor } from './domain/model';
-import { Adventure } from './screens/Adventure';
+import { Guild } from './screens/Guild';
+import { Crest } from './components/Crest';
+import { champion } from './domain/guild/engine';
+import { CLASSES } from './domain/guild/content';
+import { AdventurerSheet, AwaySheet, Founding, ReportSheet, SendSheet } from './sheets/GuildSheets';
+import { BuildingSheet, NewBuildingSheet } from './sheets/TownSheets';
 import { Calendar } from './screens/Calendar';
 import { EventSheet } from './sheets/EventSheet';
 import { ReviewSheet } from './sheets/ReviewSheet';
@@ -9,16 +13,17 @@ import { Glossary } from './screens/Glossary';
 import { Home } from './screens/Home';
 import { Quests } from './screens/Quests';
 import { CampaignSheet } from './sheets/CreateSheets';
-import { ProfileSheet, Welcome } from './sheets/ProfileSheet';
+import { ProfileSheet } from './sheets/ProfileSheet';
 import { ChronicleSheet } from './sheets/ChronicleSheet';
 import { NewQuestSheet, QuestSheet } from './sheets/QuestSheet';
 import { useStore, type Tab } from './state/store';
 
-const NAV: [Tab, string, IconName][] = [['home', 'Home', 'home'], ['quests', 'Quests', 'scroll'], ['calendar', 'Calendar', 'calendar'], ['glossary', 'Glossary', 'book-open'], ['adventure', 'Adventure', 'compass']];
+const NAV: [Tab, string, IconName][] = [['home', 'Home', 'home'], ['quests', 'Quests', 'scroll'], ['calendar', 'Calendar', 'calendar'], ['glossary', 'Glossary', 'book-open'], ['guild', 'Guild', 'shield']];
 
 export function App() {
   const { data, ui, setUi, isDesk, toast, lastToast, canUndo, scrollRef, actions } = useStore();
-  const { hero } = data;
+  const g = data.guild;
+  const champ = g ? champion(g) : undefined;
   const openQuest = data.quests.find((q) => q.id === ui.openId);
   const shown = toast || lastToast;
 
@@ -26,7 +31,7 @@ export function App() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: false } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, buildPlot: null, away: null }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -42,15 +47,21 @@ export function App() {
               <button key={k} onClick={() => actions.goTab(k)} aria-current={ui.tab === k ? 'page' : undefined}><Icon n={ic} size={20} />{n}</button>
             ))}
           </nav>
-          <div className="side-hero" role="button" tabIndex={0} aria-label="Open your profile" onClick={() => setUi({ profileOpen: true })} onKeyDown={(e) => e.key === 'Enter' && setUi({ profileOpen: true })}>
-            <div className="heading" style={{ fontSize: 18 }}>{heroName(hero)}</div>
-            <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-accent-800)' }}>Level {hero.level} {titleFor(hero.level)}</div>
-            <div className="bar"><div style={{ width: Math.round((hero.xp / hero.next) * 100) + '%' }} /></div>
-            <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-              <span>{hero.xp} / {hero.next} XP</span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon n="coins" size={13} />{hero.gold}</span>
-            </div>
+          <div className="side-hero" role="button" tabIndex={0} aria-label="Open the guild" onClick={() => actions.goTab('guild')} onKeyDown={(e) => e.key === 'Enter' && actions.goTab('guild')}>
+            {g ? (
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Crest seed={g.crestSeed} size={26} />
+                  <div className="heading ellipsis" style={{ fontSize: 17 }}>{g.name}</div>
+                </div>
+                <div style={{ fontSize: 13, fontStyle: 'italic', color: 'var(--color-accent-800)' }}>
+                  {champ ? 'Champion: ' + champ.first + ', level ' + champ.level + ' ' + CLASSES[champ.cls].name : 'No Champion'}
+                </div>
+                <div className="muted tnum" style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12 }}><Icon n="coins" size={13} />{g.gold} gold</div>
+              </>
+            ) : <div className="heading" style={{ fontSize: 17 }}>No guild yet</div>}
           </div>
+          <button className="btn btn-ghost inked" onClick={() => setUi({ profileOpen: true })} style={{ justifyContent: 'flex-start', gap: 8 }}><Icon n="wrench" size={16} />Settings and backup</button>
         </aside>
       )}
 
@@ -60,7 +71,7 @@ export function App() {
           {ui.tab === 'quests' && <Quests />}
           {ui.tab === 'glossary' && <Glossary />}
           {ui.tab === 'calendar' && <Calendar />}
-          {ui.tab === 'adventure' && <Adventure />}
+          {ui.tab === 'guild' && <Guild />}
         </main>
 
         {!isDesk && (
@@ -100,7 +111,13 @@ export function App() {
       {ui.chronicleOpen && <ChronicleSheet />}
       {ui.reviewOpen && <ReviewSheet />}
       {ui.eventSheet !== null && <EventSheet key={String(ui.eventSheet)} id={ui.eventSheet} />}
-      {!hero.name && <Welcome />}
+      {g && ui.advSheet && <AdventurerSheet key={ui.advSheet} id={ui.advSheet} />}
+      {g && ui.offerSheet && <SendSheet key={ui.offerSheet} id={ui.offerSheet} />}
+      {g && ui.reportSheet && <ReportSheet key={ui.reportSheet} id={ui.reportSheet} />}
+      {g && ui.buildSheet === 'new' && <NewBuildingSheet />}
+      {g && ui.buildSheet && ui.buildSheet !== 'new' && <BuildingSheet key={ui.buildSheet} id={ui.buildSheet} />}
+      {g && ui.away && !ui.advSheet && !ui.offerSheet && !ui.reportSheet && !ui.buildSheet && <AwaySheet entries={ui.away} />}
+      {!g && <Founding />}
 
       {ui.confirm && (
         <div className="modal" style={{ zIndex: 80 }} onClick={(e) => e.target === e.currentTarget && setUi({ confirm: null })}>
@@ -120,11 +137,11 @@ export function App() {
       {ui.levelUp && (
         <div className="modal" style={{ zIndex: 55, background: 'color-mix(in srgb, var(--color-neutral-900) 40%, transparent)' }}>
           <div role="alertdialog" aria-modal="true" aria-label="Level up" style={{ width: 'min(320px,100%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, padding: '28px 22px 20px', textAlign: 'center', border: '1px solid color-mix(in srgb, var(--color-accent-800) 35%, transparent)', borderRadius: 'var(--radius-lg)', boxShadow: 'inset 0 0 0 5px var(--q-parch), inset 0 0 0 6px var(--color-accent-500), var(--shadow-lg)', background: 'var(--q-parch)' }}>
-            <span className="seal heading tnum" style={{ width: 72, height: 72, fontSize: 34, boxShadow: 'inset 0 0 0 5px var(--q-wax), inset 0 0 0 6px rgba(255,230,200,.35), 0 3px 8px rgba(40,10,0,.35)' }}>{hero.level}</span>
+            <span className="seal heading tnum" style={{ width: 72, height: 72, fontSize: 34, boxShadow: 'inset 0 0 0 5px var(--q-wax), inset 0 0 0 6px rgba(255,230,200,.35), 0 3px 8px rgba(40,10,0,.35)' }}>{ui.levelUp.level}</span>
             <span className="kicker">Level up</span>
-            <div className="heading" style={{ fontSize: 26, lineHeight: 1.1 }}>{heroName(hero)} reaches level {hero.level}{titleFor(hero.level) !== titleFor(hero.level - 1) ? ' and becomes a ' + titleFor(hero.level) : ''}</div>
-            <p className="muted" style={{ margin: 0, fontSize: 14 }}>{hero.next} XP to the next level.</p>
-            <button className="btn btn-primary inked" onClick={() => setUi({ levelUp: false })} style={{ minHeight: 44, minWidth: 140, marginTop: 6 }} autoFocus>Onward</button>
+            <div className="heading" style={{ fontSize: 26, lineHeight: 1.1 }}>{ui.levelUp.name} reaches level {ui.levelUp.level}</div>
+            <p className="muted" style={{ margin: 0, fontSize: 14 }}>Stronger, and a little more likely to come home.</p>
+            <button className="btn btn-primary inked" onClick={() => setUi({ levelUp: null })} style={{ minHeight: 44, minWidth: 140, marginTop: 6 }} autoFocus>Onward</button>
           </div>
         </div>
       )}

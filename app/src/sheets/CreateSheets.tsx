@@ -16,13 +16,15 @@ export function CampaignSheet({ campKey }: { campKey: string | null }) {
   const [seal, setSeal] = useState(existing?.seal ?? '');
   const [icon, setIcon] = useState<IconName>(existing?.icon ?? 'flag');
   const [size, setSize] = useState<SizeKey>(existing ? campSize(existing) : 'M');
+  const [bearerId, setBearer] = useState<string | null>(existing?.bearerId ?? null);
+  const adventurers = data.guild?.adventurers.filter((a) => a.state === 'active') ?? [];
   const close = () => setUi({ campSheet: null });
   const title = existing ? 'Edit Campaign' : 'New Campaign';
   const save = () => {
     const n = name.trim();
     if (!n) return;
     const sz = CSIZE[size];
-    const c = { name: n, short: n.split(' ')[0], desc: desc.trim() || 'A new campaign.', xp: sz.xp, gold: sz.gold, seal: seal.trim() || n + ' seal', icon };
+    const c = { name: n, short: n.split(' ')[0], desc: desc.trim() || 'A new campaign.', xp: sz.xp, gold: sz.gold, seal: seal.trim() || n + ' seal', icon, bearerId };
     if (campKey && existing) {
       // A campaign already won keeps the reward it paid.
       actions.updateCampaign(campKey, existing.completedOn ? { ...c, xp: existing.xp, gold: existing.gold } : c);
@@ -53,6 +55,15 @@ export function CampaignSheet({ campKey }: { campKey: string | null }) {
           })}
         </div>
       </div>
+      {adventurers.length > 0 && !existing?.completedOn && (
+        <div className="field"><label>Standard-bearer</label>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            <button className="chip" aria-pressed={!bearerId} onClick={() => setBearer(null)}>Your Champion</button>
+            {adventurers.map((a) => <button key={a.id} className="chip" aria-pressed={bearerId === a.id} onClick={() => setBearer(a.id)}>{a.first} {a.family}</button>)}
+          </div>
+          <span className="muted" style={{ fontSize: 12 }}>This campaign's quests level whoever carries it, instead of your Champion.</span>
+        </div>
+      )}
       <div className="field"><label htmlFor="nc-seal">Reward title</label><input id="nc-seal" className="input" value={seal} onChange={(e) => setSeal(e.target.value)} placeholder="e.g. Explorer's seal" style={{ minHeight: 44 }} /></div>
       {!existing?.completedOn && (
         <div className="field"><label>Size</label>

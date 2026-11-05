@@ -7,34 +7,16 @@ import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } 
 import { dayDiff, todayISO } from '../domain/dates';
 import { migrate } from '../domain/migrate';
 import type { Data } from '../domain/model';
-import { emptyData, heroName, titleFor } from '../domain/model';
-import { Icon } from '../components/Icon';
-import { CloseBtn, onEnter, Portrait, Sheet } from '../components/common';
+import { emptyData } from '../domain/model';
+import { PHASE_MS } from '../domain/guild/content';
+import { CloseBtn, Sheet } from '../components/common';
 import { useStore } from '../state/store';
 import { BOARD_THEMES, loadBoardTheme, saveBoardTheme, type BoardTheme } from '../theme';
 
 
-/** Center-crops an image file to a small square JPEG, so the portrait stays light in storage. */
-function toPortrait(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const url = URL.createObjectURL(file);
-    const img = new Image();
-    img.onload = () => {
-      const side = Math.min(img.naturalWidth, img.naturalHeight), px = 256;
-      const c = document.createElement('canvas');
-      c.width = c.height = px;
-      c.getContext('2d')!.drawImage(img, (img.naturalWidth - side) / 2, (img.naturalHeight - side) / 2, side, side, 0, 0, px, px);
-      URL.revokeObjectURL(url);
-      resolve(c.toDataURL('image/jpeg', 0.85));
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('not an image')); };
-    img.src = url;
-  });
-}
-
 function summary(d: Data) {
   const parts = [
-    'level ' + d.hero.level,
+    d.guild ? d.guild.name : 'no guild yet',
     d.quests.length + (d.quests.length === 1 ? ' quest' : ' quests'),
     d.habits.length + (d.habits.length === 1 ? ' habit' : ' habits'),
     Object.keys(d.camps).length + (Object.keys(d.camps).length === 1 ? ' campaign' : ' campaigns'),
@@ -58,7 +40,7 @@ export function useImport() {
       title: 'Restore this backup?',
       body: 'It holds ' + summary(next) + '. It replaces everything in this browser.',
       confirmLabel: 'Restore backup',
-      onConfirm: () => { actions.replaceData(next); showToast('Backup restored', heroName(next.hero) + ' · level ' + next.hero.level); },
+      onConfirm: () => { actions.replaceData(next); showToast('Backup restored', next.guild?.name ?? 'Your quest log'); },
     });
   };
   const field = <input ref={input} type="file" accept="application/json,.json" hidden onChange={(e) => onFile(e.target.files?.[0])} />;
@@ -91,21 +73,14 @@ function ThemeSection() {
 
 export function ProfileSheet() {
   const { data, setUi, today, actions, showToast } = useStore();
-  const { hero } = data;
+  const g = data.guild;
   const [lastExportDay, setLastExport] = useState(lastExport);
   const [stored, setStored] = useState<StorageState>('unknown');
   useEffect(() => { void storageState().then(setStored); }, []);
-  const picker = useRef<HTMLInputElement>(null);
   const restore = useImport();
   const close = () => setUi({ profileOpen: false });
   const questsDone = data.quests.filter((q) => q.status === 'done').length;
   const seals = Object.values(data.camps).filter((c) => c.completedOn).length;
-
-  const pickPortrait = async (file: File | undefined) => {
-    if (!file) return;
-    try { actions.updateHero({ portrait: await toPortrait(file) }); } catch { showToast("That picture couldn't be read", file.name); }
-    if (picker.current) picker.current.value = '';
-  };
 
   const exportLog = () => {
     const file = exportBackup(data, today);
@@ -115,7 +90,7 @@ export function ProfileSheet() {
 
   const startOver = () => actions.confirm({
     title: 'Start over?',
-    body: 'This erases every quest, habit, campaign, Glossary entry and all Expeditions progress in this browser, and resets you to level 1. Export a backup first if you might want it back.',
+    body: 'This erases every quest, habit, campaign, Glossary entry and your guild in this browser. Export a backup first if you might want it back.',
     confirmLabel: 'Erase everything',
     onConfirm: () => { actions.replaceData(emptyData()); showToast('A fresh log', 'Everything was erased'); },
   });
@@ -126,21 +101,9 @@ export function ProfileSheet() {
 
   return (
     <Sheet onClose={close} label="Profile">
-      <div style={{ display: 'flex', alignItems: 'center', paddingTop: 6 }}><h3 style={{ fontSize: 26 }}>Profile</h3><span style={{ marginLeft: 'auto' }}><CloseBtn onClick={close} /></span></div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <Portrait hero={hero} size={84} fontSize={40} />
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-start' }}>
-          <button className="btn btn-secondary" onClick={() => picker.current?.click()} style={{ minHeight: 40 }}><Icon n="pencil" size={14} />{hero.portrait ? 'Change picture' : 'Add a picture'}</button>
-          {hero.portrait && <button className="btn btn-ghost inked" onClick={() => actions.updateHero({ portrait: undefined })}>Use monogram</button>}
-          <input ref={picker} type="file" accept="image/*" hidden onChange={(e) => pickPortrait(e.target.files?.[0])} />
-        </div>
-      </div>
-      <div className="field"><label htmlFor="hero-name">Name</label>
-        <input id="hero-name" className="input" value={hero.name} placeholder="Adventurer" onChange={(e) => actions.updateHero({ name: e.target.value })}
-          onBlur={() => { if (!hero.name.trim()) actions.updateHero({ name: 'Adventurer' }); }} style={{ minHeight: 44, fontSize: 16 }} />
-      </div>
+      <div style={{ display: 'flex', alignItems: 'center', paddingTop: 6 }}><h3 style={{ fontSize: 26 }}>Settings</h3><span style={{ marginLeft: 'auto' }}><CloseBtn onClick={close} /></span></div>
       <div className="facts" style={{ gridTemplateColumns: 'repeat(4, 1fr)', borderTop: '1px solid var(--q-rule)', borderBottom: '1px solid var(--q-rule)' }}>
-        {[['Level', hero.level + ' · ' + titleFor(hero.level)], ['Gold', hero.gold], ['Quests done', questsDone], ['Seals', seals]].map(([k, v]) => (
+        {[['Guild gold', g?.gold ?? 0], ['Adventurers', g?.adventurers.filter((a) => a.state === 'active').length ?? 0], ['Quests done', questsDone], ['Seals', seals]].map(([k, v]) => (
           <div key={k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 0' }}>
             <span className="label" style={{ fontSize: 10 }}>{k}</span>
             <span className="heading tnum" style={{ fontSize: 22 }}>{v}</span>
@@ -171,31 +134,30 @@ export function ProfileSheet() {
 
       <InstallSection />
 
+      {g && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3 style={{ fontSize: 22 }}>Holiday mode</h3>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Stops the guild's clock, expeditions included, until you turn it off. Real-life quests and habits still pay your Champion.</p>
+          <button className="btn btn-secondary" onClick={() => actions.holiday(g.holiday === null)} style={{ minHeight: 46 }}>{g.holiday === null ? 'Start a holiday' : 'End the holiday'}</button>
+        </div>
+      )}
+
+      {g && new URLSearchParams(window.location.search).has('dev') && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3 style={{ fontSize: 22 }}>Time skip (testing)</h3>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Moves the guild's clock forward. Only shown with ?dev in the address.</p>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {([['+1 phase', 1], ['+1 day', 3], ['+1 week', 24], ['+1 season', 48], ['+1 year', 192]] as const).map(([label, n]) => (
+              <button key={label} className="btn btn-secondary" onClick={() => actions.skip(n * PHASE_MS)} style={{ minHeight: 40 }}>{label}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
         <button className="danger-btn" onClick={startOver}>Start over</button>
       </div>
     </Sheet>
-  );
-}
-
-/** First launch: ask for a name, or restore a backup from another device. */
-export function Welcome() {
-  const { actions } = useStore();
-  const [name, setName] = useState('');
-  const restore = useImport();
-  const begin = () => actions.updateHero({ name: name.trim() || 'Adventurer' });
-  return (
-    <div className="modal" style={{ zIndex: 70 }}>
-      <div role="dialog" aria-modal="true" aria-labelledby="welcome-title" style={{ width: 'min(360px,100%)', display: 'flex', flexDirection: 'column', gap: 12, padding: '28px 22px 20px', textAlign: 'center', border: '1px solid color-mix(in srgb, var(--color-accent-800) 35%, transparent)', borderRadius: 'var(--radius-lg)', boxShadow: 'inset 0 0 0 5px var(--q-parch), inset 0 0 0 6px var(--color-accent-500), var(--shadow-lg)', background: 'var(--q-parch)' }}>
-        <span className="seal heading" style={{ width: 64, height: 64, fontSize: 30, alignSelf: 'center' }}>Q</span>
-        <span className="kicker">Welcome to Questlog</span>
-        <h2 id="welcome-title" style={{ fontSize: 28 }}>What should we call you?</h2>
-        <input className="input" value={name} onChange={(e) => setName(e.target.value)} onKeyDown={onEnter(begin)} placeholder="Your name" aria-label="Your name" autoFocus style={{ minHeight: 46, fontSize: 17, textAlign: 'center' }} />
-        <button className="btn btn-primary inked" onClick={begin} style={{ minHeight: 46, fontSize: 17 }}>Begin</button>
-        <button className="btn btn-ghost inked" onClick={restore.open} style={{ fontSize: 13 }}>Restore a backup instead</button>
-        {restore.field}
-      </div>
-    </div>
   );
 }
 
@@ -218,7 +180,7 @@ function DriveSection() {
     const write = () => run(async () => {
       const f = await upload(tok, JSON.stringify(data, null, 2), remote?.id);
       setSync(recordSync(f));
-      showToast('Saved to Google Drive', heroName(data.hero) + ' · ' + summary(data));
+      showToast('Saved to Google Drive', summary(data));
     });
     if (remote && driveHasNewer(remote, lastSync())) {
       actions.confirm({
@@ -238,7 +200,7 @@ function DriveSection() {
       title: 'Load the Drive save?',
       body: 'It holds ' + summary(next) + ' (saved ' + new Date(remote.modifiedTime).toLocaleString() + '). It replaces everything in this browser.',
       confirmLabel: 'Load save', tone: 'go',
-      onConfirm: () => { actions.replaceData(next); setSync(recordSync(remote)); showToast('Loaded from Google Drive', heroName(next.hero) + ' · level ' + next.hero.level); },
+      onConfirm: () => { actions.replaceData(next); setSync(recordSync(remote)); showToast('Loaded from Google Drive', summary(next)); },
     });
   });
   return (
