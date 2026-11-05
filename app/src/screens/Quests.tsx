@@ -188,9 +188,9 @@ function MobileGrid() {
               <span className="heading tnum" style={{ fontSize: 19, lineHeight: 1, color: 'var(--color-accent-100)' }}>{list.length}</span>
               {z.key === 'main' && <span className="xp-mult" style={{ flex: 'none', fontSize: 10, lineHeight: 1.3, padding: '1px 4px' }}>×1.5</span>}
             </span>
-            <span style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              {list.slice(0, 6).map((q) => <span key={q.id} className="tile-note">{q.title}</span>)}
-              {list.length > 6 && <span style={{ fontSize: 11, color: 'var(--color-accent-200)' }}>+{list.length - 6} more</span>}
+            <span style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {list.slice(0, 5).map((q) => <span key={q.id} className="tile-note">{q.title}</span>)}
+              {list.length > 5 && <span style={{ fontSize: 12, fontStyle: 'italic', color: 'var(--color-accent-200)', paddingTop: 2 }}>+{list.length - 5} more</span>}
             </span>
           </button>
         );
