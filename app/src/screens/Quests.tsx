@@ -45,6 +45,8 @@ const zoneStyle = (light: string) => ({ '--zone-light': light }) as CSSPropertie
 const isWide = (q: Quest, hasDue: boolean, campaign?: string | null) =>
   !!stepCount(q) || q.title.length + (hasDue ? 12 : 0) + (campaign ? 10 : 0) + (q.companions.length ? 10 : 0) > 50;
 /** Campaign keys hidden by the filter; '' stands for quests without a campaign. */
+/** The filter only applies while campaigns exist, so it can never hide quests with no way to show them. */
+const useHidden = () => { const { data, ui } = useStore(); return Object.keys(data.camps).length ? ui.hiddenCamps : []; };
 const shown = (q: Quest, hidden: string[]) => !hidden.includes(q.campaign || '');
 const activeIn = (quests: Quest[], quad: QuadKey, hidden: string[]) => quests.filter((q) => q.status !== 'done' && q.quad === quad && shown(q, hidden)).sort(byDue);
 
@@ -122,6 +124,7 @@ function BoardNote({ q, wide, stretch = false, inPair = false, drag }: { q: Ques
 
 function DeskBoard() {
   const { data, ui, setUi, today, actions } = useStore();
+  const hidden = useHidden();
   const drag = useDrag();
   const drop = (e: DragEvent, key: QuadKey) => {
     e.preventDefault();
@@ -140,7 +143,7 @@ function DeskBoard() {
         </div>
         <div className="wood" style={{ gridColumn: '2 / 4', display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 12, padding: 14 }}>
           {QUADS.map((z) => {
-            const list = activeIn(data.quests, z.key, ui.hiddenCamps);
+            const list = activeIn(data.quests, z.key, hidden);
             return (
               <div key={z.key} className={'zone' + (z.key === 'main' ? ' is-main' : '') + (ui.dragOver === z.key ? ' is-over' : '')} style={{ ...zoneStyle(z.light), minHeight: 250, display: 'flex', flexDirection: 'column', gap: 14, padding: '12px 14px 18px' }}
                 onDragOver={(e) => drag.over(e, z.key)} onDrop={(e) => drop(e, z.key)}>
@@ -175,11 +178,12 @@ function DeskBoard() {
 }
 
 function MobileGrid() {
-  const { data, ui, setUi } = useStore();
+  const { data, setUi } = useStore();
+  const hidden = useHidden();
   return (
     <div className="wood" style={{ flex: 1, minHeight: 480, display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gridTemplateRows: 'minmax(0,1fr) minmax(0,1fr)', gap: 9, padding: 10 }}>
       {QUADS.map((z) => {
-        const list = activeIn(data.quests, z.key, ui.hiddenCamps);
+        const list = activeIn(data.quests, z.key, hidden);
         return (
           <button key={z.key} className={'zone tile' + (z.key === 'main' ? ' is-main' : '')} style={zoneStyle(z.light)} onClick={() => setUi({ mobileZone: z.key })}>
             <span className="zone-head" style={{ gap: 5 }}>
@@ -200,9 +204,10 @@ function MobileGrid() {
 }
 
 function MobileZone({ zone }: { zone: QuadKey }) {
-  const { data, ui, setUi, today, actions } = useStore();
+  const { data, setUi, today, actions } = useStore();
+  const hidden = useHidden();
   const z = QUADS.find((x) => x.key === zone)!;
-  const list = activeIn(data.quests, zone, ui.hiddenCamps);
+  const list = activeIn(data.quests, zone, hidden);
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div className="hscroll" style={{ gap: 6, margin: '0 -18px', padding: '0 18px 2px' }}>
@@ -212,7 +217,7 @@ function MobileZone({ zone }: { zone: QuadKey }) {
         {QUADS.map((c) => (
           <button key={c.key} className="chip" aria-pressed={c.key === zone} onClick={() => setUi({ mobileZone: c.key })} style={{ minHeight: 40, padding: '6px 12px', fontSize: 15 }}>
             <span className="dot" style={{ color: c.color }} />{c.name}
-            <span className="tnum" style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 12 }}>{activeIn(data.quests, c.key, ui.hiddenCamps).length}</span>
+            <span className="tnum" style={{ fontFamily: 'var(--font-body)', fontWeight: 400, fontSize: 12 }}>{activeIn(data.quests, c.key, hidden).length}</span>
           </button>
         ))}
       </div>

@@ -224,6 +224,9 @@ function useStoreValue() {
       createQuest(q: Omit<Quest, 'id'>) {
         const cur = d();
         apply(settleCampaigns({ ...cur, quests: [...cur.quests, { ...q, id: nextId(cur.quests) }] }, today));
+        // A new quest should not vanish because its campaign is filtered out of the board.
+        const camp = q.campaign || '';
+        setUi((u) => (u.hiddenCamps.includes(camp) ? { hiddenCamps: u.hiddenCamps.filter((x) => x !== camp) } : {}));
         showToast('Quest pinned', 'Added to ' + (q.campaign && cur.camps[q.campaign] ? cur.camps[q.campaign].name : QM[q.quad].name));
       },
       toggleStep(id: number, stepId: number) {
