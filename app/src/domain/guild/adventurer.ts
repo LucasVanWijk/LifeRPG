@@ -4,6 +4,7 @@ import {
   ATTR_MAX, ATTRS, CLASS_IDS, CLASSES, DAYS_PER_SEASON, DAYS_PER_YEAR, MAX_LEVEL, NAMES, PHASE_MS, PHASE_NAMES, PHASES_PER_DAY, PHASES_PER_YEAR,
   pointsPerLevel, RACE_IDS, RACES, SEASON_NAMES, xpToNext,
 } from './content';
+import { itemRating } from './gear';
 import type { Rng } from './rng';
 import { hash, rng } from './rng';
 import type { Adventurer, GameMs } from './types';
@@ -44,16 +45,20 @@ export const role = (a: Pick<Adventurer, 'cls'>): Role => CLASSES[a.cls].role;
 export const ageYears = (a: Adventurer, phase: number) => Math.floor((phase - a.bornPhase) / PHASES_PER_YEAR);
 export const yearsLeft = (a: Adventurer, phase: number) => Math.max(0, Math.ceil((a.retirePhase - phase) / PHASES_PER_YEAR));
 export const isActive = (a: Adventurer) => a.state === 'active';
+export const isResident = (a: Adventurer) => a.state === 'retired' || a.state === 'child';
 export const isHome = (a: Adventurer) => a.state === 'active' && !a.awayOn;
 export const injured = (a: Adventurer, phase: number) => !!a.injury && a.injury.until > phase;
-export const canGoOut = (a: Adventurer, phase: number) => isHome(a) && !injured(a, phase);
+export const canGoOut = (a: Adventurer, phase: number) => (isHome(a) && !injured(a, phase)) || canRecall(a);
 
 /** Class-weighted attributes, 1–20. */
 export const weighted = (a: Pick<Adventurer, 'cls' | 'attrs'>) => ATTRS.reduce((n, k) => n + CLASSES[a.cls].weights[k] * a.attrs[k], 0);
-/** How much they bring to a check: level plus half their weighted attributes. */
-export const rating = (a: Pick<Adventurer, 'cls' | 'attrs' | 'level'>) => a.level + weighted(a) / 2;
+export const gearRating = (a: Pick<Adventurer, 'gear'>) => Object.values(a.gear).reduce((n, i) => n + (i ? itemRating(i) : 0), 0);
+/** How much they bring to a check: level, half their weighted attributes, and what they carry. */
+export const rating = (a: Pick<Adventurer, 'cls' | 'attrs' | 'level' | 'gear'>) => a.level + weighted(a) / 2 + gearRating(a);
 /** Rating shown to the player, rounded. */
-export const ratingShown = (a: Pick<Adventurer, 'cls' | 'attrs' | 'level'>) => Math.round(rating(a));
+export const ratingShown = (a: Pick<Adventurer, 'cls' | 'attrs' | 'level' | 'gear'>) => Math.round(rating(a));
+/** A retiree whose One Last Job is still unused. */
+export const canRecall = (a: Adventurer) => a.state === 'retired' && !a.recalled && !a.awayOn;
 
 /** Spread attribute points by class weight, never above the cap. */
 function spread(attrs: Record<Attr, number>, cls: ClassId, points: number, r: Rng) {
@@ -85,7 +90,7 @@ export function addXp(a: Adventurer, xp: number): number {
 const TALENT_WEIGHT = [15, 30, 30, 17, 8];
 const RACE_WEIGHT: Record<RaceId, number> = { human: 35, halfling: 25, dwarf: 20, elf: 20 };
 
-export interface RecruitOpts { cls?: ClassId; race?: RaceId; family?: string; level?: number }
+export interface RecruitOpts { cls?: ClassId; race?: RaceId; family?: string; level?: number; talent?: number }
 
 /** A new adventurer, as they walk into the tavern at `phase`. */
 export function makeAdventurer(r: Rng, id: string, phase: number, opts: RecruitOpts = {}): Adventurer {
@@ -95,7 +100,7 @@ export function makeAdventurer(r: Rng, id: string, phase: number, opts: RecruitO
   const age = r.int(R.age[0], R.age[1]);
   const frac = (age - R.age[0]) / (R.age[1] - R.age[0]);
   const career = Math.max(3, Math.min(15, Math.round(3 + 12 * (1 - frac)) + r.int(-1, 1)));
-  const talent = r.weighted([1, 2, 3, 4, 5], (t) => TALENT_WEIGHT[t - 1]);
+  const talent = opts.talent ?? r.weighted([1, 2, 3, 4, 5], (t) => TALENT_WEIGHT[t - 1]);
   const attrs = Object.fromEntries(ATTRS.map((k) => [k, Math.max(1, 4 + r.int(0, 3) + (R.mods[k] ?? 0))])) as Record<Attr, number>;
   attrs[CLASSES[cls].main] += 2;
   const level = opts.level ?? Math.min(7, 1 + Math.floor(frac * 5) + r.int(0, 1));
@@ -108,5 +113,6 @@ export function makeAdventurer(r: Rng, id: string, phase: number, opts: RecruitO
     level, xp: 0, talent, attrs, practice: { might: 0, finesse: 0, wits: 0, spirit: 0 },
     health: 100, fatigue: 0, injury: null, scars: [], purse: 0, duty: 'auto', state: 'active', awayOn: null,
     outings: 0, chapter: { quests: 0, habits: 0, campaigns: [], notable: [] }, traitIds: [],
+    gear: {}, autoBuy: true, staffAt: null, shared: {}, clears5: 0, liberated: 0,
   };
 }

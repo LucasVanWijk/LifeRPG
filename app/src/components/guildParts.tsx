@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Adventurer, Guild } from '../domain/guild/types';
-import { CLASSES, RACES } from '../domain/guild/content';
+import { BUILDINGS, CLASSES, RACES } from '../domain/guild/content';
 import { fullName, injured, ratingShown, realDuration } from '../domain/guild/adventurer';
 import { effectiveDuty } from '../domain/guild/engine';
 import { hash } from '../domain/guild/rng';
@@ -38,7 +38,13 @@ export const advSub = (a: Adventurer) => 'Level ' + a.level + ' ' + CLASSES[a.cl
 
 /** Where they are and what they're doing, in a few words. */
 export function status(g: Guild, a: Adventurer, phase: number, now: number): { text: string; tone: 'go' | 'rest' | 'bad' | 'away' | 'gone' } {
-  if (a.state === 'retired') return { text: 'Retired', tone: 'gone' };
+  if (a.state === 'passed') return { text: 'Passed away', tone: 'gone' };
+  if (a.state === 'child') return { text: 'Growing up', tone: 'gone' };
+  if (a.state === 'retired') {
+    const post = a.staffAt ? g.buildings.find((b) => b.id === a.staffAt) : undefined;
+    if (a.awayOn) { const o = g.outings.find((x) => x.id === a.awayOn); return { text: 'One last job' + (o ? ' · back in ' + realDuration(o.returnAt - now) : ''), tone: 'away' }; }
+    return { text: post ? 'Retired · works at the ' + BUILDINGS[post.type].name : 'Retired', tone: 'gone' };
+  }
   if (a.state === 'fallen') return { text: 'Fell' + (a.fellAt ? ' at ' + a.fellAt : ''), tone: 'gone' };
   if (a.state === 'left') return { text: 'Left the guild', tone: 'gone' };
   if (a.awayOn) {
@@ -46,7 +52,8 @@ export function status(g: Guild, a: Adventurer, phase: number, now: number): { t
     return { text: o ? o.offer.name + ' · back in ' + realDuration(o.returnAt - now) : 'Away', tone: 'away' };
   }
   if (injured(a, phase)) return { text: 'Injured · ' + Math.ceil((a.injury!.until - phase) / 3) + ' days', tone: 'bad' };
-  return effectiveDuty(a, phase) === 'rest' ? { text: 'Resting', tone: 'rest' } : { text: 'Training', tone: 'go' };
+  const duty = effectiveDuty(a, phase);
+  return duty === 'rest' ? { text: 'Resting', tone: 'rest' } : { text: { train: 'Training', labour: 'Labouring', patrol: 'On patrol' }[duty], tone: 'go' };
 }
 const TONE = { go: 'var(--q-moss)', rest: 'var(--color-accent-700)', bad: 'var(--q-wax)', away: 'oklch(0.45 0.08 255)', gone: 'var(--color-accent-700)' };
 

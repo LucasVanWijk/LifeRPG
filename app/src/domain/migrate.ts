@@ -2,6 +2,7 @@ import { addDays } from './dates';
 import type { Data, Every, Habit, Quest } from './model';
 import { emptyData } from './model';
 import { periodOf } from './logic';
+import { upgradeGuild } from './guild/engine';
 
 type LegacyQuest = Quest & { recur?: { every: 'daily' | 'weekly' | 'monthly'; streak: number } | null; lastDone?: string | null; prevDue?: string | null };
 
@@ -25,7 +26,7 @@ export function migrate(raw: unknown, today: string): Data | null {
     ...d,
     version: 3,
     profile: version === 3 ? { ...d.profile } : { reviewedWeek: hero?.reviewedWeek },
-    guild: version === 3 ? d.guild ?? null : null,
+    guild: version === 3 && d.guild ? upgradeGuild(d.guild) : null,
     habits: Array.isArray(d.habits) ? d.habits : [],
     camps: d.camps ?? {},
     companions: d.companions ?? [],

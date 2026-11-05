@@ -1,6 +1,6 @@
 # Guild Redesign
 
-Status: design draft, revision 2. **Stage 1 (guild core) is built**; see section 15 for what stands in for the town until stage 2.
+Status: **stages 1 to 4 are built** (guild core, town, depth, legacy and realm). What is left is stage 5 (the paper map, traits, backstories, events, the desktop layout). Section 17 lists where the build differs from this design.
 Replaces: the single Hero (level, title, skill points) and the idle Expedition game (fishing, mining, smithing, dungeons).
 Keeps: the Quest board, Habits, Campaigns, Weekly review, Calendar, Glossary, Drive sync.
 
@@ -660,3 +660,21 @@ The bottom tab **Adventure** becomes **Guild**, with a top segmented control:
 - Exact text for traits, backstories and events.
 - Final balance numbers. Everything here is a starting point for the tests in 13.4.
 - Art style for crests, portraits and the paper map. Everything is drawn in code like the current SVG icons.
+
+## 17. As built (stages 2 to 4)
+
+Where the build settled differently from the numbers above, or where the design was silent:
+
+- **Time and pacing.** A bot that plays the real engine (5 quests and 3 habits a day, a visit every 6 real hours, sensible builds) reaches Hall levels 2 to 10 on about days 4, 15, 40, 58, 110, 148, 224, 289 and 416. That is inside the ±25% pacing test against the targets in 8.3 (level 10 is a little late). Real life supplies about 57% of the guild's gold through Hall 6.
+- **Hall costs** were raised after the bot showed gold was not binding late on. The final table is `HALL_STEPS` in `content.ts` (level 10: 9,000 gold, 4,800 wood and stone, 1,400 iron, 2,400 renown). Every step still fits the Warehouse you can have a level earlier.
+- **Renown** per full expedition clear is `tier²` (1, 4, 9, 16, 25), an odyssey `10 × tier`, a freed region 100, and a finished campaign 5, 10 or 20.
+- **Retirees pile up.** With careers of 3 to 15 years, a roster of 12 produces about 40 retirees a year, living 10 to 80 years afterwards. By day 380 the bot housed 68. Housing, food and order demand is therefore the real late-game limit, which is the point of the Homes, Farms and Watch House, but it means Homes and Farms must be raised, not just added.
+- **Death rates.** Measured over 300 simulated careers with conditions in play: careful play loses 31%, Bold play 67% (Bold's death multiplier is ×2.2). Stacking two risks loses far more.
+- **Conditions** cost 1.2 on every non-rest check for each one nobody in the party counters (by class, race or a trinket). Evening departures always add Darkness.
+- **Odds** are exact for outings of up to 8 stages. Odysseys use 20,000 fixed seeded runs. Hidden conditions turn the odds into a range from "none of them matter" to "all of them are uncountered".
+- **Tiers** open at Guild Hall 1, 2, 4, 6 and 8, so a new guild only sees tier 1. Expeditions out at once: `1 + floor(Hall / 2)` plus one per freed region.
+- **Gear** is Common to Legendary with 8 to 50 outings of wear, melted into iron when it breaks. Potions (heal, cure, ward) spoil after one game year. Adventurers with gold buy potions and better gear from the Merchant House themselves.
+- **Legacy.** Retirees keep their best piece as an heirloom, work in buildings (+1% per level, doubled for the right class), may take one last job, and pass away. Couples form after 6 shared outings, retired couples have children who arrive at the Tavern for free when they come of age, and legends without children may send a relative. Every 10 years an era closes. Habit streaks of 7, 30 and 100 days (4, 12, 40 weeks) forge heirlooms, and finished campaigns raise monuments.
+- **Realm.** The Cartographer opens one region per level. Each has a lair odyssey (4 to 6 legs, a Tank and a Healer needed). Clearing its boss frees the region: shorter, richer expeditions there, an extra expedition slot, 100 renown and an obelisk. Every death at level 5 or above leaves a witness stone that lowers the death chance there, and a recovery expedition brings them home for a tomb.
+- **Holiday mode** stops the clock from Settings.
+- **Still to do:** the paper map and town scene, traits, backstories and events, two-role classes, the desktop layout, generated portraits beyond the crests.

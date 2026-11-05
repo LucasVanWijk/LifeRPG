@@ -1,7 +1,8 @@
 // Words for the guild: chronicle lines and expedition reports, written when shown (saves keep only ids and numbers).
 import type { IconName } from '../../components/Icon';
 import type { StageKind } from './content';
-import { CLASSES, PHASES_PER_YEAR } from './content';
+import type { BuildingId, RegionId } from './content';
+import { BUILDINGS, CLASSES, hallRank, PHASES_PER_YEAR, REGIONS } from './content';
 import { fullName } from './adventurer';
 import { byId } from './engine';
 import { hash } from './rng';
@@ -17,15 +18,18 @@ export function names(list: string[]) {
 }
 export const partyNames = (g: Guild, o: Outing) => names(o.party.map((id) => firstOf(g, id)));
 
-export function entryText(g: Guild, e: Entry): { text: string; icon: IconName; tone: 'good' | 'bad' | 'plain' } {
+export type EntryView = { text: string; icon: IconName; tone: 'good' | 'bad' | 'plain' };
+
+export function entryText(g: Guild, e: Entry): EntryView {
   const who = nameOf(g, e.a);
   const o = e.o ? g.outings.find((x) => x.id === e.o) : undefined;
+  const b = e.t ? BUILDINGS[e.t as BuildingId]?.name : undefined;
   switch (e.k) {
     case 'found': return { text: e.t + ' was founded in ' + g.town + '.', icon: 'flag', tone: 'good' };
     case 'hire': return { text: who + ' joined the guild' + (e.v ? ' for ' + e.v + 'g' : '') + '.', icon: 'users', tone: 'plain' };
     case 'leave': return { text: who + ' left the guild.', icon: 'users', tone: 'plain' };
     case 'back': return { text: (o ? partyNames(g, o) + ' came back from ' + o.offer.name : 'A party came back') + (e.v ? ' with ' + e.v + ' gold' : '') + '.', icon: 'compass', tone: 'plain' };
-    case 'fell': return { text: who + ' fell' + (o ? ' at ' + o.offer.name : '') + '. The guild was paid ' + e.v + 'g insurance.', icon: 'skull', tone: 'bad' };
+    case 'fell': return { text: who + ' fell' + (o ? ' at ' + o.offer.name : '') + (e.v ? '. The guild was paid ' + e.v + 'g insurance' : '') + '.', icon: 'skull', tone: 'bad' };
     case 'hurt': return { text: who + ' came back with ' + e.t + ' (' + e.v + (e.v === 1 ? ' day' : ' days') + ').', icon: 'heart', tone: 'bad' };
     case 'scar': return { text: who + ' will carry it for good: ' + (e.t ?? '').toLowerCase() + '.', icon: 'alert', tone: 'bad' };
     case 'retire': {
@@ -37,6 +41,25 @@ export function entryText(g: Guild, e: Entry): { text: string; icon: IconName; t
     case 'champion': return { text: who + ' became Champion.', icon: 'crown', tone: 'good' };
     case 'notice': return { text: 'A notice went up at the tavern for a ' + (CLASSES[e.t as keyof typeof CLASSES]?.name ?? 'recruit') + '.', icon: 'scroll', tone: 'plain' };
     case 'year': return { text: 'Year ' + e.v + ' began.', icon: 'sun', tone: 'plain' };
+    case 'season': return { text: ['Spring', 'Summer', 'Autumn', 'Winter'][e.v ?? 0] + ' came to ' + g.town + '.', icon: 'sun', tone: 'plain' };
+    case 'built': return { text: 'A ' + (b ?? 'building') + ' was finished.', icon: 'hammer', tone: 'good' };
+    case 'upgraded': return { text: 'The ' + (b ?? 'building') + ' reached level ' + e.v + '.', icon: 'hammer', tone: 'good' };
+    case 'hall': return { text: 'The Guild Hall reached level ' + e.v + ' (' + hallRank(e.v ?? 1) + ' rank).', icon: 'crown', tone: 'good' };
+    case 'demolish': return { text: 'The ' + (b ?? 'building') + ' was pulled down.', icon: 'hammer', tone: 'plain' };
+    case 'broke': return { text: who + '’s ' + e.t + ' broke and was melted down.', icon: 'alert', tone: 'plain' };
+    case 'forged': return { text: 'The Blacksmith forged ' + e.t + '.', icon: 'hammer', tone: 'plain' };
+    case 'pair': return { text: who + ' and ' + nameOf(g, e.b) + ' became a couple.', icon: 'heart', tone: 'good' };
+    case 'birth': return { text: nameOf(g, e.a) + ' was born to ' + nameOf(g, e.b) + '.', icon: 'cake', tone: 'good' };
+    case 'adult': return { text: who + ' came of age and walked into the tavern.', icon: 'users', tone: 'good' };
+    case 'pass': return { text: who + ' passed away peacefully.', icon: 'feather', tone: 'plain' };
+    case 'kin': return { text: 'A relative of ' + who + ' turned up at the tavern: ' + nameOf(g, e.b) + '.', icon: 'users', tone: 'good' };
+    case 'era': return { text: 'An era ended. They will call it the Age of ' + who + '.', icon: 'trophy', tone: 'good' };
+    case 'liberated': return { text: (REGIONS[e.t as RegionId]?.name ?? 'A region') + ' was freed. The guild gained an outpost.', icon: 'flag', tone: 'good' };
+    case 'monument': return { text: 'A monument to “' + e.t + '” was raised in the Garden of Valor.', icon: 'flag', tone: 'good' };
+    case 'heirloom': return { text: e.a ? who + '’s ' + e.t + ' was kept as an heirloom.' : 'A new heirloom was forged: ' + e.t + '.', icon: 'star', tone: 'good' };
+    case 'tomb': return { text: who + ' was brought home and laid to rest.', icon: 'skull', tone: 'good' };
+    case 'legend': return { text: who + ' is remembered as a legend.', icon: 'trophy', tone: 'good' };
+    case 'region': return { text: (REGIONS[e.t as RegionId]?.name ?? 'A region') + ' was charted.', icon: 'map', tone: 'good' };
   }
 }
 
@@ -90,7 +113,7 @@ export function stageLines(g: Guild, o: Outing, i: number): string[] {
   if (st.saved) {
     const x = firstOf(g, st.saved.id);
     const healer = o.party.find((id) => byId(g, id) && CLASSES[byId(g, id)!.cls].role === 'healer' && id !== st.died);
-    lines.push(st.saved.by === 'healer' ? firstOf(g, healer) + ' kept ' + x + ' alive.' : st.saved.by === 'luck' ? x + ' should have died there, and somehow didn’t.' : x + ' was struck down, but pulled through.');
+    lines.push(st.saved.by === 'healer' ? firstOf(g, healer) + ' kept ' + x + ' alive.' : st.saved.by === 'luck' ? x + ' should have died there, and somehow didn’t.' : st.saved.by === 'ward' ? x + '’s ward flared and took the blow.' : x + ' was struck down, but pulled through.');
   }
   if (st.died) lines.push(firstOf(g, st.died) + ' fell here.');
   const hurt = st.injured.filter((id) => id !== st.saved?.id);

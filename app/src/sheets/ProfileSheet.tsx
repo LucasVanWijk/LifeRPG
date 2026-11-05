@@ -134,6 +134,14 @@ export function ProfileSheet() {
 
       <InstallSection />
 
+      {g && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <h3 style={{ fontSize: 22 }}>Holiday mode</h3>
+          <p className="muted" style={{ margin: 0, fontSize: 13 }}>Stops the guild's clock, expeditions included, until you turn it off. Real-life quests and habits still pay your Champion.</p>
+          <button className="btn btn-secondary" onClick={() => actions.holiday(g.holiday === null)} style={{ minHeight: 46 }}>{g.holiday === null ? 'Start a holiday' : 'End the holiday'}</button>
+        </div>
+      )}
+
       {g && new URLSearchParams(window.location.search).has('dev') && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <h3 style={{ fontSize: 22 }}>Time skip (testing)</h3>

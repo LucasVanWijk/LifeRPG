@@ -1,10 +1,10 @@
 // Career simulation used by the balance test: how many adventurers die before they retire under a play style.
 import type { ClassId, Stance } from './content';
-import { CLASSES, DAYS_PER_YEAR, stageCount, tierLevels } from './content';
+import { CLASSES, DAYS_PER_YEAR, REGION_ORDER, stageCount, tierLevels } from './content';
 import { makeAdventurer } from './adventurer';
 import { makeExpedition } from './board';
 import type { Ctx } from './resolve';
-import { resolve, snapshot } from './resolve';
+import { NEUTRAL, resolve, snapshot } from './resolve';
 import { rngFor } from './rng';
 
 export interface Style {
@@ -37,11 +37,11 @@ export function deathShare(style: Style, careers = 400, seed = 7): number {
       const [lo, hi] = tierLevels(tier);
       const level = r.int(lo, hi);
       const party = classes.map((cls, k) => makeAdventurer(rngFor(seed, c, i, k), 'p' + k, 0, { cls, level }));
-      const offer = makeExpedition(rngFor(seed, 'offer', c, i), 'o', 0, 5);
+      const offer = makeExpedition(rngFor(seed, 'offer', c, i), 'o', 0, { maxTier: 5, regions: REGION_ORDER });
       offer.tier = Math.min(5, tier + style.overTier);
       offer.stages = offer.stages.slice(0, stageCount(offer.tier));
       while (offer.stages.length < stageCount(offer.tier)) offer.stages.unshift({ kind: 'combat', title: '' });
-      const ctx: Ctx = { offer, stance: style.stance, charter: 'martial', members: party.map(snapshot) };
+      const ctx: Ctx = { ...NEUTRAL, offer, stance: style.stance, charter: 'martial', members: party.map((a) => snapshot(a)), conditions: offer.conditions.map((x) => x.id) };
       const res = resolve(ctx, rngFor(seed, 'run', c, i));
       if (res.members[party[hero].id].died) { died++; break; }
     }

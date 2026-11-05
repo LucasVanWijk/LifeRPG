@@ -1,15 +1,15 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { CharterId, Stance } from '../domain/guild/content';
+import type { CharterId, Slot, Stance } from '../domain/guild/content';
 import {
-  ATTR_NAME, ATTRS, CHARTERS, CLASSES, DAYS_PER_YEAR, GUILD_NAMES, OFFER_KIND, PRACTICE_PER_POINT, RACES, ROLE_NAME, STAGE_ICON, STAGE_NAME, STANCES,
-  STOCK_NAME, TOWN_NAMES, xpToNext,
+  ATTR_NAME, ATTRS, BUILDINGS, CHARTERS, CLASSES, CONDITIONS, DAYS_PER_YEAR, GRADES, GUILD_NAMES, OFFER_KIND, PRACTICE_PER_POINT, RACES, REGIONS, ROLE_NAME, SLOT_NAME, SLOTS, STAGE_ICON,
+  STAGE_NAME, STANCES, STOCK_NAME, TOWN_NAMES, xpToNext,
 } from '../domain/guild/content';
 import { ageYears, canGoOut, fullName, injured, phaseAt, rating, ratingShown, realDuration, role, shortClock, yearsLeft } from '../domain/guild/adventurer';
-import { byId, ctxFor, found, sendProblem } from '../domain/guild/engine';
-import { odds } from '../domain/guild/resolve';
+import { byId, ctxFor, departure, found, sendProblem } from '../domain/guild/engine';
+import { oddsRange } from '../domain/guild/resolve';
 import { hash } from '../domain/guild/rng';
 import { entryText, names, partyNames, stageLines } from '../domain/guild/text';
-import type { Duty, Entry, Loot } from '../domain/guild/types';
+import type { Adventurer, Duty, Entry, Guild, Item, Loot } from '../domain/guild/types';
 import { Crest } from '../components/Crest';
 import { Icon } from '../components/Icon';
 import { CloseBtn, Empty, Seg, Sheet } from '../components/common';
@@ -19,9 +19,9 @@ import { useImport } from './ProfileSheet';
 import { useStore } from '../state/store';
 
 const pct = (p: number) => (p <= 0 ? '0%' : p < 0.001 ? '<0.1%' : p < 0.1 ? (p * 100).toFixed(1) + '%' : Math.round(p * 100) + '%');
-const lootText = (l: Loot) => [l.gold ? l.gold + ' gold' : '', ...(['wood', 'stone', 'iron', 'herbs'] as const).filter((k) => l[k]).map((k) => l[k] + ' ' + STOCK_NAME[k].toLowerCase())].filter(Boolean).join(', ') || 'nothing';
+const lootText = (l: Loot) => [l.gold ? l.gold + ' gold' : '', l.items?.length ? l.items.map((i) => i.name.toLowerCase()).join(', ') : '', ...(['wood', 'stone', 'iron', 'herbs'] as const).filter((k) => l[k]).map((k) => l[k] + ' ' + STOCK_NAME[k].toLowerCase())].filter(Boolean).join(', ') || 'nothing';
 
-function Head({ title, onClose, children }: { title: string; onClose: () => void; children?: ReactNode }) {
+export function Head({ title, onClose, children }: { title: string; onClose: () => void; children?: ReactNode }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingTop: 6 }}>
       {children}
@@ -33,8 +33,49 @@ function Head({ title, onClose, children }: { title: string; onClose: () => void
 
 // ── Adventurer ───────────────────────────────────────────────
 
+function Gear({ g, a }: { g: Guild; a: Adventurer }) {
+  const { actions } = useStore();
+  const [open, setOpen] = useState<Slot | null>(null);
+  const home = a.state === 'active' && !a.awayOn;
+  const options = (slot: Slot): Item[] => [...g.armoury, ...g.heirlooms].filter((i) => i.slot === slot).sort((x, y) => y.grade - x.grade);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <h3 style={{ fontSize: 20 }}>Gear</h3>
+      {SLOTS.map((slot) => {
+        const i = a.gear[slot];
+        return (
+          <div key={slot} style={{ borderTop: '1px solid var(--q-rule)', padding: '6px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span className="label" style={{ width: 62 }}>{SLOT_NAME[slot]}</span>
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
+                {i ? <>{i.name} <span className="muted" style={{ fontSize: 12 }}>· {GRADES[i.grade]}{i.heirloom ? ' · heirloom' : ' · ' + i.wear + ' left'}{i.counters ? ' · counters ' + CONDITIONS[i.counters].name.toLowerCase() : ''}{i.owner === 'guild' ? ' · lent' : ''}</span></> : <span className="muted">nothing</span>}
+              </span>
+              {home && i && <button className="btn btn-ghost inked" onClick={() => actions.unequip(a.id, slot)} style={{ minHeight: 34, padding: '0 8px' }}>Take off</button>}
+              {home && <button className="btn btn-secondary" onClick={() => setOpen(open === slot ? null : slot)} aria-expanded={open === slot} style={{ minHeight: 34, padding: '0 10px' }}>Change</button>}
+            </div>
+            {open === slot && (
+              <div style={{ paddingTop: 6 }}>
+                {options(slot).map((o) => (
+                  <button key={o.id} className="opt-btn" onClick={() => { actions.equip(a.id, o.id); setOpen(null); }} style={{ width: '100%', marginTop: 4, minHeight: 40 }}>
+                    <span style={{ flex: 1, fontSize: 14 }}>{o.name} <span className="muted" style={{ fontSize: 12 }}>· {GRADES[o.grade]}{o.heirloom ? ' · heirloom' : ' · ' + o.wear + ' left'}{o.counters ? ' · counters ' + CONDITIONS[o.counters].name.toLowerCase() : ''}</span></span>
+                  </button>
+                ))}
+                {!options(slot).length && <Empty>Nothing on the racks for this slot.</Empty>}
+              </div>
+            )}
+          </div>
+        );
+      })}
+      <label style={{ display: 'flex', gap: 10, alignItems: 'center', paddingTop: 6, fontSize: 14 }}>
+        <input type="checkbox" checked={a.autoBuy} onChange={(e) => actions.setAutoBuy(a.id, e.target.checked)} />
+        <span>Spend their own gold on better gear and potions before an expedition</span>
+      </label>
+    </div>
+  );
+}
+
 export function AdventurerSheet({ id }: { id: string }) {
-  const { data, setUi, actions, today } = useStore();
+  const { data, setUi, actions } = useStore();
   const g = data.guild!;
   const now = useGameNow(g);
   const a = byId(g, id);
@@ -46,7 +87,11 @@ export function AdventurerSheet({ id }: { id: string }) {
   const st = status(g, a, phase, now);
   const bearing = Object.values(data.camps).filter((c) => c.bearerId === a.id && !c.completedOn).map((c) => c.name);
   const ch = a.chapter;
-  void today;
+  const partner = byId(g, a.partnerId);
+  const parents = (a.parentIds ?? []).map((x) => byId(g, x)).filter((x): x is Adventurer => !!x);
+  const kids = (a.childIds ?? []).map((x) => byId(g, x)).filter((x): x is Adventurer => !!x);
+  const years = a.endedPhase !== undefined ? Math.round(((a.endedPhase - a.joinedPhase) / (DAYS_PER_YEAR * 3)) * 10) / 10 : 0;
+  const post = a.staffAt ? g.buildings.find((b) => b.id === a.staffAt) : undefined;
   return (
     <Sheet onClose={close} label={fullName(a)}>
       <Head title={fullName(a)} onClose={close}><AdvCrest a={a} size={52} /></Head>
@@ -58,6 +103,19 @@ export function AdventurerSheet({ id }: { id: string }) {
         {live ? 'Age ' + ageYears(a, phase) + ' · sworn ' + yearsLeft(a, phase) + ' more ' + (yearsLeft(a, phase) === 1 ? 'year' : 'years') + ' · ' : ''}{st.text}.
         {' '}{RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}{a.race === 'halfling' && a.luckUsed ? ' (used)' : ''}. {CLASSES[a.cls].blurb}
       </p>
+      {!live && a.state !== 'child' && (
+        <div className="panel" style={{ padding: '10px 12px', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <span className="label">In memoriam</span>
+          <span>
+            {a.state === 'fallen' ? 'Fell at ' + (a.fellAt ?? 'a far place') + ' after ' + years + ' years' + (a.tomb ? '. They were brought home and have a tomb.' : a.level >= 5 ? '. A witness stone marks the place.' : '.')
+              : a.state === 'passed' ? 'Retired after ' + years + ' years and passed away peacefully.'
+              : a.state === 'retired' ? 'Retired after ' + years + ' years' + (post ? ' and works at the ' + BUILDINGS[post.type].name : '') + '.'
+              : 'Left the guild after ' + years + ' years.'}
+            {' '}{a.outings} outings, level {a.level}{a.clears5 ? ', ' + a.clears5 + ' tier 5 clears' : ''}{a.liberated ? ', freed a region' : ''}.
+          </span>
+          {a.state === 'fallen' && !a.tomb && !!a.lostGear?.length && <span className="muted" style={{ fontSize: 12 }}>Their gear is still out there. A recovery expedition on the board can bring it home.</span>}
+        </div>
+      )}
 
       {live && (
         <div className="two-col">
@@ -83,26 +141,30 @@ export function AdventurerSheet({ id }: { id: string }) {
           </div>
         ))}
       </div>
-      <p className="muted" style={{ margin: '-4px 0 0', fontSize: 12 }}>
+      {live && <p className="muted" style={{ margin: '-4px 0 0', fontSize: 12 }}>
         The thin bars are practice from real life: Crisis quests train Might, Main quests Wits, Errands Finesse, Side quests Spirit, and habits {a.first}'s main attribute. Every {PRACTICE_PER_POINT} XP adds a point.
-      </p>
+      </p>}
 
       {live && (
         <>
           <div className="two-col">
-            <div><span className="label">Health {a.health}</span><Bar value={a.health} color="var(--q-moss)" label="Health" /></div>
-            <div><span className="label">Fatigue {a.fatigue}</span><Bar value={a.fatigue} color="var(--color-accent-500)" label="Fatigue" /></div>
+            <div><span className="label">Health {Math.round(a.health)}</span><Bar value={a.health} color="var(--q-moss)" label="Health" /></div>
+            <div><span className="label">Fatigue {Math.round(a.fatigue)}</span><Bar value={a.fatigue} color="var(--color-accent-500)" label="Fatigue" /></div>
           </div>
           {injured(a, phase) && <p style={{ margin: 0, color: 'var(--q-wax)', fontSize: 14 }}>Recovering from {a.injury!.text}.</p>}
           {!a.awayOn && (
             <div className="field"><label>At home</label>
-              <Seg<Duty> name="duty" value={a.duty} onChange={(v) => actions.setDuty(a.id, v)} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }} optStyle={{ justifyContent: 'center', minHeight: 40 }}
-                options={[{ key: 'auto', label: 'Auto' }, { key: 'train', label: 'Train' }, { key: 'rest', label: 'Rest' }]} />
-              <span className="muted" style={{ fontSize: 12 }}>Auto rests when health is under 60 or fatigue over 40, and trains otherwise.</span>
+              <Seg<Duty> name="duty" value={a.duty} onChange={(v) => actions.setDuty(a.id, v)} style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)' }} optStyle={{ justifyContent: 'center', minHeight: 40, fontSize: 13, padding: '0 2px' }}
+                options={[{ key: 'auto', label: 'Auto' }, { key: 'train', label: 'Train' }, { key: 'rest', label: 'Rest' }, { key: 'labour', label: 'Labour' }, { key: 'patrol', label: 'Patrol' }]} />
+              <span className="muted" style={{ fontSize: 12 }}>
+                Auto rests when health is under 60 or fatigue over 40, and trains otherwise. Labour speeds up construction (+5%), Patrol gathers a little wood and stone and adds an expedition to the board. The wounded always rest.
+              </span>
             </div>
           )}
         </>
       )}
+
+      {(live || a.state === 'retired') && <Gear g={g} a={a} />}
 
       <div className="facts" style={{ gridTemplateColumns: 'repeat(4, 1fr)', borderTop: '1px solid var(--q-rule)', borderBottom: '1px solid var(--q-rule)' }}>
         {[['Rating', ratingShown(a)], ['Purse', a.purse + 'g'], ['Outings', a.outings], ['Joined', shortClock(a.joinedPhase * 3_600_000).split(',')[1]?.trim() ?? '']].map(([k, v]) => (
@@ -112,6 +174,20 @@ export function AdventurerSheet({ id }: { id: string }) {
         ))}
       </div>
       {a.scars.length > 0 && <p style={{ margin: 0, fontSize: 14 }}><strong>Scars:</strong> {a.scars.join(', ')}.</p>}
+      {(partner || parents.length > 0 || kids.length > 0) && (
+        <p style={{ margin: 0, fontSize: 14 }}>
+          {partner && <>Partner: <strong>{partner.first}</strong>. </>}
+          {parents.length > 0 && <>Child of {names(parents.map((x) => x.first))}. </>}
+          {kids.length > 0 && <>{kids.length === 1 ? 'Child' : 'Children'}: {names(kids.map((x) => x.first))}.</>}
+        </p>
+      )}
+      {a.state === 'retired' && (
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+          {a.staffAt ? 'Works at the ' + (post ? BUILDINGS[post.type].name : 'town') + '. ' : 'Posts to a building are made from the Town tab. '}
+          {a.recalled ? 'Has already taken their one last job.' : 'Can be called back once for an expedition or odyssey, at a small penalty.'}
+        </p>
+      )}
+      {a.staffAt && <button className="btn btn-secondary" onClick={() => actions.assignStaff(a.id, null)}>Stand down from their post</button>}
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         <h3 style={{ fontSize: 20 }}>{live ? 'Their chapter so far' : 'Their chapter'}</h3>
@@ -134,7 +210,7 @@ export function AdventurerSheet({ id }: { id: string }) {
 
       {live && !a.awayOn && (
         <button className="danger-btn" onClick={() => actions.confirm({
-          title: 'Let ' + a.first + ' go?', body: a.first + ' leaves the guild for good. Their purse (' + a.purse + 'g) stays with the guild.', confirmLabel: 'Let them go',
+          title: 'Let ' + a.first + ' go?', body: a.first + ' leaves the guild for good. Their purse (' + a.purse + 'g) and gear stay with the guild.', confirmLabel: 'Let them go',
           onConfirm: () => actions.release(a.id),
         })}>Let {a.first} go</button>
       )}
@@ -150,49 +226,69 @@ export function SendSheet({ id }: { id: string }) {
   const offer = g.board.find((o) => o.id === id);
   const phase = phaseAt(g.t);
   const close = () => setUi({ offerSheet: null });
-  const avail = g.adventurers.filter((a) => a.state === 'active');
-  const [party, setParty] = useState<string[]>(() => (offer ? avail.filter((a) => canGoOut(a, phase)).sort((x, y) => rating(y) - rating(x)).slice(0, offer.minParty).map((a) => a.id) : []));
+  const avail = g.adventurers.filter((a) => (a.state === 'active' || (a.state === 'retired' && offer?.scale !== 'odd' && !a.recalled)) && !a.awayOn);
+  const [party, setParty] = useState<string[]>(() => (offer ? avail.filter((a) => a.state === 'active' && canGoOut(a, phase)).sort((x, y) => rating(y) - rating(x)).slice(0, offer.minParty).map((a) => a.id) : []));
   const [stance, setStance] = useState<Stance>('steady');
   const problem = offer ? sendProblem(g, offer, party) : 'Gone';
-  const o = useMemo(() => (offer && party.length && party.every((x) => byId(g, x)) ? odds(ctxFor(g, offer, party, stance)) : null), [g, offer, party, stance]);
+  const calc = useMemo(() => {
+    if (!offer || !party.length || !party.every((x) => byId(g, x))) return null;
+    const { ctx, hidden } = ctxFor(g, offer, party, stance);
+    return { ctx, hidden, ...oddsRange(ctx, hidden) };
+  }, [g, offer, party, stance]);
   if (!offer) return null;
+  const o = calc ? (calc.hidden ? calc.hi : calc.lo) : null;
+  const lo = calc?.lo;
   const toggle = (aid: string) => setParty((p) => (p.includes(aid) ? p.filter((x) => x !== aid) : p.length >= offer.maxParty ? p : [...p, aid]));
-  const deathAvg = o ? party.reduce((n, x) => n + o.death[x], 0) / Math.max(1, party.length) : 0;
+  const rangePct = (a: number, b: number) => (calc && calc.hidden && Math.abs(a - b) >= 0.0005 ? pct(Math.min(a, b)) + '–' + pct(Math.max(a, b)) : pct(Math.max(a, b)));
+  const deathOf = (x: Record<string, number>, ids: string[]) => ids.reduce((n, k) => n + (x[k] ?? 0), 0) / Math.max(1, ids.length);
+  const deathAvg = o && lo ? Math.max(deathOf(o.death, party), deathOf(lo.death, party)) : 0;
   const yearsAvg = party.reduce((n, x) => n + yearsLeft(byId(g, x)!, phase), 0) / Math.max(1, party.length);
   const outlook = 1 - Math.pow(1 - deathAvg, yearsAvg * (DAYS_PER_YEAR / 8) * 1.5);
+  const dep = departure(g, offer);
+  const members = calc?.ctx.members ?? [];
+  const countered = (c: string) => members.some((m) => m.counters.includes(c as never));
   return (
     <Sheet onClose={close} label={offer.name}>
       <Head title={offer.name} onClose={close}>
-        <span className="seal" style={{ width: 40, height: 40, flex: 'none' }}><Icon n={offer.scale === 'odd' ? 'scroll' : OFFER_KIND[offer.kind].icon} size={18} /></span>
+        <span className="seal" style={{ width: 40, height: 40, flex: 'none' }}><Icon n={offer.scale === 'odd' ? 'scroll' : offer.scale === 'odyssey' ? 'compass' : OFFER_KIND[offer.kind].icon} size={18} /></span>
       </Head>
-      <OfferMeta o={offer} />
-      {offer.scale === 'expedition' && (
+      <OfferMeta o={offer} g={g} />
+      {offer.scale !== 'odd' && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{REGIONS[offer.region].blurb} Setting out in the {dep.fx.name.toLowerCase()}: {dep.fx.text.toLowerCase()}{g.regions[offer.region].liberated ? ' This region is free, so trips here are shorter and richer.' : ''}</p>}
+      {offer.scale !== 'odd' && (
         <ol className="battle-log" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
-          {offer.stages.map((s, i) => <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Icon n={STAGE_ICON[s.kind]} size={13} /><span><strong>{STAGE_NAME[s.kind]}</strong> · {s.title}</span></li>)}
+          {offer.stages.map((st, i) => <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Icon n={STAGE_ICON[st.kind]} size={13} /><span><strong>{STAGE_NAME[st.kind]}</strong> · {st.title}</span></li>)}
         </ol>
+      )}
+      {calc && calc.ctx.conditions.length > 0 && (
+        <p style={{ margin: 0, fontSize: 13 }}>
+          {calc.ctx.conditions.map((c, i) => c === 'unknown' ? null : (
+            <span key={i} style={{ marginRight: 12, color: countered(c) ? 'var(--q-moss)' : 'var(--q-wax)' }}>{CONDITIONS[c].name}: {countered(c) ? 'countered' : 'not countered'}</span>
+          ))}
+          {calc.hidden > 0 && <span className="muted">+ {calc.hidden} hidden</span>}
+        </p>
       )}
 
       <div className="field">
         <label>Party · {party.length} of {offer.maxParty}</label>
         <div className="choice-list">
-        {avail.map((a) => {
-          const free = canGoOut(a, phase), on = party.includes(a.id);
-          return (
-            <button key={a.id} className="opt-btn" aria-pressed={on} disabled={!free} onClick={() => toggle(a.id)} style={{ gap: 10, opacity: free ? 1 : 0.5 }}>
-              <span className={'checkbox' + (on ? ' on' : '')} style={{ width: 20, height: 20 }}>{on && <Icon n="check" size={13} stroke={2.4} />}</span>
-              <AdvCrest a={a} size={26} />
-              <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-                <span className="heading" style={{ fontSize: 16 }}>{a.first}{g.championId === a.id ? ' ♛' : ''}</span>
-                <span className="muted" style={{ fontSize: 12 }}>{advSub(a)} · {free ? 'health ' + a.health + ', fatigue ' + a.fatigue : status(g, a, phase, g.t).text}</span>
-              </span>
-              <span className="heading tnum" style={{ fontSize: 17 }}>{ratingShown(a)}</span>
-            </button>
-          );
-        })}
+          {avail.map((a) => {
+            const free = canGoOut(a, phase), on = party.includes(a.id);
+            return (
+              <button key={a.id} className="opt-btn" aria-pressed={on} disabled={!free} onClick={() => toggle(a.id)} style={{ gap: 10, opacity: free ? 1 : 0.5 }}>
+                <span className={'checkbox' + (on ? ' on' : '')} style={{ width: 20, height: 20 }}>{on && <Icon n="check" size={13} stroke={2.4} />}</span>
+                <AdvCrest a={a} size={26} />
+                <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+                  <span className="heading" style={{ fontSize: 16 }}>{a.first}{g.championId === a.id ? ' ♛' : ''}{a.state === 'retired' ? ' · one last job' : ''}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{advSub(a)} · {free ? 'health ' + Math.round(a.health) + ', fatigue ' + Math.round(a.fatigue) : status(g, a, phase, g.t).text}</span>
+                </span>
+                <span className="heading tnum" style={{ fontSize: 17 }}>{ratingShown(a)}</span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
-      {offer.scale === 'expedition' && (
+      {offer.scale !== 'odd' && (
         <div className="field"><label>Stance</label>
           <Seg<Stance> name="stance" value={stance} onChange={setStance} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }} optStyle={{ justifyContent: 'center', minHeight: 40 }}
             options={(['cautious', 'steady', 'bold'] as Stance[]).map((k) => ({ key: k, label: STANCES[k].name }))} />
@@ -200,26 +296,27 @@ export function SendSheet({ id }: { id: string }) {
         </div>
       )}
 
-      {o && (
+      {o && lo && (
         <div className="panel" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <span className="label">The odds</span>
+          <span className="label">The odds{calc!.hidden > 0 ? ' · a range, because something is hidden' : ''}</span>
           <div className="tnum" style={{ fontSize: 14 }}>
-            {offer.scale === 'expedition' ? <>Clean run {pct(o.full)} · turn back {pct(o.turnBack)} · someone dies {pct(o.anyDeath)}</> : <>Goes well {pct(o.full)}</>}
+            {offer.scale !== 'odd' ? <>Clean run {rangePct(lo.full, o.full)} · turn back {rangePct(lo.turnBack, o.turnBack)} · someone dies {rangePct(lo.anyDeath, o.anyDeath)}</> : <>Goes well {rangePct(lo.full, o.full)}</>}
           </div>
           <div className="tnum" style={{ fontSize: 14 }}>
-            Loot about {lootText(o.loot)}{o.goldHigh > o.goldLow ? ' (gold ' + o.goldLow + '–' + o.goldHigh + ')' : ''} · about {o.xp} XP each
+            Loot about {lootText(lo.loot)}{lo.goldHigh > lo.goldLow ? ' (gold ' + lo.goldLow + '–' + lo.goldHigh + ')' : ''} · about {lo.xp} XP each
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {party.map((x) => (
               <div key={x} className="tnum" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, padding: '3px 0', borderTop: '1px solid var(--q-rule)' }}>
                 <span>{byId(g, x)!.first}</span>
-                <span>injury {pct(o.injury[x])} · <span style={{ color: o.death[x] > 0.01 ? 'var(--q-wax)' : undefined }}>death {pct(o.death[x])}</span></span>
+                <span>injury {rangePct(lo.injury[x], o.injury[x])} · <span style={{ color: Math.max(o.death[x], lo.death[x]) > 0.01 ? 'var(--q-wax)' : undefined }}>death {rangePct(lo.death[x], o.death[x])}</span></span>
               </div>
             ))}
           </div>
-          {deathAvg > 0 && offer.scale === 'expedition' && (
+          {deathAvg > 0 && offer.scale !== 'odd' && (
             <span className="muted" style={{ fontSize: 12 }}>If they went out like this every time, about {Math.round(outlook * 10)} in 10 would not live to retire.</span>
           )}
+          {offer.scale !== 'odd' && <span className="muted" style={{ fontSize: 12 }}>Gear is lent from the racks, and adventurers with gold buy potions and better gear themselves.</span>}
         </div>
       )}
 
@@ -278,6 +375,9 @@ export function ReportSheet({ id }: { id: string }) {
           <span>{lootText(o.result.loot)}{o.result.chest ? ' (the chest held ' + lootText(o.result.chest) + ')' : ''}</span>
           <span>{Object.entries(o.result.members).filter(([, m]) => !m.died).map(([k, m]) => byId(g, k)!.first + ' +' + m.xp + ' XP').join(' · ') || 'Nobody came back.'}</span>
           {injuredBack.map(([k, m]) => <span key={k} style={{ color: 'var(--q-wax)' }}>{byId(g, k)!.first}: {m.injury!.text}, {m.injury!.days} days{m.scar ? '. A scar for life: ' + m.scar.toLowerCase() : ''}.</span>)}
+          {o.potions && Object.values(o.potions).some((x) => x.length) && <span className="muted">Potions drunk: {Object.entries(o.potions).filter(([, x]) => x.length).map(([k, x]) => byId(g, k)!.first + ' ' + x.join(', ')).join(' · ')}.</span>}
+          {o.offer.recover && o.done && byId(g, o.offer.recover)?.tomb && <span style={{ color: 'var(--q-moss)' }}>{byId(g, o.offer.recover)!.first} was brought home and laid to rest.</span>}
+          {o.offer.scale === 'odyssey' && g.regions[o.offer.region].liberated && o.done && <span style={{ color: 'var(--q-moss)', fontWeight: 600 }}>{REGIONS[o.offer.region].name} is free. The guild has an outpost there.</span>}
           {fell.length > 0 && <span style={{ color: 'var(--q-wax)', fontWeight: 600 }}>{names(fell)} did not come back.</span>}
         </div>
       )}

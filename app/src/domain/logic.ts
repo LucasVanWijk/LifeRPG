@@ -1,8 +1,8 @@
 import { addDays, nextAnnual, parseDay } from './dates';
 import type { Data, Every, Habit, Quest, Status } from './model';
-import { habitReward, reward, streakText } from './model';
+import { campSize, habitReward, reward, streakText } from './model';
 import type { Pay } from './guild/engine';
-import { payReal, refund } from './guild/engine';
+import { awardStreak, payReal, refund } from './guild/engine';
 import { ATTR_NAME, QUAD_ATTR } from './guild/content';
 
 /** undo: the toast offers to reverse the action that produced it. */
@@ -49,7 +49,7 @@ export function settleCampaigns(data: Data, today: string): Outcome {
     const d = out.data;
     if (complete && !c.completedOn) {
       const paid = pay({ ...d, camps: { ...d.camps, [key]: { ...c, completedOn: today } } },
-        { key: 'c:' + key, xp: c.xp, gold: c.gold, kind: 'campaign', title: c.name, date: today, attr: 'main', notable: false, bearerId: c.bearerId }, c.seal);
+        { key: 'c:' + key, xp: c.xp, gold: c.gold, kind: 'campaign', title: c.name, date: today, attr: 'main', notable: false, bearerId: c.bearerId, monument: { camp: key, size: campSize(c), seal: c.seal, icon: c.icon } }, c.seal);
       paid.toasts[0] = { ...paid.toasts[0], text: 'Campaign complete · ' + c.name, sub: paid.toasts[0].text + ' · ' + paid.toasts[0].sub };
       out = merge(out, paid);
     } else if (c.completedOn === today && qs.some((q) => q.status !== 'done')) {
@@ -175,9 +175,13 @@ export function toggleHabit(data: Data, id: number, today: string): Outcome {
   const next = { ...h, log: [...h.log, today] };
   const prog = habitProgress(next, today);
   const sub = prog.count < prog.target ? prog.count + ' of ' + prog.target + ' this week' : streakText(habitStreak(next, today), h.every);
-  return pay({ ...data, habits: setLog(next.log) }, {
+  const paid = pay({ ...data, habits: setLog(next.log) }, {
     key: 'h:' + id + ':' + today, xp: r.xp, gold: r.gold, kind: 'habit', title: h.title, date: today, attr: 'main', notable: false,
   }, h.title + ' · ' + sub);
+  // A streak milestone forges an heirloom, and it stays even if the streak breaks later.
+  const forged = paid.data.guild ? awardStreak(paid.data.guild, id, h.title, habitStreak(next, today), h.every) : null;
+  if (forged) return { ...paid, data: { ...paid.data, guild: forged }, toasts: [...paid.toasts, { text: 'Heirloom forged', sub: h.title + ' · see the Hall of Heroes' }] };
+  return paid;
 }
 
 // ── Chronicle ───────────────────────────────────────────────

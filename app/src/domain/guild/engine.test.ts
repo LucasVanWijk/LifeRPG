@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { PHASE_MS, PHASES_PER_YEAR, ROSTER_LIMIT, TUTORIAL_MINUTES } from './content';
+import { PHASE_MS, PHASES_PER_YEAR, TUTORIAL_MINUTES } from './content';
+import { rosterLimit } from './town';
 import { makeAdventurer, role } from './adventurer';
 import { makeExpedition } from './board';
 import { CAREFUL, deathShare, RISKY } from './balance';
@@ -25,7 +26,7 @@ describe('founding', () => {
     expect(g.board.filter((o) => o.tutorial)).toHaveLength(1);
     expect(g.board.filter((o) => o.scale === 'expedition')).toHaveLength(4);
     expect(g.board.filter((o) => o.scale === 'odd' && !o.tutorial).length).toBeGreaterThanOrEqual(2);
-    expect(g.recruits).toHaveLength(3);
+    expect(g.recruits).toHaveLength(2);
     expect(g.recruits.some((r) => ['tank', 'healer'].includes(role(r.adv)))).toBe(true);
   });
 });
@@ -106,10 +107,10 @@ describe('outings', () => {
 
   it('gives odds that match the rolled outcomes', () => {
     const g = fresh();
-    const offer = makeExpedition(rngFor(3, 'x'), 'o', 0, 2);
+    const offer = makeExpedition(rngFor(3, 'x'), 'o', 0, { maxTier: 2, regions: ['hearth'] });
     offer.tier = 2;
     const party = g.adventurers.map((a) => a.id);
-    const ctx = ctxFor(g, offer, party, 'bold');
+    const { ctx } = ctxFor(g, offer, party, 'bold');
     // Push them below their tier so deaths are common enough to measure.
     ctx.members = ctx.members.map((m) => ({ ...m, rating: m.rating - 6, health: 70 }));
     const o = odds(ctx);
@@ -146,7 +147,7 @@ describe('hiring', () => {
     expect(r.guild.gold).toBe(10_000 - first.fee);
     expect(r.guild.adventurers.at(-1)!.retirePhase).toBe(r.guild.adventurers.at(-1)!.joinedPhase + first.adv.career * PHASES_PER_YEAR);
     let full = r.guild;
-    while (full.adventurers.filter((a) => a.state === 'active').length < ROSTER_LIMIT) {
+    while (full.adventurers.filter((a) => a.state === 'active').length < rosterLimit(full)) {
       full = { ...full, adventurers: [...full.adventurers, makeAdventurer(rngFor(5, full.adventurers.length), 'z' + full.adventurers.length, 0)] };
     }
     const again = hire(full, full.recruits[0].adv.id);

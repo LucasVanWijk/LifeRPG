@@ -5,7 +5,7 @@ import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, sett
 import { migrate } from '../domain/migrate';
 import type { CalEvent, Campaign, Data, Habit, QuadKey, Quest, Status } from '../domain/model';
 import { emptyData, QM } from '../domain/model';
-import type { ClassId, Stance } from '../domain/guild/content';
+import type { BuildingId, ClassId, PotionKind, Slot, Stance } from '../domain/guild/content';
 import { AWAY_SUMMARY_MS } from '../domain/guild/content';
 import * as G from '../domain/guild/engine';
 import type { Duty, Entry, Guild } from '../domain/guild/types';
@@ -14,7 +14,7 @@ import type { Duty, Entry, Guild } from '../domain/guild/types';
 const STORAGE_KEY = 'questlog:v2';
 
 export type Tab = 'home' | 'quests' | 'calendar' | 'glossary' | 'guild';
-export type GuildTab = 'roster' | 'board' | 'tavern' | 'chronicle';
+export type GuildTab = 'roster' | 'board' | 'town' | 'tavern' | 'legacy';
 export type QuestView = 'board' | 'campaign' | 'habits';
 export type GlossaryCat = 'companions' | 'tomes' | 'codex';
 export type { Toast };
@@ -52,6 +52,8 @@ export interface Ui {
   advSheet: string | null;
   offerSheet: string | null;
   reportSheet: string | null;
+  /** A building's id (or 'hall'), or 'new' for the list of things to build. */
+  buildSheet: string | null;
   /** What happened while the app was closed. */
   away: Entry[] | null;
   confirm: Confirm | null;
@@ -108,10 +110,11 @@ function initialUi(today: string): Ui {
     weekOffset: 0,
     selDay: today,
     levelUp: null,
-    guildTab: pick('gtab', ['roster', 'board', 'tavern', 'chronicle'] as const, 'roster'),
+    guildTab: pick('gtab', ['roster', 'board', 'town', 'tavern', 'legacy'] as const, 'roster'),
     advSheet: null,
     offerSheet: null,
     reportSheet: null,
+    buildSheet: null,
     away: null,
     confirm: null,
     dragId: null,
@@ -389,6 +392,27 @@ function useStoreValue() {
       postNotice(cls: ClassId) { guildDo((g) => G.postNotice(g, cls), () => showToast('Notice posted', 'Someone will answer it at the next tavern day')); },
       send(offerId: string, party: string[], stance: Stance) {
         return guildDo((g) => G.send(g, offerId, party, stance), () => { setUi({ offerSheet: null }); showToast('They set out', 'Check the Roster to follow them'); });
+      },
+      // Town
+      build(type: BuildingId) { guildDo((g) => G.build(g, type), () => { setUi({ buildSheet: null }); showToast('Work begins', 'A crew has started on it'); }); },
+      upgrade(id: string) { guildDo((g) => G.upgrade(g, id), () => showToast('Work begins', 'A crew has started on it')); },
+      demolish(id: string) { guildDo((g) => G.demolish(g, id), () => setUi({ buildSheet: null })); },
+      assignStaff(advId: string, buildingId: string | null) { guildDo((g) => G.assignStaff(g, advId, buildingId)); },
+      sell(s: G.Sale) { guildDo((g) => G.sell(g, s), () => showToast('Sold', 'The Merchant House paid in gold')); },
+      buyMarket(id: string) { guildDo((g) => G.buyMarket(g, id), () => showToast('Bought', 'It is on the racks')); },
+      forge(slot: Slot, grade: number) { guildDo((g) => G.forge(g, slot, grade), () => showToast('Forged', 'It is on the racks')); },
+      reforge(id: string) { guildDo((g) => G.reforge(g, id), () => showToast('Reforged', 'As good as new')); },
+      salvage(id: string) { guildDo((g) => G.salvage(g, id)); },
+      lockItem(id: string) { const cur = d(); if (cur.guild) commit({ ...cur, guild: G.lockItem(cur.guild, id) }); },
+      brew(kind: PotionKind) { guildDo((g) => G.brew(g, kind), () => showToast('Brewed', 'It is on the shelf')); },
+      equip(advId: string, itemId: string) { guildDo((g) => G.equip(g, advId, itemId)); },
+      unequip(advId: string, slot: Slot) { guildDo((g) => G.unequip(g, advId, slot)); },
+      setAutoBuy(id: string, on: boolean) { const cur = d(); if (cur.guild) commit({ ...cur, guild: G.setAutoBuy(cur.guild, id, on) }); },
+      holiday(on: boolean) {
+        const cur = d();
+        if (!cur.guild) return;
+        commit({ ...cur, guild: G.setHoliday(cur.guild, on, Date.now()) });
+        showToast(on ? 'On holiday' : 'Welcome back', on ? 'The guild’s clock is stopped' : 'The guild’s clock is running again');
       },
       markRead(id: string) { const cur = d(); if (cur.guild) { const g = G.markRead(cur.guild, id); if (g !== cur.guild) commit({ ...cur, guild: g }); } },
       /** Testing aid (?dev): moves the guild's clock forward. */

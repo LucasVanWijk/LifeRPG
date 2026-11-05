@@ -5,6 +5,7 @@ import { Crest } from './components/Crest';
 import { champion } from './domain/guild/engine';
 import { CLASSES } from './domain/guild/content';
 import { AdventurerSheet, AwaySheet, Founding, ReportSheet, SendSheet } from './sheets/GuildSheets';
+import { BuildingSheet, NewBuildingSheet } from './sheets/TownSheets';
 import { Calendar } from './screens/Calendar';
 import { EventSheet } from './sheets/EventSheet';
 import { ReviewSheet } from './sheets/ReviewSheet';
@@ -30,7 +31,7 @@ export function App() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, away: null }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, away: null }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -113,7 +114,9 @@ export function App() {
       {g && ui.advSheet && <AdventurerSheet key={ui.advSheet} id={ui.advSheet} />}
       {g && ui.offerSheet && <SendSheet key={ui.offerSheet} id={ui.offerSheet} />}
       {g && ui.reportSheet && <ReportSheet key={ui.reportSheet} id={ui.reportSheet} />}
-      {g && ui.away && !ui.advSheet && !ui.offerSheet && !ui.reportSheet && <AwaySheet entries={ui.away} />}
+      {g && ui.buildSheet === 'new' && <NewBuildingSheet />}
+      {g && ui.buildSheet && ui.buildSheet !== 'new' && <BuildingSheet key={ui.buildSheet} id={ui.buildSheet} />}
+      {g && ui.away && !ui.advSheet && !ui.offerSheet && !ui.reportSheet && !ui.buildSheet && <AwaySheet entries={ui.away} />}
       {!g && <Founding />}
 
       {ui.confirm && (
