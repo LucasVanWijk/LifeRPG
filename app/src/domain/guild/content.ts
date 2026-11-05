@@ -48,15 +48,20 @@ export const RACE_IDS = Object.keys(RACES) as RaceId[];
 export type Role = 'tank' | 'healer' | 'dps' | 'scout';
 export const ROLE_NAME: Record<Role, string> = { tank: 'Tank', healer: 'Healer', dps: 'DPS', scout: 'Scout' };
 export const ROLES: Role[] = ['tank', 'healer', 'dps', 'scout'];
+/** What a dual-role class gives up in rating for being two things. */
+export const DUAL_ROLE_PENALTY = 0.8;
 
-export type ClassId = 'guardian' | 'cleric' | 'ranger' | 'arcanist' | 'blademaster' | 'rogue';
-export interface Cls { id: ClassId; name: string; role: Role; main: Attr; weights: Record<Attr, number>; icon: IconName; blurb: string }
+export type ClassId = 'guardian' | 'cleric' | 'ranger' | 'arcanist' | 'blademaster' | 'rogue' | 'paladin' | 'druid' | 'bard';
+export interface Cls { id: ClassId; name: string; role: Role; /** Two-role classes fill a second role at a small cost to rating. */ second?: Role; main: Attr; weights: Record<Attr, number>; icon: IconName; blurb: string }
 export const CLASSES: Record<ClassId, Cls> = {
   guardian: { id: 'guardian', name: 'Guardian', role: 'tank', main: 'might', weights: { might: 0.45, finesse: 0.1, wits: 0.1, spirit: 0.35 }, icon: 'shield', blurb: 'Holds the line, so the others are hurt less.' },
   cleric: { id: 'cleric', name: 'Cleric', role: 'healer', main: 'spirit', weights: { might: 0.1, finesse: 0.1, wits: 0.3, spirit: 0.5 }, icon: 'heart', blurb: 'Turns deaths into injuries and injuries into bruises.' },
   ranger: { id: 'ranger', name: 'Ranger', role: 'dps', main: 'finesse', weights: { might: 0.15, finesse: 0.5, wits: 0.25, spirit: 0.1 }, icon: 'feather', blurb: 'Bow and blade, best in the open.' },
   arcanist: { id: 'arcanist', name: 'Arcanist', role: 'dps', main: 'wits', weights: { might: 0.1, finesse: 0.1, wits: 0.55, spirit: 0.25 }, icon: 'sparkles', blurb: 'Spells that burn what steel cannot.' },
   blademaster: { id: 'blademaster', name: 'Blademaster', role: 'dps', main: 'might', weights: { might: 0.4, finesse: 0.4, wits: 0.1, spirit: 0.1 }, icon: 'sword', blurb: 'Two blades and no patience.' },
+  paladin: { id: 'paladin', name: 'Paladin', role: 'tank', second: 'healer', main: 'spirit', weights: { might: 0.3, finesse: 0.05, wits: 0.1, spirit: 0.55 }, icon: 'shield', blurb: 'Shield and prayer: holds the line and mends it too.' },
+  druid: { id: 'druid', name: 'Druid', role: 'healer', second: 'dps', main: 'wits', weights: { might: 0.1, finesse: 0.15, wits: 0.4, spirit: 0.35 }, icon: 'tree', blurb: 'Heals with one hand and burns with the other.' },
+  bard: { id: 'bard', name: 'Bard', role: 'healer', second: 'scout', main: 'finesse', weights: { might: 0.05, finesse: 0.35, wits: 0.3, spirit: 0.3 }, icon: 'music', blurb: 'Keeps spirits up and ears open, and knows a way round.' },
   rogue: { id: 'rogue', name: 'Rogue', role: 'scout', main: 'finesse', weights: { might: 0.05, finesse: 0.5, wits: 0.35, spirit: 0.1 }, icon: 'lock', blurb: 'Traps, locks and the way round.' },
 };
 export const CLASS_IDS = Object.keys(CLASSES) as ClassId[];
@@ -245,6 +250,7 @@ export const COND_IDS = Object.keys(CONDITIONS) as ConditionId[];
 /** Penalty to every check for each condition nobody in the party counters. */
 export const COND_PENALTY = 1.2;
 export const CLASS_COUNTERS: Record<ClassId, ConditionId[]> = {
+  paladin: ['undead', 'ambush'], druid: ['beasts', 'flooded'], bard: ['locked', 'cursed'],
   guardian: ['ambush'], cleric: ['plague', 'undead'], ranger: ['open', 'beasts'], arcanist: ['cursed', 'undead'], blademaster: ['narrow', 'swarm'], rogue: ['traps', 'locked'],
 };
 export const RACE_COUNTERS: Partial<Record<RaceId, ConditionId[]>> = { dwarf: ['cold'], elf: ['darkness'] };
@@ -418,6 +424,9 @@ export const STREAK_MILESTONES = { daily: [7, 30, 100], weekly: [4, 12, 40] };
 export const LAST_JOB_PENALTY = 2;
 /** What each class's legends add to the guild, per legend. */
 export const LEGEND_STAT: Record<ClassId, { name: string; text: string }> = {
+  paladin: { name: 'valor', text: 'fewer deaths' },
+  druid: { name: 'growth', text: 'faster recovery' },
+  bard: { name: 'renown', text: 'more gold from outings' },
   guardian: { name: 'safety', text: 'fewer injuries' },
   cleric: { name: 'recovery', text: 'faster recovery' },
   ranger: { name: 'loot', text: 'more materials and herbs' },

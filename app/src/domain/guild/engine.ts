@@ -8,7 +8,8 @@ import {
   SELL_PRICE, SLOTS, SPOIL_PHASES, START_GOLD, START_STOCK, STANCES, STARTING_BUILDINGS, STOCK_KEYS, STREAK_MILESTONES, TAVERN_REFRESH_DAYS, TRAIN_XP, WEEK_DAYS,
   WORK_CREW_BONUS, WORK_CREW_MAX, realGoldMult, STONE_LEVEL, GRADE_DURABILITY,
 } from './content';
-import { addXp, canGoOut, dayOfPhase, injured, isActive, makeAdventurer, phaseAt, role } from './adventurer';
+import { addXp, canGoOut, dayOfPhase, hasRole, injured, isActive, makeAdventurer, phaseAt } from './adventurer';
+import { backstory, pickTraits, traitFx } from './traits';
 import { makeExpedition, makeOddJob, makeOdyssey, makeRecovery, tutorialJob } from './board';
 import { better, itemIron, itemValue, makeDraft } from './gear';
 import { births, closeEra, comeOfAge, kin, pairUp } from './legacy';
@@ -75,11 +76,12 @@ export function upgradeGuild(raw: Guild): Guild {
   g.bestHaul ??= { gold: 0, name: '' };
   for (const a of g.adventurers) {
     a.gear ??= {}; a.autoBuy ??= true; a.staffAt ??= null; a.shared ??= {}; a.clears5 ??= 0; a.liberated ??= 0;
+    if (!a.traitIds?.length) { const r = rngFor(g.seed, 'traits', a.id); a.traitIds = pickTraits(r); a.backstory = backstory(r, a.race, a.traitIds); }
   }
   for (const o of [...g.board, ...g.outings.map((x) => x.offer)]) { o.region ??= 'hearth'; o.conditions ??= []; }
   for (const o of g.outings) { if (Array.isArray(o.potions)) o.potions = {}; o.potions ??= {}; o.phase ??= 0; }
   for (const e of g.ledger) { e.at ??= 0; e.renown ??= 0; }
-  for (const r of g.recruits) { r.adv.gear ??= {}; r.adv.autoBuy ??= true; r.adv.staffAt ??= null; r.adv.shared ??= {}; r.adv.clears5 ??= 0; r.adv.liberated ??= 0; }
+  for (const r of g.recruits) { if (!r.adv.traitIds?.length) { const rr = rngFor(g.seed, 'traits', r.adv.id); r.adv.traitIds = pickTraits(rr); r.adv.backstory = backstory(rr, r.adv.race, r.adv.traitIds); } r.adv.gear ??= {}; r.adv.autoBuy ??= true; r.adv.staffAt ??= null; r.adv.shared ??= {}; r.adv.clears5 ??= 0; r.adv.liberated ??= 0; }
   return g;
 }
 
@@ -143,12 +145,13 @@ function phaseTick(g: Guild, p: number) {
     if (a.injury && a.injury.until <= p) a.injury = null;
     const duty = duties.get(a.id) ?? 'rest';
     const k = duty === 'rest' ? REST_MULT : 1;
-    a.health = Math.min(100, a.health + HEALTH_REGEN * k * infirm);
+    const tf = traitFx(a.traitIds ?? []);
+    a.health = Math.min(100, a.health + HEALTH_REGEN * k * infirm * Math.max(0.2, 1 + tf.rec));
     a.fatigue = Math.max(0, a.fatigue - FATIGUE_REGEN * k * (1 + (infirm - 1) / 3));
     if (duty === 'train') {
       const onBench = fieldLevel > 0 && benches > 0;
       if (onBench) benches--;
-      gainXp(g, a, (onBench ? fieldXp : TRAIN_XP / 2) * RACES[a.race].xpMult);
+      gainXp(g, a, (onBench ? fieldXp : TRAIN_XP / 2) * RACES[a.race].xpMult * Math.max(0.2, 1 + tf.tr));
     } else if (duty === 'patrol') {
       const room = storageCap(g);
       g.stock.wood = Math.min(room, g.stock.wood + PATROL_YIELD.wood);
@@ -221,7 +224,7 @@ function refreshTavern(g: Guild, p: number, day: number) {
   while (paying().length < size || forced.length) {
     if (paying().length >= size) { const i = g.recruits.findIndex((x) => x.fee > 0); g.recruits.splice(i, 1); }
     let cls = forced.shift();
-    if (!cls && !paying().some((x) => ['tank', 'healer'].includes(role(x.adv))) && paying().length === size - 1) cls = r.pick(['guardian', 'cleric'] as ClassId[]);
+    if (!cls && !paying().some((x) => hasRole(x.adv, 'tank') || hasRole(x.adv, 'healer')) && paying().length === size - 1) cls = r.pick(['guardian', 'cleric'] as ClassId[]);
     const adv = makeAdventurer(rngFor(g.seed, 'recruit', day, g.counter), nextId(g, 'a'), p, { cls });
     if (boost && rngFor(g.seed, 'talent', adv.id).chance(0.3 * boost)) adv.talent = Math.min(5, adv.talent + 1);
     g.recruits.push({ adv, leaves: p + r.int(RECRUIT_STAY_DAYS[0], RECRUIT_STAY_DAYS[1]) * PHASES_PER_DAY, fee: hireFee(adv.level, adv.talent) });
@@ -572,7 +575,7 @@ export function sendProblem(g: Guild, offer: Offer, party: string[]): string | n
   if (members.some((a) => !a || !canGoOut(a, p))) return 'Everyone must be at home and unhurt';
   if (offer.scale === 'odd' && members.some((a) => a && a.state === 'retired')) return 'Retirees only take expeditions and odysseys';
   if (offer.scale !== 'odd' && expeditionsOut(g) >= outLimit(g)) return 'Already ' + outLimit(g) + (outLimit(g) === 1 ? ' expedition' : ' expeditions') + ' out';
-  for (const need of offer.needs) if (!members.some((a) => a && role(a) === need)) return 'Needs a ' + (need === 'tank' ? 'Tank' : 'Healer');
+  for (const need of offer.needs) if (!members.some((a) => a && hasRole(a, need))) return 'Needs a ' + (need === 'tank' ? 'Tank' : 'Healer');
   return null;
 }
 
@@ -607,7 +610,8 @@ function buildCtx(g: Guild, offer: Offer, party: string[], stance: Stance, plan:
     }),
     conditions: conds,
     lootMult: fx.loot * (g.regions[offer.region].liberated ? LIBERATED.loot : 1),
-    goldMult: (g.charter === 'mercantile' ? 1.15 : 1) * (1 + legendBonus(g, 'rogue')),
+    goldMult: (g.charter === 'mercantile' ? 1.15 : 1) * (1 + legendBonus(g, 'rogue')) * (1 + party.reduce((n, id) => n + traitFx(byId(g, id)?.traitIds ?? []).g, 0) / Math.max(1, party.length)),
+    phase: departure(g, offer).phase,
     matMult: 1 + legendBonus(g, 'ranger'),
     xpMult: (g.charter === 'martial' ? 1.15 : 1) * library * (1 + legendBonus(g, 'arcanist')),
     deathMult: Math.max(0.1, 1 - (real ? (value(g, 'chapel') / 100) * staffMult(g, 'chapel') : 0)) * (1 - stoneCut(g, offer.region)),

@@ -4,7 +4,8 @@ import {
   ATTR_NAME, ATTRS, BUILDINGS, CHARTERS, CLASSES, CONDITIONS, DAYS_PER_YEAR, GRADES, GUILD_NAMES, OFFER_KIND, PRACTICE_PER_POINT, RACES, REGIONS, ROLE_NAME, SLOT_NAME, SLOTS, STAGE_ICON,
   STAGE_NAME, STANCES, STOCK_NAME, TOWN_NAMES, xpToNext,
 } from '../domain/guild/content';
-import { ageYears, canGoOut, fullName, injured, phaseAt, rating, ratingShown, realDuration, role, shortClock, yearsLeft } from '../domain/guild/adventurer';
+import { ageYears, canGoOut, fullName, injured, phaseAt, rating, ratingShown, realDuration, rolesOf, shortClock, yearsLeft } from '../domain/guild/adventurer';
+import { TRAIT } from '../domain/guild/traits';
 import { byId, ctxFor, departure, found, sendProblem } from '../domain/guild/engine';
 import { oddsRange } from '../domain/guild/resolve';
 import { hash } from '../domain/guild/rng';
@@ -96,13 +97,24 @@ export function AdventurerSheet({ id }: { id: string }) {
     <Sheet onClose={close} label={fullName(a)}>
       <Head title={fullName(a)} onClose={close}><AdvCrest a={a} size={52} /></Head>
       <div className="meta" style={{ marginTop: -6 }}>
-        <span>{advSub(a)}</span><Stars n={a.talent} /><span>{ROLE_NAME[role(a)]}</span>
+        <span>{advSub(a)}</span><Stars n={a.talent} /><span>{rolesOf(a).map((r) => ROLE_NAME[r]).join(' + ')}</span>
         {champ && <span style={{ color: 'var(--q-wax)', gap: 4 }}><Icon n="crown" size={12} />Champion</span>}
       </div>
       <p className="muted" style={{ margin: 0, fontSize: 14 }}>
         {live ? 'Age ' + ageYears(a, phase) + ' · sworn ' + yearsLeft(a, phase) + ' more ' + (yearsLeft(a, phase) === 1 ? 'year' : 'years') + ' · ' : ''}{st.text}.
         {' '}{RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}{a.race === 'halfling' && a.luckUsed ? ' (used)' : ''}. {CLASSES[a.cls].blurb}
       </p>
+      {a.traitIds?.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {a.traitIds.map((id) => TRAIT[id] && (
+            <div key={id} style={{ display: 'flex', gap: 8, alignItems: 'baseline', fontSize: 14 }}>
+              <span className="pill" style={{ whiteSpace: 'nowrap', color: TRAIT[id].kind === 'bad' ? 'var(--q-wax)' : TRAIT[id].kind === 'good' ? 'var(--q-moss)' : 'var(--color-accent-800)' }}>{TRAIT[id].name}</span>
+              <span className="muted" style={{ fontSize: 13 }}>{TRAIT[id].text}</span>
+            </div>
+          ))}
+          {a.backstory && <p style={{ margin: '2px 0 0', fontSize: 14, fontStyle: 'italic' }}>{a.backstory}</p>}
+        </div>
+      )}
       {!live && a.state !== 'child' && (
         <div className="panel" style={{ padding: '10px 12px', fontSize: 14, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <span className="label">In memoriam</span>
@@ -473,6 +485,7 @@ export function Founding() {
                 <span style={{ display: 'flex', flexDirection: 'column', gap: 3, minWidth: 0 }}>
                   <span className="heading" style={{ fontSize: 18 }}>{fullName(a)}</span>
                   <span className="meta" style={{ marginTop: 0 }}><span>{advSub(a)}</span><Stars n={a.talent} /></span>
+                  <span style={{ fontSize: 12 }}>{a.traitIds.map((id) => TRAIT[id]?.name).filter(Boolean).join(' · ')}</span>
                   <span className="muted" style={{ fontSize: 12 }}>{CLASSES[a.cls].blurb} Age {ageYears(a, 0)}, sworn {a.career} years. {RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}.</span>
                 </span>
               </button>

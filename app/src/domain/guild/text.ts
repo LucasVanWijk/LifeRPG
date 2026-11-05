@@ -112,7 +112,7 @@ export function stageLines(g: Guild, o: Outing, i: number): string[] {
   const lines = [pool[h % pool.length].replace('{a}', a).replace('{b}', here.length > 1 ? b : a)];
   if (st.saved) {
     const x = firstOf(g, st.saved.id);
-    const healer = o.party.find((id) => byId(g, id) && CLASSES[byId(g, id)!.cls].role === 'healer' && id !== st.died);
+    const healer = o.party.find((id) => byId(g, id) && (CLASSES[byId(g, id)!.cls].role === 'healer' || CLASSES[byId(g, id)!.cls].second === 'healer') && id !== st.died);
     lines.push(st.saved.by === 'healer' ? firstOf(g, healer) + ' kept ' + x + ' alive.' : st.saved.by === 'luck' ? x + ' should have died there, and somehow didn’t.' : st.saved.by === 'ward' ? x + '’s ward flared and took the blow.' : x + ' was struck down, but pulled through.');
   }
   if (st.died) lines.push(firstOf(g, st.died) + ' fell here.');

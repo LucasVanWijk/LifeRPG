@@ -71,8 +71,9 @@ export interface Adventurer {
   luckUsed?: boolean;
   outings: number;
   chapter: Chapter;
-  /** Deferred: traits are written in a later stage. */
   traitIds: string[];
+  /** A few sentences of where they came from. */
+  backstory?: string;
   gear: Partial<Record<Slot, Item>>;
   autoBuy: boolean;
   /** Retirees: the building they work in. */

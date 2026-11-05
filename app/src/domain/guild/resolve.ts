@@ -8,7 +8,9 @@ import {
   STAGE_MATERIALS, STANCES, STOCK_KEYS, STRAIN_AT, xpFor, CLASS_COUNTERS, RACE_COUNTERS,
 } from './content';
 import type { Stance } from './content';
-import { rating, role } from './adventurer';
+import { rating, role, rolesOf } from './adventurer';
+import type { TraitFx } from './traits';
+import { KIND_KEY, traitFx } from './traits';
 import { dropGrade, itemInjuryCut, makeDraft } from './gear';
 import type { Rng } from './rng';
 import { rng } from './rng';
@@ -16,7 +18,7 @@ import type { Adventurer, Loot, MemberResult, Offer, Outcome, OutingResult, Stag
 
 /** A party member as they were when the party left. */
 export interface Member {
-  id: string; role: Role; rating: number; health: number; fatigue: number; injuryMult: number; xpMult: number;
+  id: string; role: Role; roles: Role[]; fx: TraitFx; rating: number; health: number; fatigue: number; injuryMult: number; xpMult: number;
   lucky: boolean; elf: boolean; ward: boolean; counters: ConditionId[]; partner: string | null;
 }
 export interface Ctx {
@@ -27,18 +29,21 @@ export interface Ctx {
   lootMult: number; goldMult: number; matMult: number; xpMult: number;
   /** Multipliers on danger: chapel and witness stones, and legends of the Guardian class. */
   deathMult: number; injuryMult: number;
+  /** Which phase of the day they set out in: 0 morning, 1 noon, 2 evening. */
+  phase: number;
 }
 
-export const NEUTRAL = { lootMult: 1, goldMult: 1, matMult: 1, xpMult: 1, deathMult: 1, injuryMult: 1 };
+export const NEUTRAL = { lootMult: 1, goldMult: 1, matMult: 1, xpMult: 1, deathMult: 1, injuryMult: 1, phase: 1 };
 
 export interface SnapshotOpts { ward?: boolean; heal?: boolean; penalty?: number }
 export const snapshot = (a: Adventurer, o: SnapshotOpts = {}): Member => {
   const trinket = a.gear.trinket?.counters;
   const cut = a.gear.armour ? itemInjuryCut(a.gear.armour) : 0;
+  const fx = traitFx(a.traitIds ?? []);
   return {
-    id: a.id, role: role(a), rating: rating(a) - (o.penalty ?? 0), health: o.heal ? Math.min(100, a.health + 40) : a.health, fatigue: a.fatigue,
-    injuryMult: RACES[a.race].injuryMult * (1 - cut), xpMult: RACES[a.race].xpMult, lucky: a.race === 'halfling' && !a.luckUsed, elf: a.race === 'elf',
-    ward: !!o.ward, counters: [...CLASS_COUNTERS[a.cls], ...(RACE_COUNTERS[a.race] ?? []), ...(trinket ? [trinket] : [])], partner: a.partnerId ?? null,
+    id: a.id, role: role(a), roles: rolesOf(a), fx, rating: rating(a) - (o.penalty ?? 0), health: o.heal ? Math.min(100, a.health + 40) : a.health, fatigue: a.fatigue,
+    injuryMult: RACES[a.race].injuryMult * (1 - cut), xpMult: RACES[a.race].xpMult * (1 + fx.x), lucky: a.race === 'halfling' && !a.luckUsed, elf: a.race === 'elf',
+    ward: !!o.ward, counters: [...CLASS_COUNTERS[a.cls], ...(RACE_COUNTERS[a.race] ?? []), ...fx.cnt, ...(trinket ? [trinket] : [])], partner: a.partnerId ?? null,
   };
 };
 
@@ -60,15 +65,22 @@ export function uncountered(ctx: Ctx, s: State): number {
   return ctx.conditions.filter((c) => c === 'unknown' || !idx.some((i) => ctx.members[i].counters.includes(c))).length;
 }
 
+/** One member's rating for this kind of check, with what their traits do in this party and this setting. */
+function memberRating(ctx: Ctx, m: Member, kind: Exclude<StageKind, 'rest'>, n: number): number {
+  const f = m.fx, k = KIND_KEY[kind];
+  return m.rating + f.r + (k ? f[k] : 0) + (ctx.stance === 'bold' ? f.bold : ctx.stance === 'cautious' ? f.caut : 0)
+    + (n <= 2 ? f.solo : 0) + f.team * (Math.min(n, 5) - 1) + (ctx.phase === 2 ? f.eve : ctx.phase === 0 ? f.morn : 0);
+}
+
 /** What the party brings to a check of this kind. */
 export function partyScore(ctx: Ctx, s: State, kind: Exclude<StageKind, 'rest'>): number {
   const idx = living(s);
   const w = ROLE_WEIGHT[kind];
   let sum = 0, weights = 0;
-  for (const i of idx) { const m = ctx.members[i]; sum += w[m.role] * m.rating; weights += w[m.role]; }
+  for (const i of idx) { const m = ctx.members[i]; const wt = Math.max(...m.roles.map((r) => w[r])); sum += wt * memberRating(ctx, m, kind, idx.length); weights += wt; }
   let score = sum / Math.max(1e-9, weights) + SIZE_BONUS * Math.min(5, idx.length - 1);
   const miss = MISSING_ROLE[kind];
-  if (miss && !idx.some((i) => ctx.members[i].role === miss.role)) score -= miss.penalty;
+  if (miss && !idx.some((i) => ctx.members[i].roles.includes(miss.role))) score -= miss.penalty;
   if ((kind === 'hazard' || kind === 'trap') && idx.some((i) => ctx.members[i].elf)) score += 1;
   if (idx.some((i) => ctx.members[i].partner && idx.some((j) => ctx.members[j].id === ctx.members[i].partner))) score += 1;
   score -= COND_PENALTY * uncountered(ctx, s);
@@ -93,12 +105,12 @@ function margin(ctx: Ctx, s: State, kind: StageKind): number {
   return partyScore(ctx, s, kind) - difficulty(o.tier) - (kind === 'boss' ? BOSS_EXTRA : 0);
 }
 
-const healerAlive = (ctx: Ctx, s: State) => living(s).some((i) => ctx.members[i].role === 'healer');
+const healerAlive = (ctx: Ctx, s: State) => living(s).some((i) => ctx.members[i].roles.includes('healer'));
 
 function injuryChance(ctx: Ctx, s: State, i: number, outcome: Outcome): number {
   if (outcome === 'clear' || ctx.offer.tutorial) return 0;
   const base = INJURY_CHANCE[outcome] * (ctx.offer.scale === 'odd' ? 0.5 : 1);
-  return Math.min(0.9, base * ctx.members[i].injuryMult * ctx.injuryMult * STANCES[ctx.stance].injury * (healerAlive(ctx, s) ? INJURY_HEALER_MULT : 1));
+  return Math.min(0.9, base * ctx.members[i].injuryMult * Math.max(0.2, 1 + ctx.members[i].fx.i) * ctx.injuryMult * STANCES[ctx.stance].injury * (healerAlive(ctx, s) ? INJURY_HEALER_MULT : 1));
 }
 
 /** On a failed stage one member is struck: who, and how likely they die or are saved. */
@@ -107,11 +119,11 @@ function strikes(ctx: Ctx, s: State) {
   const idx = living(s);
   const w = idx.map((i) => EXPOSURE[ctx.members[i].role] * (1 + (100 - s.health[i]) / 100));
   const total = w.reduce((n, x) => n + x, 0);
-  const healers = idx.filter((i) => ctx.members[i].role === 'healer');
+  const healers = idx.filter((i) => ctx.members[i].roles.includes('healer'));
   const heal = healers.length ? Math.min(HEALER_SAVE.max, HEALER_SAVE.base + HEALER_SAVE.perRating * Math.max(...healers.map((i) => ctx.members[i].rating))) : 0;
   const charter = ctx.charter === 'hospitaller' ? 0.2 : 0;
   return idx.map((i, k) => {
-    const raw = Math.min(0.95, DEATH_BASE * STANCES[ctx.stance].death * ctx.deathMult * (1 + (100 - s.health[i]) / 50));
+    const raw = Math.min(0.95, DEATH_BASE * STANCES[ctx.stance].death * ctx.deathMult * Math.max(0.2, 1 + ctx.members[i].fx.d) * (1 + (100 - s.health[i]) / 50));
     const hit = (w[k] / total) * raw;
     const byHealer = hit * heal;
     const byCharter = hit * (1 - heal) * charter;
@@ -126,7 +138,7 @@ function afterStage(ctx: Ctx, s: State, kind: StageKind, outcome: Outcome) {
   for (const i of living(s)) {
     if (kind === 'rest') { s.health[i] = Math.min(100, s.health[i] + 10); s.fatigue[i] = Math.max(0, s.fatigue[i] - 10); continue; }
     if (outcome !== 'clear') s.health[i] = Math.max(0, s.health[i] - HEALTH_LOSS[outcome]);
-    s.fatigue[i] = Math.min(100, s.fatigue[i] + FATIGUE_GAIN[outcome] * f);
+    s.fatigue[i] = Math.min(100, s.fatigue[i] + FATIGUE_GAIN[outcome] * f * Math.max(0.2, 1 + ctx.members[i].fx.f));
   }
   if (outcome === 'fail') s.fails++;
 }
