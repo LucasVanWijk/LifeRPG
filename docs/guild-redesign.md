@@ -1,6 +1,6 @@
 # Guild Redesign
 
-Status: design draft, revision 2. Nothing built yet.
+Status: design draft, revision 2. **Stage 1 (guild core) is built**; see section 15 for what stands in for the town until stage 2.
 Replaces: the single Hero (level, title, skill points) and the idle Expedition game (fishing, mining, smithing, dungeons).
 Keeps: the Quest board, Habits, Campaigns, Weekly review, Calendar, Glossary, Drive sync.
 
@@ -264,7 +264,7 @@ Each stage: `d20 + partyScore(stage) − difficulty(tier, conditions not counter
 
 - **Clear** (≥ 10): loot for the stage, small fatigue.
 - **Strain** (5–9): loot, more fatigue, a chance of injury.
-- **Fail** (< 5): no loot, Health loss, a chance of injury, and a **death roll** for the most exposed member. The Tank takes the hit first if there is one. The Healer moves the outcome one step down.
+- **Fail** (< 5): no loot, Health loss, a chance of injury, and one member is **struck**. Who is struck depends on exposure: a Tank 2.5× as often as anyone else, and the wounded more often than the healthy. A strike can kill. A Healer in the party saves 45–70% of those deaths (the adventurer is injured instead), Halfling luck saves one per career, and the Hospitaller charter saves 20%.
 
 The death roll is scaled by stance, Health, Chapel blessing, potions, Halfling luck and the guild's Witness Stones.
 
@@ -275,7 +275,9 @@ The death roll is scaled by stance, Health, Chapel blessing, potions, Halfling l
 | Careful: Cautious or Steady, the right tier, a healer along | **about 2/3** | about 1/3 |
 | Risky: Bold, a tier above them, no healer | **about 1/3** | about 2/3 |
 
-With careers of 24–120 real days and roughly 1–2 outings a day, that's roughly 0.4–0.8% death per expedition when careful and 1–2.5% when risky. The balance test sets the real numbers.
+With careers of 24–120 real days and roughly 1–2 outings a day, that's roughly 0.4–0.8% death per expedition when careful and 1–2.5% when risky.
+
+Measured with the stage 1 numbers (400 simulated careers each): careful play loses **34%**. Taking **any one** risk every time (going Bold, leaving the healer at home, or going a tier above) loses **56–67%**. Stacking two risks loses **over 90%**, and Cautious play loses about 9%. So "risky" means one habitual risk; stacking them is reckless. The balance test (`domain/guild/engine.test.ts`) keeps careful play at 20–45% and Bold play at 50–82%.
 
 ### 6.5 Return
 
@@ -616,7 +618,7 @@ The bottom tab **Adventure** becomes **Guild**, with a top segmented control:
 
 ## 15. Build stages
 
-1. **Guild core:**
+1. **Guild core (built):**
    - Time engine (event queue, phases, uncapped catch-up, "While you were away"), the time-skip tool.
    - Founding: names, generated crest, charter.
    - Races, classes, talent, attributes.
@@ -628,6 +630,7 @@ The bottom tab **Adventure** becomes **Guild**, with a top segmented control:
    - Injury, scars, death and insurance; aging and retirement.
    - Recording life chapters.
    - Migration v3 and removal of the old Expedition and Hero.
+   - Until the town exists, fixed values stand in for buildings: a roster of 6, 2 expeditions out at once, tiers 1–2, 3 recruits at the tavern every 4 days, and a 50g recruitment notice. Wood, stone, iron and herbs are collected and kept for stage 2.
 2. **Town:**
    - Stock and capacity resources and the build rule.
    - Buildings with 5 levels, the Guild Hall with 10 and its real-life bonus and ranks.

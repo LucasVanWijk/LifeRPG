@@ -1,6 +1,5 @@
 import type { IconName } from '../components/Icon';
-import type { Expedition } from './expedition/engine';
-import { newExpedition } from './expedition/engine';
+import type { Guild } from './guild/types';
 
 export type QuadKey = 'crisis' | 'main' | 'errand' | 'side';
 export type SizeKey = 'S' | 'M' | 'L';
@@ -39,6 +38,8 @@ export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;
   /** Day every quest was done and the reward was paid. */
   completedOn?: string | null;
+  /** The adventurer who carries this campaign: its quests' rewards go to them instead of the Champion. */
+  bearerId?: string | null;
 }
 
 export interface CompanionNote { t: string; date?: string; label?: string }
@@ -51,12 +52,8 @@ export interface Tome { id: string; name: string; items: TomeItem[] }
 export interface CodexField { k: string; v: string; date?: string; label?: string }
 export interface CodexEntry { id: string; name: string; sub: string; icon: IconName; fields: CodexField[] }
 
-/**
- * portrait is a small JPEG data URL. An empty name means the welcome screen hasn't been completed.
- * points is the skill-point pool for Expeditions: every XP point earned also adds one.
- */
-export interface Hero {
-  name: string; portrait?: string; xp: number; level: number; next: number; gold: number; points: number;
+/** What's left of the old Hero: there is no "you" in the game, only the guild. */
+export interface Profile {
   /** Monday of the last week whose review was finished. */
   reviewedWeek?: string;
 }
@@ -83,8 +80,10 @@ export interface CalEvent {
 }
 
 export interface Data {
-  version: 2;
-  hero: Hero;
+  version: 3;
+  profile: Profile;
+  /** Null until the guild is founded. */
+  guild: Guild | null;
   quests: Quest[];
   habits: Habit[];
   camps: Record<string, Campaign>;
@@ -92,7 +91,6 @@ export interface Data {
   tomes: Tome[];
   codex: CodexEntry[];
   events: CalEvent[];
-  expedition: Expedition;
 }
 
 export interface Quad { key: QuadKey; name: string; sub: string; icon: IconName; mult: number; color: string; light: string }
@@ -148,12 +146,11 @@ export const streakText = (n: number, every: Every) => n + '-' + UNIT[every] + '
 const ROT = [-1.4, 0.9, -0.5, 1.2, -0.9, 0.5, 1.5];
 export const noteRotation = (id: number, scale = 1, shift = 0) => ROT[(id + shift) % ROT.length] * scale + 'deg';
 
-export const heroName = (h: Hero) => h.name || 'Adventurer';
-
-/** A fresh log: level 1, no gold, nothing written down yet. */
+/** A fresh log: no guild yet, nothing written down. */
 export const emptyData = (): Data => ({
-  version: 2,
-  hero: { name: '', xp: 0, level: 1, next: 100, gold: 0, points: 0 },
+  version: 3,
+  profile: {},
+  guild: null,
   quests: [],
   habits: [],
   camps: {},
@@ -161,9 +158,4 @@ export const emptyData = (): Data => ({
   tomes: [],
   codex: [],
   events: [],
-  expedition: newExpedition(Date.now()),
 });
-
-/** Titles earned by level, lowest first. */
-export const TITLES: [number, string][] = [[1, 'Wanderer'], [3, 'Squire'], [5, 'Adventurer'], [8, 'Ranger'], [12, 'Knight'], [16, 'Champion'], [20, 'Hero'], [25, 'Legend']];
-export const titleFor = (level: number) => TITLES.reduce((t, [l, name]) => (level >= l ? name : t), TITLES[0][1]);

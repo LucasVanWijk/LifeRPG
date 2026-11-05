@@ -63,6 +63,8 @@ const P = {
 } as const;
 
 export type IconName = keyof typeof P;
+/** The raw paths, for drawing an icon inside another SVG (the crests). */
+export const ICON_PATHS: Record<IconName, string> = P;
 
 export function Icon({ n, size = 18, stroke = 1.6 }: { n: IconName; size?: number; stroke?: number }) {
   return (

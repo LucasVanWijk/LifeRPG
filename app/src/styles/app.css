@@ -364,3 +364,8 @@ button { font: inherit; }
 .qa-menu button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 38px; padding: 4px 10px; border: 0; border-radius: 3px; background: transparent; text-align: left; cursor: pointer; color: var(--q-ink); font: inherit; font-size: 14px; }
 .qa-menu button:hover, .qa-menu li:first-child button { background: var(--q-tint); }
 .qa-menu .muted { margin-left: auto; font-size: 12px; font-style: italic; }
+
+/* Guild: choice buttons in a column keep their height and full width. */
+.choice-list { display: flex; flex-direction: column; gap: 8px; }
+.choice-list > .opt-btn, .found-box > * { flex-shrink: 0; }
+.choice-list > .opt-btn { width: 100%; }

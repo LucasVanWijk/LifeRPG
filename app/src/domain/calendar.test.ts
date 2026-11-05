@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { calendarItems, eventItems, repeatText } from './calendar';
 import type { CalEvent } from './model';
-import { emptyData, titleFor } from './model';
+import { emptyData } from './model';
 import { migrate } from './migrate';
 
 const ev = (patch: Partial<CalEvent>): CalEvent => ({ id: 1, title: 'E', start: '2026-09-25', end: '2026-09-25', allDay: true, repeat: null, location: '', notes: '', companions: [], ...patch });
@@ -53,10 +53,7 @@ describe('calendarItems', () => {
   });
 });
 
-describe('titles and migration', () => {
-  it('names each level band', () => {
-    expect([1, 2, 3, 7, 8, 12, 24, 25, 40].map(titleFor)).toEqual(['Wanderer', 'Wanderer', 'Squire', 'Adventurer', 'Ranger', 'Knight', 'Hero', 'Legend', 'Legend']);
-  });
+describe('migration', () => {
   it('gives older logs an empty calendar', () => {
     const { events, ...old } = emptyData();
     void events;

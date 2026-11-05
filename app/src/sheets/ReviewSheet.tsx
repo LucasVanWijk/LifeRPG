@@ -17,7 +17,7 @@ export const reviewWeek = (today: string) => {
 
 /** Home shows the review card until that week's review is done (and only once there is something to review). */
 export const reviewDue = (data: Data, today: string) =>
-  (data.quests.length + data.habits.length > 0) && data.hero.reviewedWeek !== reviewWeek(today);
+  (data.quests.length + data.habits.length > 0) && data.profile.reviewedWeek !== reviewWeek(today);
 
 export function ReviewSheet() {
   const { data, today, setUi, actions } = useStore();

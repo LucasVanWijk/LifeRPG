@@ -1,7 +1,7 @@
 import { useState, type CSSProperties, type KeyboardEvent, type ReactNode } from 'react';
 import { dayDiff, dueLabel } from '../domain/dates';
-import type { Campaign, Companion, Hero, Quest } from '../domain/model';
-import { heroName, QM, reward } from '../domain/model';
+import type { Campaign, Companion, Quest } from '../domain/model';
+import { QM, reward } from '../domain/model';
 import { Icon } from './Icon';
 
 /** Display fields shared by every quest card. */
@@ -100,17 +100,6 @@ export function DoneBanner({ onReopen }: { onReopen: () => void }) {
 
 /** Enter submits in single-line add fields. */
 export const onEnter = (fn: () => void) => (e: KeyboardEvent) => { if (e.key === 'Enter') fn(); };
-
-/** The hero's portrait: their picture if they chose one, otherwise a monogram. */
-export function Portrait({ hero, size, fontSize }: { hero: Hero; size: number; fontSize: number }) {
-  return (
-    <span className="portrait" style={{ width: size, height: size, fontSize, overflow: 'hidden' }}>
-      {hero.portrait
-        ? <img src={hero.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%', padding: 5 }} />
-        : heroName(hero)[0]}
-    </span>
-  );
-}
 
 export function Empty({ children }: { children: ReactNode }) {
   return <p className="muted" style={{ margin: 0, padding: '14px 0', fontStyle: 'italic', fontSize: 14 }}>{children}</p>;

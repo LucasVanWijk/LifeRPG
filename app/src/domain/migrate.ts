@@ -1,36 +1,37 @@
 import { addDays } from './dates';
 import type { Data, Every, Habit, Quest } from './model';
 import { emptyData } from './model';
-import { chronicle, periodOf } from './logic';
+import { periodOf } from './logic';
 
 type LegacyQuest = Quest & { recur?: { every: 'daily' | 'weekly' | 'monthly'; streak: number } | null; lastDone?: string | null; prevDue?: string | null };
 
 /**
  * Brings saved or imported data up to the current shape, or returns null if it isn't a Questlog log.
+ * Version 3 replaced the Hero and the idle Expeditions with the guild: older logs keep their quests,
+ * habits, campaigns, calendar and Glossary, and found a new guild on first open.
  * Version 1 kept repeating quests ("bounties") on the board; they become habits, with their
  * streak rebuilt as check-ins in the preceding periods.
  */
 export function migrate(raw: unknown, today: string): Data | null {
   if (!raw || typeof raw !== 'object') return null;
-  const { rewards, ...d } = raw as Partial<Data> & { version?: number; quests?: LegacyQuest[]; rewards?: unknown };
-  void rewards; // The Tavern was removed; its rewards are dropped.
+  const { rewards, hero, expedition, ...d } = raw as Partial<Data> & { version?: number; quests?: LegacyQuest[]; rewards?: unknown; hero?: { reviewedWeek?: string }; expedition?: unknown };
+  void rewards; void expedition;
   const version = d.version as number | undefined;
-  if (!d.hero || !Array.isArray(d.quests) || (version !== 1 && version !== 2)) return null;
+  if (!Array.isArray(d.quests) || (version !== 1 && version !== 2 && version !== 3)) return null;
+  if (version !== 3 && !hero) return null;
   const base = emptyData();
   const out: Data = {
     ...base,
     ...d,
-    version: 2,
-    hero: { ...base.hero, ...d.hero },
+    version: 3,
+    profile: version === 3 ? { ...d.profile } : { reviewedWeek: hero?.reviewedWeek },
+    guild: version === 3 ? d.guild ?? null : null,
     habits: Array.isArray(d.habits) ? d.habits : [],
     camps: d.camps ?? {},
     companions: d.companions ?? [],
     tomes: d.tomes ?? [],
     codex: d.codex ?? [],
     events: Array.isArray(d.events) ? d.events : [],
-    expedition: d.expedition
-      ? { ...base.expedition, ...d.expedition, skills: { ...base.expedition.skills, ...d.expedition.skills } }
-      : base.expedition,
     quests: [],
   };
   let nextHabitId = Math.max(0, ...out.habits.map((h) => h.id)) + 1;
@@ -47,7 +48,5 @@ export function migrate(raw: unknown, today: string): Data | null {
     const habit: Habit = { id: nextHabitId++, title: q.title, every, size: q.size, log: log.reverse(), created: log[0] ?? today };
     out.habits.push(habit);
   }
-  // Logs from before Expeditions start with a skill-point pool worth all the XP already earned.
-  if (typeof d.hero.points !== 'number') out.hero.points = chronicle(out).reduce((n, e) => n + e.xp, 0);
   return out;
 }

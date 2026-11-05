@@ -5,6 +5,17 @@ import { migrate } from './migrate';
 import type { Data, Habit, Quest } from './model';
 import { emptyData, habitReward, reward } from './model';
 import { sampleData } from './sample';
+import { found, setChampion } from './guild/engine';
+import { RACES, xpToNext } from './guild/content';
+
+const founding = { name: 'Test Company', town: 'Testwick', charter: 'martial' as const, crestSeed: 1, seed: 42 };
+/** The data with a freshly founded guild whose first adventurer is Champion. */
+const G = (d: Data): Data => {
+  const g = found(founding, Date.UTC(2026, 8, 25));
+  const c = setChampion(g, g.adventurers[0].id);
+  if (!c.ok) throw new Error(c.reason);
+  return { ...d, guild: c.guild };
+};
 
 const T = '2026-09-25'; // a Friday
 const quest = (id: number, patch: Partial<Quest> = {}): Quest =>
@@ -22,50 +33,48 @@ describe('reward', () => {
 });
 
 describe('completeQuest / undoQuest', () => {
-  it('pays out a quest and reverses it exactly', () => {
-    const d = sampleData(T);
+  it('pays out a quest to the Champion and the guild, and reverses it exactly', () => {
+    const d = G(sampleData(T));
+    const champ = d.guild!.adventurers[0];
+    const xp = Math.round(25 * RACES[champ.race].xpMult);
     const c = completeQuest(d, 8, T)!; // Pay car insurance: crisis S → 25 XP, 8 gold
-    expect(c.toasts[0]).toMatchObject({ text: '+25 XP · +8 gold', sub: 'Pay car insurance', undo: true });
-    expect(c.data.hero).toMatchObject({ xp: 365, gold: 433, level: 7 });
+    expect(c.toasts[0]).toMatchObject({ text: '+' + xp + ' XP to ' + champ.first + ' · +6g', sub: 'Pay car insurance · +2g to their purse', undo: true });
+    expect(c.data.guild!.gold).toBe(d.guild!.gold + 6);
+    expect(c.data.guild!.adventurers[0].purse).toBe(champ.purse + 2);
+    expect(c.data.guild!.adventurers[0].practice.might).toBe(xp);
     expect(c.data.quests.find((x) => x.id === 8)).toMatchObject({ status: 'done', doneOn: T, prevStatus: 'todo' });
     expect(completeQuest(c.data, 8, T)).toBeNull();
     const u = undoQuest(c.data, 8, T).data;
-    expect(u.hero).toEqual(d.hero);
+    expect(u.guild).toEqual(d.guild);
     expect(u.quests.find((x) => x.id === 8)!.status).toBe('todo');
   });
 
-  it('levels up and carries the overflow', () => {
-    const d = sampleData(T);
-    d.hero.xp = 490;
+  it('shows the level-up when the Champion levels', () => {
+    const d = G(sampleData(T));
+    const champ = d.guild!.adventurers[0];
+    d.guild!.adventurers[0] = { ...champ, xp: xpToNext(champ.level) - 10 };
     const c = completeQuest(d, 4, T)!; // L main → 105 XP
-    expect(c.leveledUp).toBe(true);
-    expect(c.data.hero).toMatchObject({ level: 8, xp: 95, next: 600 });
+    expect(c.levelUp).toEqual({ name: champ.first, level: champ.level + 1 });
   });
 
-  it('starts a fresh log at level 1', () => {
+  it('pays nothing into a guild that has not been founded yet', () => {
     const d: Data = { ...emptyData(), quests: [quest(1, { quad: 'main', size: 'L' })] };
     const c = completeQuest(d, 1, T)!;
-    expect(c.leveledUp).toBe(true);
-    expect(c.data.hero).toMatchObject({ level: 2, xp: 5, next: 200, gold: 35 });
+    expect(c.levelUp).toBeNull();
+    expect(c.data.guild).toBeNull();
+    expect(c.toasts[0].text).toBe('+105 XP · +35 gold');
   });
 });
 
-describe('skill points', () => {
-  it('fills the pool 1:1 with XP and takes it back on undo, never below zero', () => {
-    const d: Data = { ...emptyData(), quests: [quest(1, { quad: 'main', size: 'L' })] };
-    const c = completeQuest(d, 1, T)!;
-    expect(c.data.hero.points).toBe(105);
-    expect(undoQuest(c.data, 1, T).data.hero.points).toBe(0);
-    const spent = { ...c.data, hero: { ...c.data.hero, points: 20 } };
-    expect(undoQuest(spent, 1, T).data.hero.points).toBe(0);
-  });
-
-  it('seeds the pool from XP already earned when an older log is loaded', () => {
-    const { points, ...hero } = { ...emptyData().hero, name: 'Old' };
-    void points;
-    const old = { ...emptyData(), hero, quests: [quest(1, { status: 'done', doneOn: T, quad: 'main', size: 'L' })] };
-    expect(migrate(old, T)!.hero.points).toBe(105);
-    expect(migrate({ ...old, hero: { ...hero, points: 7 } }, T)!.hero.points).toBe(7);
+describe('migrate to the guild', () => {
+  it('keeps the quest log, drops the old Hero and Expeditions, and founds a new guild', () => {
+    const old = { version: 2, hero: { name: 'Old', xp: 10, level: 3, next: 300, gold: 50, points: 4, reviewedWeek: '2026-09-21' }, expedition: { skills: {} }, quests: [quest(1)], habits: [], camps: {}, companions: [], tomes: [], codex: [], events: [] };
+    const d = migrate(old, T)!;
+    expect(d.version).toBe(3);
+    expect(d.guild).toBeNull();
+    expect(d.profile).toEqual({ reviewedWeek: '2026-09-21' });
+    expect(d.quests).toHaveLength(1);
+    expect('hero' in d || 'expedition' in d).toBe(false);
   });
 });
 
@@ -75,7 +84,7 @@ describe('setStatus', () => {
     const a = setStatus(d, 9, 'done', T);
     expect(a.toasts[0].text).toBe('+60 XP · +20 gold');
     const b = setStatus(a.data, 9, 'doing', T);
-    expect(b.data.hero).toEqual(d.hero);
+    expect(b.data.guild).toEqual(d.guild);
     expect(b.data.quests.find((x) => x.id === 9)!.status).toBe('doing');
   });
 });
@@ -88,24 +97,37 @@ describe('campaign rewards', () => {
     const c = completeQuest(withCamp(), 2, T)!;
     expect(c.data.camps.trip.completedOn).toBe(T);
     expect(c.toasts.map((t) => t.text)).toEqual(['+10 XP · +3 gold', 'Campaign complete · Trip']);
-    expect(c.data.hero).toMatchObject({ gold: 103, level: 2, xp: 160 });
+    const g = completeQuest(G(withCamp()), 2, T)!;
+    expect(g.data.guild!.gold - G(withCamp()).guild!.gold).toBe(2 + 75);
+    expect(g.data.guild!.adventurers[0].chapter.campaigns).toEqual(['Trip']);
   });
 
   it('takes the reward back if reopened the same day, keeps it on later days', () => {
-    const c = completeQuest(withCamp(), 2, T)!;
+    const start = G(withCamp()).guild!.gold;
+    const c = completeQuest(G(withCamp()), 2, T)!;
     const same = undoQuest(c.data, 2, T).data;
     expect(same.camps.trip.completedOn).toBeNull();
-    expect(same.hero.gold).toBe(0);
+    expect(same.guild!.gold).toBe(start);
     const later = undoQuest(c.data, 2, '2026-09-26').data;
     expect(later.camps.trip.completedOn).toBe(T);
-    expect(later.hero.gold).toBe(100);
+    expect(later.guild!.gold).toBe(start + 75);
   });
 
   it('keeps the reward when finished quests are deleted', () => {
-    const c = completeQuest(withCamp(), 2, T)!;
+    const start = G(withCamp()).guild!.gold;
+    const c = completeQuest(G(withCamp()), 2, T)!;
     const d = deleteQuest(deleteQuest(c.data, 1, T).data, 2, T).data;
     expect(d.camps.trip.completedOn).toBe(T);
-    expect(d.hero.gold).toBe(103);
+    expect(d.guild!.gold).toBe(start + 77);
+  });
+
+  it('pays a campaign’s quests to its Standard-bearer', () => {
+    const d = G(withCamp());
+    const bearer = d.guild!.adventurers[2];
+    d.camps.trip.bearerId = bearer.id;
+    const c = completeQuest(d, 2, T)!;
+    expect(c.data.guild!.adventurers[2].chapter).toMatchObject({ quests: 1, campaigns: ['Trip'] });
+    expect(c.data.guild!.adventurers[0].chapter.quests).toBe(0);
   });
 
   it('keeps quests when a campaign is deleted', () => {
@@ -139,7 +161,15 @@ describe('habits', () => {
     expect(a.data.habits[0].log).toEqual(['2026-09-24', T]);
     const b = toggleHabit(a.data, 1, T);
     expect(b.data.habits[0].log).toEqual(['2026-09-24']);
-    expect(b.data.hero).toEqual(d.hero);
+    expect(b.data.guild).toEqual(d.guild);
+  });
+
+  it('pays a check-in to the Champion and takes exactly that back', () => {
+    const d = G({ ...emptyData(), habits: [h({ log: ['2026-09-24'] })] });
+    const a = toggleHabit(d, 1, T);
+    expect(a.data.guild!.ledger).toHaveLength(1);
+    expect(a.data.guild!.adventurers[0].chapter.habits).toBe(1);
+    expect(toggleHabit(a.data, 1, T).data.guild).toEqual(d.guild);
   });
 });
 
@@ -193,7 +223,7 @@ describe('migrate', () => {
       quests: [quest(1), { ...quest(2, { title: 'Call mom' }), recur: { every: 'weekly', streak: 3 } }],
     };
     const d = migrate(v1, T)!;
-    expect(d.version).toBe(2);
+    expect(d.version).toBe(3);
     expect(d.quests.map((q) => q.id)).toEqual([1]);
     expect(d.habits[0]).toMatchObject({ title: 'Call mom', every: 'weekly' });
     expect(habitStreak(d.habits[0], T)).toBe(3);
