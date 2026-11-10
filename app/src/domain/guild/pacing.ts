@@ -51,9 +51,12 @@ export function simulate(days: number, style: PlayStyle = TYPICAL, seed = 3): Pa
       for (let i = 0; i < style.quests; i++) { const r = payReal(g, { key: 'q' + key++, ...AVG_QUEST, kind: 'quest', title: 'q', date: '', attr: 'wits', notable: false }); g = r.guild; real += r.entry.guild + r.entry.purse; }
       for (let i = 0; i < style.habits; i++) { const r = payReal(g, { key: 'h' + key++, ...AVG_HABIT, kind: 'habit', title: 'h', date: '', attr: 'main', notable: false }); g = r.guild; real += r.entry.guild + r.entry.purse; }
     }
-    // Keep the roster full with the best affordable recruits.
+    // Keep the roster full with the best affordable recruits, a Tank or Healer first if the roster has none.
     for (let n = 0; n < 3 && g.adventurers.filter((a) => a.state === 'active').length < rosterLimit(g); n++) {
-      const cand = [...g.recruits].filter((r) => r.fee <= g.gold * 0.4).sort((a, b) => b.adv.talent * 3 + b.adv.level - (a.adv.talent * 3 + a.adv.level))[0];
+      const has = (r: Role) => g.adventurers.some((a) => a.state === 'active' && role(a) === r);
+      const short = (['tank', 'healer'] as Role[]).filter((r) => !has(r));
+      const fills = (a: Guild['recruits'][number]['adv']) => (short.includes(role(a)) ? 100 : 0);
+      const cand = [...g.recruits].filter((r) => r.fee <= g.gold * 0.4).sort((a, b) => fills(b.adv) + b.adv.talent * 3 + b.adv.level - (fills(a.adv) + a.adv.talent * 3 + a.adv.level))[0];
       if (!cand) break;
       const r = hire(g, cand.adv.id);
       if (r.ok) g = r.guild;
@@ -83,7 +86,7 @@ export function simulate(days: number, style: PlayStyle = TYPICAL, seed = 3): Pa
       const next = HALL_STEPS[hallLevel(g) + 1];
       const saving = !!next && g.renown >= next.renown * 0.7;
       let did = false;
-      // Fix a shortage the way a player would: raise the lowest Home or Farm, or add one, or a Watch House for order.
+      // Fix a shortage the way a player would: raise Housing or Farms, or build or raise a Watch House for order.
       const fix = (type: BuildingId) => {
         const mine = g.buildings.filter((b) => b.type === type).sort((a, b) => a.level - b.level);
         const low = mine.find((b) => !buildProblem(g, type, b));

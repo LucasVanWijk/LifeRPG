@@ -2,12 +2,11 @@ import type { KeyboardEvent } from 'react';
 import { BUILDINGS, REGIONS, SEASON_NAMES } from '../domain/guild/content';
 import type { BuildingId } from '../domain/guild/content';
 import { mapModel } from '../domain/guild/map';
-import type { MapBuilding, MapSlot } from '../domain/guild/map';
-import type { Multi } from '../domain/guild/plots';
-import { FIELDS, HILLS, PLAZA, RIVER, ROADS, SCENE, TREES, WALLS } from '../domain/guild/plots';
+import type { MapBuilding } from '../domain/guild/map';
+import { AREAS, FIELDS, HILLS, PLAZA, RIVER, ROADS, SCENE, TREES, WALLS } from '../domain/guild/plots';
 import { hash, rng } from '../domain/guild/rng';
 import type { Guild } from '../domain/guild/types';
-import { BuildingArt, GardenArt, HeroesArt } from './mapArt';
+import { BuildingArt, FarmsArt, GardenArt, HeroesArt, HousingArt } from './mapArt';
 import { ICON_PATHS } from './Icon';
 
 const TINT = ['#7fb069', '#e0b84a', '#c0662b', '#9ab7d8'];
@@ -17,7 +16,7 @@ const press = (fn: () => void) => (e: KeyboardEvent) => { if (e.key === 'Enter' 
 const H = SCENE.h + 30;
 
 const SHORT: Partial<Record<BuildingId, string>> = {
-  lodge: 'Lodge', warehouse: 'Warehouse', market: 'Market', smithy: 'Smithy', stillroom: 'Stillroom', infirmary: 'Infirmary', field: 'Training', library: 'Library',
+  home: 'Housing', farm: 'Farms', lodge: 'Lodge', warehouse: 'Warehouse', market: 'Market', smithy: 'Smithy', stillroom: 'Stillroom', infirmary: 'Infirmary', field: 'Training', library: 'Library',
   cartographer: 'Maps', watch: 'Watch', garden: 'Valor', heroes: 'Heroes', herbs: 'Herbs', fishery: 'Fishery', forestry: 'Forestry', quarry: 'Quarry', mine: 'Mine', tavern: 'Tavern', chapel: 'Chapel', armoury: 'Armoury',
 };
 
@@ -72,12 +71,20 @@ function Land({ season }: { season: number }) {
   );
 }
 
-function Spot({ b, onOpen }: { b: MapBuilding; onOpen: (id: string) => void }) {
+function Spot({ b, onOpen, season }: { b: MapBuilding; onOpen: (id: string) => void; season: number }) {
   const d = BUILDINGS[b.type];
   const empty = b.state === 'empty', building = b.state === 'building';
   const label = d.name + (empty ? (b.locked ? ', level 0, needs Guild Hall level ' + b.locked : b.canRaise ? ', level 0, can be built now' : ', level 0, not built') : ', level ' + b.level + (building ? ', under construction' : b.state === 'improving' ? ', being improved' : b.canRaise ? ', can be raised' : ''));
   const open = () => onOpen(b.id);
-  const art = b.type === 'garden' ? <GardenArt stones={0} /> : b.type === 'heroes' ? <HeroesArt /> : <BuildingArt type={b.type} level={Math.max(1, b.level)} staffed={b.staffed} />;
+  const lvl = Math.max(1, b.level);
+  const art = b.type === 'garden' ? <GardenArt stones={0} /> : b.type === 'heroes' ? <HeroesArt /> : b.type === 'home' ? <HousingArt level={lvl} /> : b.type === 'farm' ? <FarmsArt level={lvl} winter={season === 3} /> : <BuildingArt type={b.type} level={lvl} staffed={b.staffed} />;
+  // Housing is a whole quarter: its level sits on the crossroads, and a tap anywhere in it opens it.
+  const area = AREAS[b.type];
+  // Keep the label inside the map at its edges (about 4 units a letter).
+  const name = (SHORT[b.type] ?? d.name) + (b.locked ? ' · Hall ' + b.locked : '');
+  const half = name.length * 2 + 2;
+  const labelX = Math.max(half - b.x, Math.min(SCENE.w - half - b.x, 0));
+  const badge = b.type === 'home' ? { x: 0, y: 0 } : { x: 19, y: -20 };
   return (
     <g transform={`translate(${b.x} ${b.y})`} role="button" tabIndex={0} aria-label={label} onClick={open} onKeyDown={press(open)} className="map-hit" style={{ cursor: 'pointer' }}>
       {empty && <rect x={-21} y={-17} width={42} height={34} rx={4} fill="var(--q-parch)" fillOpacity={0.5} stroke="var(--color-accent-700)" strokeWidth={1} strokeDasharray="4 3" opacity={0.8} />}
@@ -88,33 +95,22 @@ function Spot({ b, onOpen }: { b: MapBuilding; onOpen: (id: string) => void }) {
         <g transform="translate(-6 -10)"><g transform="scale(0.5)" fill="none" stroke={INK} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" dangerouslySetInnerHTML={{ __html: ICON_PATHS.lock }} /></g>
       )}
       {empty && !b.locked && b.canRaise && <g><circle cy={-2} r={8} fill="var(--q-moss)" stroke={INK} strokeWidth={0.8} /><path d="M-4 -2 H4 M0 -6 V2" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" /></g>}
-      {empty && <text y={27} textAnchor="middle" fontSize={8} fill={INK} opacity={0.75}>{SHORT[b.type] ?? d.name}{b.locked ? ' · Hall ' + b.locked : ''}</text>}
+      {empty && <text x={labelX} y={27} textAnchor="middle" fontSize={8} fill={INK} opacity={0.75}>{name}</text>}
       {!empty && b.type !== 'hall' && (
-        <g transform="translate(19 -20)"><circle r={7} fill="var(--q-parch)" stroke={INK} strokeWidth={1} /><text textAnchor="middle" y={3.2} fontSize={9} fill={INK} style={{ fontFamily: 'var(--font-heading)', fontWeight: 700 }}>{b.level}</text></g>
+        <g transform={`translate(${badge.x} ${badge.y})`}><circle r={7} fill="var(--q-parch)" stroke={INK} strokeWidth={1} /><text textAnchor="middle" y={3.2} fontSize={9} fill={INK} style={{ fontFamily: 'var(--font-heading)', fontWeight: 700 }}>{b.level}</text></g>
       )}
-      {!empty && b.canRaise && <path d="M-20 -14 l5 -8 l5 8 h-3 v5 h-4 v-5 z" fill="var(--q-moss)" stroke={INK} strokeWidth={0.7} />}
+      {!empty && b.canRaise && <path transform={b.type === 'home' ? 'translate(32 10)' : undefined} d="M-20 -14 l5 -8 l5 8 h-3 v5 h-4 v-5 z" fill="var(--q-moss)" stroke={INK} strokeWidth={0.7} />}
       {b.discount > 0 && !b.locked && <text y={empty ? 36 : 30} textAnchor="middle" fontSize={7.5} fill="var(--q-moss)" style={{ fontWeight: 700 }}>−{Math.round(b.discount * 100)}%</text>}
-      <rect x={-24} y={-26} width={48} height={52} fill="transparent" />
-    </g>
-  );
-}
-
-function OpenSlot({ s, onPlot }: { s: MapSlot; onPlot: (t: Multi, plot: number) => void }) {
-  const go = () => onPlot(s.type, s.plot);
-  return (
-    <g transform={`translate(${s.x} ${s.y})`} role="button" tabIndex={0} aria-label={'Empty plot for a ' + (s.type === 'home' ? 'Home' : 'Farm') + (s.canBuild ? ': build one here' : '')} onClick={go} onKeyDown={press(go)} className="map-hit" style={{ cursor: 'pointer' }}>
-      <rect x={-17} y={-13} width={34} height={26} rx={4} fill="none" stroke="var(--color-accent-700)" strokeWidth={1} strokeDasharray="4 3" opacity={0.6} />
-      <path d="M-4 -1 H4 M0 -5 V3" stroke="var(--color-accent-700)" strokeWidth={1.5} strokeLinecap="round" opacity={0.65} />
-      <text y={22} textAnchor="middle" fontSize={7} fill={INK} opacity={0.55}>{s.type === 'home' ? 'Home' : 'Farm'}</text>
-      <rect x={-24} y={-24} width={48} height={48} fill="transparent" />
+      {area ? <rect x={area.x - b.x} y={area.y - b.y} width={area.w} height={area.h} fill="transparent" /> : <rect x={-24} y={-26} width={48} height={52} fill="transparent" />}
     </g>
   );
 }
 
 /** The town as a paper map: each building where it would naturally stand. The list view does everything this does. */
-export function TownMap({ g, onBuilding, onPlot }: { g: Guild; onBuilding: (id: string) => void; onPlot: (type: Multi, plot: number) => void }) {
+export function TownMap({ g, onBuilding }: { g: Guild; onBuilding: (id: string) => void }) {
   const m = mapModel(g);
-  const sorted = [...m.buildings].sort((a, b) => a.y - b.y);
+  // Back to front; Housing and Farms first, so a building standing at the edge of their quarter keeps its own taps.
+  const sorted = [...m.buildings].sort((a, b) => Number(!!AREAS[b.type]) - Number(!!AREAS[a.type]) || a.y - b.y);
   const built = m.buildings.filter((b) => b.state !== 'empty').length;
   const garden = m.buildings.find((b) => b.type === 'garden' && b.state !== 'empty');
   return (
@@ -133,8 +129,7 @@ export function TownMap({ g, onBuilding, onPlot }: { g: Guild; onBuilding: (id: 
         <text x={SCENE.w / 2} y={26} textAnchor="middle" fontSize={16} fill={INK} style={{ fontFamily: 'var(--font-heading)', fontWeight: 600 }}>{g.town}</text>
       </g>
 
-      {m.open.map((s) => <OpenSlot key={s.type + s.plot} s={s} onPlot={onPlot} />)}
-      {sorted.map((b) => <Spot key={b.id} b={b} onOpen={onBuilding} />)}
+      {sorted.map((b) => <Spot key={b.id} b={b} onOpen={onBuilding} season={m.season} />)}
       {garden && m.stones > 0 && <g transform={`translate(${garden.x} ${garden.y})`} style={{ pointerEvents: 'none' }}><GardenArt stones={m.stones} /></g>}
 
       {/* Retirees on the benches south of the square */}

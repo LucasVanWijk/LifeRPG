@@ -317,18 +317,20 @@ export const POTIONS_PER_ADVENTURER = 2;
 export type BuildingId = 'hall' | 'tavern' | 'lodge' | 'home' | 'farm' | 'fishery' | 'forestry' | 'quarry' | 'mine' | 'herbs' | 'warehouse' | 'armoury' | 'market' | 'smithy' | 'stillroom' | 'infirmary' | 'chapel' | 'field' | 'library' | 'cartographer' | 'watch' | 'garden' | 'heroes';
 export interface BuildingDef {
   id: BuildingId; name: string; icon: IconName; blurb: string;
-  /** Cost and time of level 1; each level after costs ×2 and takes ×1.6. */
+  /** Cost and time of level 1; each level after costs ×2 and takes ×1.6, unless `grow` says otherwise. */
   base: { gold: number; wood?: number; stone?: number; iron?: number; phases: number };
   /** Hall level needed before it can be built. */
   hall: number;
   workers: number;
-  /** Effect by level 1–5; what it means is in `unit`. */
+  /** Effect by level (5 levels, or 10 for Housing and Farms); what it means is in `unit`. */
   values: number[];
   unit: string;
   /** Always buildable, however full the town is. */
   free?: boolean;
-  /** Can't be pulled down (the Hall, Garden and Hall of Heroes). */
-  noPlot?: boolean;
+  /** Can't be pulled down. */
+  permanent?: boolean;
+  /** How cost and build time grow per level (default ×2 and ×1.6). */
+  grow?: { cost: number; time: number };
   /** Happiness it gives (+) or costs (−), by level. */
   happy?: number[];
   /** Retirees of these classes do twice as well here. */
@@ -337,11 +339,11 @@ export interface BuildingDef {
 }
 const B = (d: BuildingDef) => d;
 export const BUILDINGS: Record<BuildingId, BuildingDef> = {
-  hall: B({ id: 'hall', name: 'Guild Hall', icon: 'crown', blurb: 'The heart of the guild. Its level unlocks everything else.', base: { gold: 0, phases: 0 }, hall: 1, workers: 0, values: [], unit: '', noPlot: true }),
+  hall: B({ id: 'hall', name: 'Guild Hall', icon: 'crown', blurb: 'The heart of the guild. Its level unlocks everything else.', base: { gold: 0, phases: 0 }, hall: 1, workers: 0, values: [], unit: '', permanent: true }),
   tavern: B({ id: 'tavern', name: 'Tavern', icon: 'beer', blurb: 'Where new adventurers turn up.', base: { gold: 80, wood: 30, stone: 10, phases: 12 }, hall: 1, workers: 1, values: [2, 3, 4, 5, 6], unit: 'recruits at a time', happy: [1, 1, 2, 2, 3], staffable: true }),
   lodge: B({ id: 'lodge', name: 'Adventurers’ Lodge', icon: 'users', blurb: 'Beds for the roster.', base: { gold: 120, wood: 40, stone: 20, phases: 12 }, hall: 1, workers: 1, values: [4, 6, 8, 10, 12], unit: 'adventurers on the roster' }),
-  home: B({ id: 'home', name: 'Home', icon: 'home', blurb: 'Housing for the people who keep the guild running, and for retirees.', base: { gold: 50, wood: 30, stone: 10, phases: 6 }, hall: 1, workers: 0, values: [4, 6, 8, 10, 12], unit: 'housing', free: true }),
-  farm: B({ id: 'farm', name: 'Farm', icon: 'tree', blurb: 'Feeds everyone in town.', base: { gold: 60, wood: 40, phases: 6 }, hall: 1, workers: 0, values: [6, 9, 12, 15, 18], unit: 'food', free: true }),
+  home: B({ id: 'home', name: 'Housing', icon: 'home', blurb: 'Houses for the people who keep the guild running, and for retirees. Each level adds a street.', base: { gold: 50, wood: 30, stone: 10, phases: 6 }, hall: 1, workers: 0, values: [10, 18, 28, 38, 52, 66, 84, 102, 122, 144], unit: 'housing', free: true, permanent: true, grow: { cost: 1.5, time: 1.25 } }),
+  farm: B({ id: 'farm', name: 'Farms', icon: 'tree', blurb: 'The fields that feed everyone in town. Each level ploughs more of them.', base: { gold: 60, wood: 40, phases: 6 }, hall: 1, workers: 0, values: [12, 22, 36, 50, 68, 88, 112, 138, 168, 200], unit: 'food', free: true, permanent: true, grow: { cost: 1.5, time: 1.25 } }),
   fishery: B({ id: 'fishery', name: 'Fishery', icon: 'fish', blurb: 'A little food from the river; needs only one hand.', base: { gold: 100, wood: 40, stone: 10, phases: 9 }, hall: 2, workers: 1, values: [4, 6, 8, 10, 12], unit: 'food', staffClass: ['ranger'], staffable: true }),
   forestry: B({ id: 'forestry', name: 'Forestry', icon: 'tree', blurb: 'Timber for building.', base: { gold: 100, wood: 20, stone: 20, phases: 9 }, hall: 1, workers: 2, values: [4, 6, 8, 10, 12], unit: 'wood per phase', staffClass: ['ranger'], staffable: true }),
   quarry: B({ id: 'quarry', name: 'Quarry', icon: 'pickaxe', blurb: 'Stone for building. Noisy and unloved.', base: { gold: 120, wood: 50, phases: 9 }, hall: 1, workers: 3, values: [3, 4, 6, 8, 10], unit: 'stone per phase', happy: [-1, -1, -1, -1, -1], staffClass: ['guardian', 'blademaster'], staffable: true }),
@@ -358,15 +360,19 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   library: B({ id: 'library', name: 'Library', icon: 'book-open', blurb: 'Lessons from past expeditions, and a look at what lies ahead.', base: { gold: 300, wood: 80, stone: 80, iron: 10, phases: 18 }, hall: 3, workers: 1, values: [5, 10, 15, 20, 25], unit: '% more XP from outings', staffClass: ['arcanist'], staffable: true }),
   cartographer: B({ id: 'cartographer', name: 'Cartographer', icon: 'map', blurb: 'Opens new regions, each with its own dangers.', base: { gold: 300, wood: 60, stone: 60, phases: 18 }, hall: 3, workers: 1, values: [1, 2, 3, 4, 5], unit: 'regions beyond the Hearthlands', staffClass: ['rogue', 'ranger'], staffable: true }),
   watch: B({ id: 'watch', name: 'Watch House', icon: 'shield', blurb: 'Keeps order, so the board can offer more.', base: { gold: 200, wood: 80, stone: 60, iron: 10, phases: 12 }, hall: 2, workers: 2, values: [5, 8, 12, 16, 20], unit: 'order', staffClass: ['guardian'], staffable: true }),
-  garden: B({ id: 'garden', name: 'Garden of Valor', icon: 'flag', blurb: 'A monument for every campaign you finish; each brings a little happiness.', base: { gold: 200, wood: 60, stone: 60, phases: 12 }, hall: 1, workers: 0, values: [5, 10, 15, 20, 25], unit: 'monuments that bring happiness', noPlot: true }),
-  heroes: B({ id: 'heroes', name: 'Hall of Heroes', icon: 'trophy', blurb: 'Where legends and the fallen are remembered. Their deeds still help the guild.', base: { gold: 200, wood: 60, stone: 60, phases: 12 }, hall: 1, workers: 0, values: [3, 6, 9, 12, 15], unit: '% cap on each legend bonus', noPlot: true }),
+  garden: B({ id: 'garden', name: 'Garden of Valor', icon: 'flag', blurb: 'A monument for every campaign you finish; each brings a little happiness.', base: { gold: 200, wood: 60, stone: 60, phases: 12 }, hall: 1, workers: 0, values: [5, 10, 15, 20, 25], unit: 'monuments that bring happiness', permanent: true }),
+  heroes: B({ id: 'heroes', name: 'Hall of Heroes', icon: 'trophy', blurb: 'Where legends and the fallen are remembered. Their deeds still help the guild.', base: { gold: 200, wood: 60, stone: 60, phases: 12 }, hall: 1, workers: 0, values: [3, 6, 9, 12, 15], unit: '% cap on each legend bonus', permanent: true }),
 };
 export const BUILDING_IDS = (Object.keys(BUILDINGS) as BuildingId[]).filter((b) => b !== 'hall');
-/** Buildings that are built once. */
-export const SINGLE = new Set<BuildingId>(BUILDING_IDS.filter((b) => !['home', 'farm'].includes(b)));
 export const MAX_BUILDING_LEVEL = 5;
 export const MAX_HALL = 10;
+/** The highest level most buildings can reach at this Hall level (Housing and Farms, with ten levels, go one per Hall level). */
 export const buildingCap = (hall: number) => Math.ceil(hall / 2);
+export const maxLevel = (t: BuildingId) => BUILDINGS[t].values.length;
+/** The highest level a building can reach at this Hall level: half the Hall's for five-level buildings, the Hall's own for ten-level ones. */
+export const levelCap = (t: BuildingId, hall: number) => Math.min(maxLevel(t), Math.ceil((hall * maxLevel(t)) / MAX_HALL));
+/** The Hall level a building needs before it can reach `level`. */
+export const hallFor = (t: BuildingId, level: number) => Math.floor(((level - 1) * MAX_HALL) / maxLevel(t)) + 1;
 export const workersFor = (b: BuildingDef, level: number) => (b.workers ? b.workers + (level >= 3 ? 1 : 0) + (level >= 5 ? 1 : 0) : 0);
 
 export interface HallStep { gold: number; wood: number; stone: number; iron: number; renown: number; phases: number }
@@ -392,8 +398,8 @@ export const crewsFor = (hall: number) => 1 + (hall >= 3 ? 1 : 0) + (hall >= 6 ?
 export const maxOutFor = (hall: number, outposts: number) => 1 + Math.floor(hall / 2) + outposts;
 /** Gold from real life grows with the Hall: ×1.0 at level 1, ×1.9 at level 10. */
 export const realGoldMult = (hall: number) => 1 + 0.1 * (hall - 1);
-/** What a new guild starts with besides the Hall. Every other building starts at level 0, on its own spot. */
-export const STARTING_BUILDINGS: BuildingId[] = ['home', 'home', 'farm', 'farm'];
+/** What a new guild starts with besides the Hall. Every other building starts at level 0. */
+export const STARTING_BUILDINGS: BuildingId[] = ['home', 'farm'];
 
 export const SEASON_COST: Record<number, Partial<Record<BuildingId, number>>> = {
   0: { farm: 0.8, herbs: 0.8 },

@@ -1,13 +1,14 @@
-// The town map. Every building has one fixed spot where it would naturally stand; only Homes and Farms
-// come in numbers, on slots of their own. The Guild Hall opens more of those slots as it rises.
+// The town map: one of every building, each where it would naturally stand. Housing is the lower town outside
+// the south gate and Farms the fields beyond it; both fill in as they rise.
 import type { BuildingId } from './content';
 
 export const SCENE = { w: 400, h: 700 };
 export type Point = { x: number; y: number };
+export type Area = { x: number; y: number; w: number; h: number };
 const p = (x: number, y: number): Point => ({ x, y });
 
-/** Where each one-of-a-kind building stands. */
-export const SPOTS: Record<Exclude<BuildingId, 'home' | 'farm'>, Point> = {
+/** Where each building stands. For Housing and Farms this is where their level and label sit. */
+export const SPOTS: Record<BuildingId, Point> = {
   // The square, inside the walls
   hall: p(200, 300), tavern: p(130, 318), market: p(258, 362), lodge: p(135, 255),
   // The scholars' row and the chapel close, to the north
@@ -18,20 +19,28 @@ export const SPOTS: Record<Exclude<BuildingId, 'home' | 'farm'>, Point> = {
   smithy: p(140, 378), armoury: p(120, 432), warehouse: p(290, 428), watch: p(255, 488),
   // Outside the walls: the forest, the river, the hills, the training ground and the herb beds
   forestry: p(58, 88), fishery: p(158, 122), quarry: p(288, 72), mine: p(355, 118), heroes: p(222, 128), field: p(376, 300), herbs: p(376, 382),
+  // The lower town and the fields
+  home: p(200, 543), farm: p(78, 664),
 };
-/** Homes: three inside the walls, then the suburb outside the south gate, nearest first. */
-export const HOME_SLOTS: Point[] = [
-  p(256, 268), p(172, 428), p(230, 424), p(145, 512), p(292, 528), p(250, 558), p(150, 568), p(98, 494), p(332, 480), p(96, 548), p(348, 532), p(246, 612),
+
+/** The houses of the lower town, in the order they go up: two more each Housing level. */
+export const HOUSES: Point[] = [
+  p(184, 505), p(216, 505), p(184, 526), p(216, 526), p(160, 526), p(240, 526), p(184, 564), p(216, 564), p(160, 564), p(240, 564),
+  p(136, 526), p(264, 526), p(136, 564), p(264, 564), p(184, 586), p(216, 586), p(112, 526), p(288, 526), p(112, 564), p(288, 564),
 ];
-/** Farms: the fields beyond the suburb, nearest the road first. */
-export const FARM_SLOTS: Point[] = [
-  p(302, 622), p(122, 626), p(362, 590), p(62, 612), p(240, 670), p(180, 666), p(368, 440), p(302, 680), p(362, 652), p(122, 682), p(62, 672), p(368, 240),
+export const housesAt = (level: number) => Math.min(HOUSES.length, 2 * level);
+/** The fields, in the order they are ploughed: one more each Farms level. The farmhouse stands by the river. */
+export const FARM_FIELDS: Area[] = [
+  { x: 156, y: 604, w: 40, h: 26 }, { x: 204, y: 604, w: 40, h: 26 }, { x: 156, y: 636, w: 40, h: 26 }, { x: 204, y: 636, w: 40, h: 26 },
+  { x: 108, y: 604, w: 40, h: 26 }, { x: 252, y: 604, w: 40, h: 26 }, { x: 108, y: 636, w: 40, h: 26 }, { x: 252, y: 636, w: 40, h: 26 },
+  { x: 156, y: 668, w: 40, h: 26 }, { x: 204, y: 668, w: 40, h: 26 }, { x: 300, y: 604, w: 40, h: 26 },
 ];
-export type Multi = 'home' | 'farm';
-export const isMulti = (t: BuildingId): t is Multi => t === 'home' || t === 'farm';
-export const slotList = (t: Multi) => (t === 'home' ? HOME_SLOTS : FARM_SLOTS);
-/** Home and Farm slots open at each Guild Hall level: 3 at level 1, one more per level, 12 at level 10. */
-export const slotsFor = (hall: number) => Math.min(HOME_SLOTS.length, 2 + hall);
+export const fieldsAt = (level: number) => Math.min(FARM_FIELDS.length, level + 1);
+/** What a tap on Housing or Farms covers, around the whole quarter. */
+export const AREAS: Partial<Record<BuildingId, Area>> = {
+  home: { x: 100, y: 494, w: 200, h: 104 },
+  farm: { x: 56, y: 600, w: 308, h: 96 },
+};
 
 // ── The land itself, drawn behind the buildings ──────────────
 
@@ -48,11 +57,11 @@ export const ROADS = [
   'M246 330 L342 335 L376 318',
   'M342 338 L376 368',
   'M207 161 L170 140 L158 128',
-  'M200 476 L150 512 M200 476 L292 528',
+  'M104 545 L296 545',
 ];
 export const PLAZA = { x: 200, y: 300, r: 48 };
 export const TREES: Point[] = [p(18, 30), p(44, 28), p(76, 36), p(100, 56), p(20, 64), p(96, 96), p(22, 110), p(84, 132), p(40, 150), p(16, 168), p(104, 22), p(62, 160)];
 export const HILLS: { x: number; y: number; s: number }[] = [{ x: 252, y: 54, s: 1 }, { x: 330, y: 44, s: 1.3 }, { x: 386, y: 70, s: 0.9 }, { x: 320, y: 128, s: 0.8 }, { x: 384, y: 160, s: 0.8 }];
 export const FIELDS: { x: number; y: number; w: number; h: number }[] = [
-  { x: 30, y: 590, w: 90, h: 50 }, { x: 140, y: 640, w: 110, h: 54 }, { x: 270, y: 596, w: 80, h: 54 }, { x: 330, y: 630, w: 66, h: 60 }, { x: 350, y: 212, w: 46, h: 60 }, { x: 350, y: 420, w: 46, h: 50 },
+  { x: 350, y: 212, w: 46, h: 60 }, { x: 350, y: 420, w: 46, h: 50 },
 ];

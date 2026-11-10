@@ -19,7 +19,7 @@ import type { Ctx } from './resolve';
 import { resolve, snapshot } from './resolve';
 import { rngFor } from './rng';
 import {
-  boardSize, buildProblem, costOf, freePlots, hallLevel, pickPlot, happyTalent, isLegend, legendBonus, levelOf, outLimit, production, rosterLimit, seasonCount,
+  boardSize, buildProblem, costOf, hallLevel, happyTalent, isLegend, legendBonus, levelOf, outLimit, production, rosterLimit, seasonCount,
   seasonIndex, staffMult, staffOf, staffSlots, stoneCut, storageCap, tavernSize, tierLimit, value, dayOf,
 } from './town';
 import { active, byId, champion, log, nextId } from './util';
@@ -53,8 +53,8 @@ export function found(f: Founding, now: number): Guild {
     armoury: [], heirlooms: [], potions: [], market: { season: -1, stock: [] }, sold: { week: -1, gold: 0 }, regions: emptyRegions(), monuments: [], eras: [], streaks: {},
     bestHaul: { gold: 0, name: '' },
   };
-  for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1, plot: pickPlot(g, type) });
-  g.layout = 2;
+  for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1 });
+  g.layout = 3;
   const dps: ClassId = rngFor(f.seed, 'starter-dps').pick(['ranger', 'arcanist', 'blademaster'] as ClassId[]);
   (['guardian', 'cleric', dps] as ClassId[]).forEach((cls, i) => {
     g.adventurers.push(makeAdventurer(rngFor(f.seed, 'starter', i), nextId(g, 'a'), 0, { cls }));
@@ -71,16 +71,21 @@ export function upgradeGuild(raw: Guild): Guild {
   g.holiday ??= null;
   g.construction ??= [];
   if (!g.buildings?.length) { g.buildings = []; for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1 }); }
-  // Layout 2 gives each building one spot; only Homes and Farms keep slots, renumbered nearest first.
-  if (g.layout !== 2) {
+  // Layout 3: one of every building. Several Homes become one Housing, several Farms one Farms, at the level that
+  // keeps at least what they gave; work on them is dropped.
+  if ((g.layout ?? 0) < 3) {
+    const OLD = { home: [4, 6, 8, 10, 12], farm: [6, 9, 12, 15, 18] };
     for (const t of ['home', 'farm'] as const) {
-      let next = 0;
-      for (const b of [...g.buildings].filter((x) => x.type === t).sort((x, y) => x.id.localeCompare(y.id))) b.plot = next++;
-      for (const c of g.construction.filter((x) => x.type === t && !x.target)) c.plot = next++;
+      const mine = g.buildings.filter((x) => x.type === t);
+      const had = mine.reduce((n, b) => n + (OLD[t][b.level - 1] ?? 0), 0);
+      const vals = BUILDINGS[t].values;
+      const level = Math.max(1, vals.findIndex((v) => v >= had) + 1 || vals.length);
+      g.buildings = g.buildings.filter((x) => x.type !== t);
+      g.buildings.push({ id: mine[0]?.id ?? nextId(g, 'b'), type: t, level });
+      g.construction = g.construction.filter((c) => c.type !== t);
     }
-    for (const b of g.buildings) if (b.type !== 'home' && b.type !== 'farm') delete b.plot;
-    for (const c of g.construction) if (c.type !== 'home' && c.type !== 'farm') delete c.plot;
-    g.layout = 2;
+    for (const x of [...g.buildings, ...g.construction]) delete (x as { plot?: number }).plot;
+    g.layout = 3;
   }
   g.armoury ??= []; g.heirlooms ??= []; g.potions ??= [];
   g.market ??= { season: -1, stock: [] };
@@ -183,7 +188,7 @@ function phaseTick(g: Guild, p: number) {
     c.left -= crewSpeed;
     if (c.left > 0) continue;
     g.construction = g.construction.filter((x) => x.id !== c.id);
-    if (c.target) { const b = g.buildings.find((x) => x.id === c.target); if (b) b.level = c.level; } else g.buildings.push({ id: nextId(g, 'b'), type: c.type, level: 1, plot: c.plot });
+    if (c.target) { const b = g.buildings.find((x) => x.id === c.target); if (b) b.level = c.level; } else g.buildings.push({ id: nextId(g, 'b'), type: c.type, level: 1 });
     log(g, c.type === 'hall' ? { k: 'hall', v: c.level } : { k: c.target ? 'upgraded' : 'built', t: c.type, v: c.level });
   }
   const made = production(g), cap = storageCap(g);
@@ -715,17 +720,13 @@ export function skipTime(g: Guild, ms: number): Guild { return { ...g, founded: 
 
 const pay = (g: Guild, c: ReturnType<typeof costOf>) => { g.gold -= c.gold; g.stock.wood -= c.wood; g.stock.stone -= c.stone; g.stock.iron -= c.iron; };
 
-/** Starts a new building: on its own spot, or for a Home or Farm on the chosen slot or the nearest free one. */
-export function build(g0: Guild, type: BuildingId, plot?: number): Result {
+/** Starts a building that isn't there yet (level 0) on its spot. */
+export function build(g0: Guild, type: BuildingId): Result {
   const problem = buildProblem(g0, type);
   if (problem) return fail(problem);
-  let p: number | undefined;
-  if (type === 'home' || type === 'farm') {
-    if (plot !== undefined) { if (!freePlots(g0, type).includes(plot)) return fail('That plot is not free'); p = plot; } else p = pickPlot(g0, type);
-  }
   const g = draft(g0), c = costOf(g, type, 1);
   pay(g, c);
-  g.construction.push({ id: nextId(g, 'c'), type, target: null, level: 1, left: c.phases, total: c.phases, plot: p });
+  g.construction.push({ id: nextId(g, 'c'), type, target: null, level: 1, left: c.phases, total: c.phases });
   return { ok: true, guild: g };
 }
 
@@ -742,10 +743,10 @@ export function upgrade(g0: Guild, buildingId: string): Result {
   return { ok: true, guild: g };
 }
 
-/** Pulls a building down to level 0: its workers (and a Home's or Farm's slot) are freed, half the materials come back, no gold. */
+/** Pulls a building down to level 0: its workers are freed, half the materials come back, no gold. */
 export function demolish(g0: Guild, buildingId: string): Result {
   const b = g0.buildings.find((x) => x.id === buildingId);
-  if (!b || BUILDINGS[b.type].noPlot) return fail('That can’t be pulled down');
+  if (!b || BUILDINGS[b.type].permanent) return fail('That can’t be pulled down');
   if (g0.construction.some((c) => c.target === b.id)) return fail('It is being improved');
   const g = draft(g0);
   const d = BUILDINGS[b.type];

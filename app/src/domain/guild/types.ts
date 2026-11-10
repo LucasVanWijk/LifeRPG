@@ -202,9 +202,9 @@ export interface LedgerEntry {
   notable: boolean;
 }
 
-/** Homes and Farms: `plot` is their slot (see plots.ts). Every other building has one fixed spot and no plot. */
-export interface Building { id: string; type: BuildingId; level: number; plot?: number }
-export interface Construction { id: string; type: BuildingId; /** The building being upgraded, or null for a new one. */ target: string | null; level: number; left: number; total: number; /** The plot a new building has reserved. */ plot?: number }
+/** One of each type, on its own spot on the map (see plots.ts). */
+export interface Building { id: string; type: BuildingId; level: number }
+export interface Construction { id: string; type: BuildingId; /** The building being upgraded, or null for a new one. */ target: string | null; level: number; left: number; total: number; }
 
 export interface Monument { id: string; camp: string; name: string; seal: string; icon: string; size: 'S' | 'M' | 'L'; date: string; bearer: string | null; at: GameMs }
 export interface Era { n: number; name: string; hero: string | null; from: number; to: number; joined: number; fell: number; retired: number; built: number; quests: number; habits: number }
@@ -250,6 +250,6 @@ export interface Guild {
   streaks: Record<string, number[]>;
   /** Most gold brought home by one outing, for the records. */
   bestHaul: { gold: number; name: string };
-  /** Which town layout the plots belong to (2: one spot per building). */
+  /** Which town layout the save is on (3: one of every building, Housing and Farms included). */
   layout?: number;
 }
