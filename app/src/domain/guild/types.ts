@@ -202,7 +202,7 @@ export interface LedgerEntry {
   notable: boolean;
 }
 
-/** `plot` is an index into the town's plots (see plots.ts); the Hall, Garden and Hall of Heroes have none. */
+/** Homes and Farms: `plot` is their slot (see plots.ts). Every other building has one fixed spot and no plot. */
 export interface Building { id: string; type: BuildingId; level: number; plot?: number }
 export interface Construction { id: string; type: BuildingId; /** The building being upgraded, or null for a new one. */ target: string | null; level: number; left: number; total: number; /** The plot a new building has reserved. */ plot?: number }
 
@@ -250,4 +250,6 @@ export interface Guild {
   streaks: Record<string, number[]>;
   /** Most gold brought home by one outing, for the records. */
   bestHaul: { gold: number; name: string };
+  /** Which town layout the plots belong to (2: one spot per building). */
+  layout?: number;
 }

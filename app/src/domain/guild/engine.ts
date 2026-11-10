@@ -53,7 +53,8 @@ export function found(f: Founding, now: number): Guild {
     armoury: [], heirlooms: [], potions: [], market: { season: -1, stock: [] }, sold: { week: -1, gold: 0 }, regions: emptyRegions(), monuments: [], eras: [], streaks: {},
     bestHaul: { gold: 0, name: '' },
   };
-  for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1, plot: BUILDINGS[type].noPlot ? undefined : pickPlot(g, type) });
+  for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1, plot: pickPlot(g, type) });
+  g.layout = 2;
   const dps: ClassId = rngFor(f.seed, 'starter-dps').pick(['ranger', 'arcanist', 'blademaster'] as ClassId[]);
   (['guardian', 'cleric', dps] as ClassId[]).forEach((cls, i) => {
     g.adventurers.push(makeAdventurer(rngFor(f.seed, 'starter', i), nextId(g, 'a'), 0, { cls }));
@@ -70,7 +71,17 @@ export function upgradeGuild(raw: Guild): Guild {
   g.holiday ??= null;
   g.construction ??= [];
   if (!g.buildings?.length) { g.buildings = []; for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1 }); }
-  for (const b of [...g.buildings].sort((x, y) => x.id.localeCompare(y.id))) if (b.plot === undefined && !BUILDINGS[b.type].noPlot) b.plot = pickPlot(g, b.type);
+  // Layout 2 gives each building one spot; only Homes and Farms keep slots, renumbered nearest first.
+  if (g.layout !== 2) {
+    for (const t of ['home', 'farm'] as const) {
+      let next = 0;
+      for (const b of [...g.buildings].filter((x) => x.type === t).sort((x, y) => x.id.localeCompare(y.id))) b.plot = next++;
+      for (const c of g.construction.filter((x) => x.type === t && !x.target)) c.plot = next++;
+    }
+    for (const b of g.buildings) if (b.type !== 'home' && b.type !== 'farm') delete b.plot;
+    for (const c of g.construction) if (c.type !== 'home' && c.type !== 'farm') delete c.plot;
+    g.layout = 2;
+  }
   g.armoury ??= []; g.heirlooms ??= []; g.potions ??= [];
   g.market ??= { season: -1, stock: [] };
   g.sold ??= { week: -1, gold: 0 };
@@ -704,13 +715,13 @@ export function skipTime(g: Guild, ms: number): Guild { return { ...g, founded: 
 
 const pay = (g: Guild, c: ReturnType<typeof costOf>) => { g.gold -= c.gold; g.stock.wood -= c.wood; g.stock.stone -= c.stone; g.stock.iron -= c.iron; };
 
-/** Starts a new building, on the chosen plot or the one it prefers. */
+/** Starts a new building: on its own spot, or for a Home or Farm on the chosen slot or the nearest free one. */
 export function build(g0: Guild, type: BuildingId, plot?: number): Result {
   const problem = buildProblem(g0, type);
   if (problem) return fail(problem);
   let p: number | undefined;
-  if (!BUILDINGS[type].noPlot) {
-    if (plot !== undefined) { if (!freePlots(g0).includes(plot)) return fail('That plot is not free'); p = plot; } else p = pickPlot(g0, type);
+  if (type === 'home' || type === 'farm') {
+    if (plot !== undefined) { if (!freePlots(g0, type).includes(plot)) return fail('That plot is not free'); p = plot; } else p = pickPlot(g0, type);
   }
   const g = draft(g0), c = costOf(g, type, 1);
   pay(g, c);
@@ -731,7 +742,7 @@ export function upgrade(g0: Guild, buildingId: string): Result {
   return { ok: true, guild: g };
 }
 
-/** Pulls a building down: the plot and its workers are freed, half the materials come back, no gold. */
+/** Pulls a building down to level 0: its workers (and a Home's or Farm's slot) are freed, half the materials come back, no gold. */
 export function demolish(g0: Guild, buildingId: string): Result {
   const b = g0.buildings.find((x) => x.id === buildingId);
   if (!b || BUILDINGS[b.type].noPlot) return fail('That can’t be pulled down');

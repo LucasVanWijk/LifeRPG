@@ -327,7 +327,7 @@ export interface BuildingDef {
   unit: string;
   /** Always buildable, however full the town is. */
   free?: boolean;
-  /** Doesn't take a plot (the Hall, Garden and Hall of Heroes). */
+  /** Can't be pulled down (the Hall, Garden and Hall of Heroes). */
   noPlot?: boolean;
   /** Happiness it gives (+) or costs (−), by level. */
   happy?: number[];
@@ -388,12 +388,12 @@ export const hallRank = (level: number) => RANKS[level - 1];
 export const TIER_HALL = [1, 2, 4, 6, 8];
 export const maxTierFor = (hall: number) => TIER_HALL.filter((h) => h <= hall).length;
 export const crewsFor = (hall: number) => 1 + (hall >= 3 ? 1 : 0) + (hall >= 6 ? 1 : 0) + (hall >= 9 ? 1 : 0);
-export const plotsFor = (hall: number) => 12 + 2 * (hall - 1);
 /** Expeditions and odysseys out at once. */
 export const maxOutFor = (hall: number, outposts: number) => 1 + Math.floor(hall / 2) + outposts;
 /** Gold from real life grows with the Hall: ×1.0 at level 1, ×1.9 at level 10. */
 export const realGoldMult = (hall: number) => 1 + 0.1 * (hall - 1);
-export const STARTING_BUILDINGS: BuildingId[] = ['tavern', 'lodge', 'home', 'home', 'farm', 'farm', 'garden', 'heroes'];
+/** What a new guild starts with besides the Hall. Every other building starts at level 0, on its own spot. */
+export const STARTING_BUILDINGS: BuildingId[] = ['home', 'home', 'farm', 'farm'];
 
 export const SEASON_COST: Record<number, Partial<Record<BuildingId, number>>> = {
   0: { farm: 0.8, herbs: 0.8 },

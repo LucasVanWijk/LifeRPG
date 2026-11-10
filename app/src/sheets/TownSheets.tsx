@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
-import { BUILDINGS, BUILDING_IDS, CLASSES, FORGE_IRON, GRADES, hallRank, MAX_BUILDING_LEVEL, MAX_HALL, POTION_KINDS, POTIONS, REGION_ORDER, REGIONS, SELL_PRICE, SLOT_NAME, SLOTS, STOCK_NAME, TIER_HALL, workersFor, crewsFor, plotsFor, buildingCap, SINGLE } from '../domain/guild/content';
+import { BUILDINGS, BUILDING_IDS, CLASSES, FORGE_IRON, GRADES, hallRank, MAX_BUILDING_LEVEL, MAX_HALL, POTION_KINDS, POTIONS, REGION_ORDER, REGIONS, SELL_PRICE, SLOT_NAME, SLOTS, STOCK_NAME, TIER_HALL, workersFor, crewsFor, buildingCap, SINGLE } from '../domain/guild/content';
+import type { BuildingId } from '../domain/guild/content';
+import { slotsFor } from '../domain/guild/plots';
 import type { Slot, StockKey } from '../domain/guild/content';
 import { fullName } from '../domain/guild/adventurer';
 import { brewCost, POTION_CAP, reforgeCost, sellLeft, sellLimit, soldThisWeek, salvagePct } from '../domain/guild/engine';
@@ -25,7 +27,7 @@ function hallUnlocks(next: number): string[] {
   if (crewsFor(next) > crewsFor(next - 1)) out.push('a ' + (crewsFor(next)) + 'th crew'.replace('2th', '2nd').replace('3th', '3rd'));
   if (buildingCap(next) > buildingCap(next - 1)) out.push('buildings up to level ' + buildingCap(next));
   if (next === 3) out.push('odysseys');
-  out.push('2 more plots (' + plotsFor(next) + ')');
+  if (slotsFor(next) > slotsFor(next - 1)) out.push('room for one more Home and Farm (' + slotsFor(next) + ' each)');
   if (Math.floor(next / 2) > Math.floor((next - 1) / 2)) out.push('one more expedition out at a time');
   out.push('+10% gold from real life');
   const d = Object.values(BUILDINGS).filter((b) => b.hall === next).map((b) => b.name);
@@ -33,7 +35,43 @@ function hallUnlocks(next: number): string[] {
   return out;
 }
 
+/** A building at level 0: what it would do, what it costs, and the button that builds it on its spot. */
+function EmptySheet({ type }: { type: BuildingId }) {
+  const { data, ui, setUi, actions } = useStore();
+  const g = data.guild!;
+  const d = BUILDINGS[type];
+  const close = () => setUi({ buildSheet: null, buildPlot: null });
+  const cost = costOf(g, type, 1), next = costNextSeason(g, type, 1);
+  const problem = buildProblem(g, type);
+  const multi = type === 'home' || type === 'farm';
+  const underway = !multi && g.construction.some((c) => c.type === type && !c.target);
+  return (
+    <Sheet onClose={close} label={d.name}>
+      <Head title={d.name + (multi ? '' : ' · level 0')} onClose={close}><span className="seal" style={{ width: 44, height: 44, flex: 'none', opacity: 0.7 }}><Icon n={d.icon} size={19} /></span></Head>
+      <p className="muted" style={{ margin: '-4px 0 0', fontSize: 14 }}>{d.blurb}</p>
+      {d.values.length > 0 && <Row label="At level 1">{d.values[0]} {d.unit}</Row>}
+      {d.workers > 0 && <Row label="Workers">{workersFor(d, 1)}</Row>}
+      {d.happy && <Row label="Happiness">{d.happy[0] > 0 ? '+' : ''}{d.happy[0]}</Row>}
+      {d.staffable && <Row label="Staff">From level 2, a retiree can work here{d.staffClass ? ' (best: ' + staffNote(type) + ')' : ''}</Row>}
+      {underway ? <p style={{ margin: 0, fontSize: 14 }}>A crew is already building it.</p> : (
+        <div className="panel" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <span className="label">{multi ? (ui.buildPlot !== null ? 'Build one on this plot' : 'Build one') : 'Build it here'}</span>
+          <span className="tnum" style={{ fontSize: 15 }}>{costText(cost)} · {cost.phases} phases</span>
+          {next.gold < cost.gold * 0.95 && <span className="muted" style={{ fontSize: 12 }}>Cheaper next season: {costText(next)}.</span>}
+          {problem && <span style={{ fontSize: 13, color: 'var(--q-wax)' }}>{problem}</span>}
+          <button className="btn btn-primary inked" disabled={!!problem} onClick={() => actions.build(type, ui.buildPlot ?? undefined)} style={{ minHeight: 44 }}>Build {multi ? 'a ' + d.name : 'to level 1'}</button>
+        </div>
+      )}
+    </Sheet>
+  );
+}
+
 export function BuildingSheet({ id }: { id: string }) {
+  if (id.startsWith('type:')) return <EmptySheet type={id.slice(5) as BuildingId} />;
+  return <BuiltSheet id={id} />;
+}
+
+function BuiltSheet({ id }: { id: string }) {
   const { data, setUi, actions } = useStore();
   const g = data.guild!;
   const b = g.buildings.find((x) => x.id === id);
@@ -59,7 +97,7 @@ export function BuildingSheet({ id }: { id: string }) {
         <>
           <Row label="Rank">{hallRank(b.level)}</Row>
           <Row label="Crews">{crewsFor(b.level)} · each builds one project at a time</Row>
-          <Row label="Plots">{plotsFor(b.level)}</Row>
+          <Row label="Homes and Farms">up to {slotsFor(b.level)} of each</Row>
           <Row label="Buildings can reach level">{buildingCap(b.level)}</Row>
           <Row label="Tiers open">{TIER_HALL.filter((h) => h <= b.level).length}</Row>
           {!maxed && <Row label={'Level ' + nextLevel + ' brings'}>{hallUnlocks(nextLevel).join(' · ')}</Row>}
@@ -124,7 +162,7 @@ export function BuildingSheet({ id }: { id: string }) {
 
       {!isHall && !d.noPlot && !up && (
         <button className="danger-btn" onClick={() => actions.confirm({
-          title: 'Pull down the ' + d.name + '?', body: 'Its plot and workers are freed, and half the wood, stone and iron it cost comes back. No gold does.', confirmLabel: 'Pull it down',
+          title: 'Pull down the ' + d.name + '?', body: 'It goes back to level 0 and its workers are freed. Half the wood, stone and iron it cost comes back; no gold does.', confirmLabel: 'Pull it down',
           onConfirm: () => actions.demolish(b.id),
         })}>Pull it down</button>
       )}

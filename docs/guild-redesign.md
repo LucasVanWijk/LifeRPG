@@ -341,8 +341,8 @@ At home, each phase: Health +5 (more with an Infirmary), Fatigue −6, plus thei
 - **Levels:** every building has **5 levels**, and the **Guild Hall has 10**. A building's level can't be higher than `ceil(Guild Hall level / 2)`, so level 5 needs Guild Hall 9.
 - **Cost:** gold + materials + time. Each level costs ×2 the one before, so level 5 costs 16× level 1. A year of play won't max out every building; choosing is the game.
 - **Build crews:** 1, and one more at Guild Hall 3, 6 and 9.
-- **Plots:** every building takes a plot, except the Garden of Valor and Hall of Heroes. You get 12 plots at Guild Hall 1, +2 per level after. Plots already exist here so the future paper map (14) needs no conversion of saves.
-- **Demolish:** frees the plot and its workers, refunds 50% of materials and no gold.
+- **One of each:** the town has one of every building, each on its own spot, and all of them except the Guild Hall, Homes and Farms start at level 0 (not built). Homes and Farms are the only ones you can have several of: they take slots, 3 of each at Guild Hall 1 and one more of each per Hall level, up to 12. (This replaced shared plots, which let a wrong build crowd out the right one; see the paper-map plan, section 11.)
+- **Demolish:** returns the building to level 0 (a Home or Farm frees its slot), frees its workers, refunds 50% of materials and no gold.
 - Seasons change costs (8.4).
 
 ### 8.2 Buildings
@@ -372,8 +372,8 @@ The level values in the table are for levels 1 / 2 / 3 / 4 / 5. Workers rise by 
 | **Library** | Expedition XP +5/10/15/20/25%. Reveals "?" conditions (1/2/3/all/all). | 1 |
 | **Cartographer** | Unlocks regions 1–5 (11) | 1 |
 | **Watch House** | Order +5/8/12/16/20 | 2 |
-| **Garden of Valor** | Holds every campaign monument; +1 Happiness per monument, up to 5/10/15/20/25. You start with it. | 0 |
-| **Hall of Heroes** | Legends, Witness Stones and Tombs, the Heirloom shelf; bonus caps rise by level. You start with it. | 0 |
+| **Garden of Valor** | Holds every campaign monument; +1 Happiness per monument, up to 5/10/15/20/25. Starts at level 0. | 0 |
+| **Hall of Heroes** | Legends, Witness Stones and Tombs, the Heirloom shelf; bonus caps rise by level. Starts at level 0. | 0 |
 
 ### 8.3 The Guild Hall (10 levels, about 1 year)
 
@@ -423,7 +423,7 @@ At the welcome screen you:
 | Hospitaller | −20% death chance (the difference becomes injuries) |
 | Builders | −15% construction cost and time |
 
-You start with a Guild Hall, Tavern and Adventurers' Lodge (each at level 1), 2 Homes, 2 Farms, the Garden of Valor and the Hall of Heroes, 150 gold, 50 wood and 30 stone. You also start with 3 free recruits (a Tank, a Healer and a DPS), pick your Champion, and the tutorial odd job is waiting on the board.
+You start with a Guild Hall at level 1, 2 Homes and 2 Farms; every other building, the Tavern and Adventurers' Lodge included, is at level 0 until you build it (until then one recruit waits at the Tavern and the roster holds 3). You have 150 gold, 50 wood and 30 stone. You also start with 3 free recruits (a Tank, a Healer and a DPS), pick your Champion, and the tutorial odd job is waiting on the board.
 
 ## 9. Legacy
 

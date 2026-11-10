@@ -122,3 +122,13 @@ Not built, and why:
 - **The long-press menu.** The arrow on raisable buildings and the sheet are one tap away already, and a hidden gesture is poor on a phone.
 - **A pinch-and-pan scene.** The whole map fits the screen width, so nothing needs it.
 - **Distinct drawings for every building.** The 22 types share seven shapes (house, barn, tower, crops, pond, grove, rock), told apart by roof colour and the emblem on the front. Replacing a shape for one type is a change to one function in `mapArt.tsx`.
+
+### Later change: one of each building
+
+Several plots that could each take any building punished a wrong build: you could fill the town with the wrong things and have to pull them down. The town now has **one of every building**, each with its own fixed spot, and every building except the Guild Hall, Homes and Farms **starts at level 0** (not built). Building one raises it from 0 to 1; pulling it down returns it to level 0 on its spot.
+
+- **Homes and Farms** are the only buildings you can have more than one of. They go on numbered slots (12 of each), and the Guild Hall opens one more of each per level: 3 at Hall 1, 12 at Hall 10. You start with 2 of each.
+- **The layout** (`plots.ts`) is drawn as a walled market town on a river: the Guild Hall on the central square with the Tavern, Market and Lodge around it; the Library, Cartographer, Chapel and Garden of Valor in the quieter north; the Smithy, Armoury and Warehouse by the south gate, with the Watchtower on the wall; the Infirmary and Stillroom together on the east side; the Training Yard and Herb Garden just outside the east wall; the Forestry in the woods, the Fishery on the river, the Quarry and Mine in the hills, and the Hall of Heroes on the north road. Homes spread out from the south gate and Farms lie in the fields beyond.
+- **On the map**, a building at level 0 is a faint outline on its spot with a green "+" (can be built now) or a lock and the Guild Hall level it needs. Tapping it opens a sheet with what level 1 does and a "Build to level 1" button. Open Home and Farm slots are drawn as dashed plots.
+- **Without a Tavern or Lodge**, one recruit waits at a time and the roster holds 3 adventurers, so building them is an early choice rather than a given.
+- **Older saves** move to the new layout once on load (`Guild.layout = 2`): Homes and Farms are renumbered onto their slots, and every other building goes to its own spot.

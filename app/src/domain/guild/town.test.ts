@@ -10,7 +10,7 @@ import {
 import { births, comeOfAge, pairUp, records } from './legacy';
 import { odds, oddsRange } from './resolve';
 import { rngFor } from './rng';
-import { bld, buildProblem, capacity, costOf, hallLevel, production, staffMult, storageCap, value } from './town';
+import { bld, buildProblem, capacity, costOf, hallLevel, production, rosterLimit, staffMult, storageCap } from './town';
 import type { Guild, Item } from './types';
 
 const NOW = Date.UTC(2026, 10, 5, 12);
@@ -29,9 +29,9 @@ const item = (id: string, patch: Partial<Item> = {}): Item => ({ id, name: 'Test
 describe('the starting town', () => {
   it('supplies enough for everyone it starts with', () => {
     const c = capacity(fresh());
-    expect(c.food).toEqual({ supply: 12, demand: 5 });
-    expect(c.housing).toEqual({ supply: 8, demand: 2 });
-    expect(c.happiness.supply).toBe(3);
+    expect(c.food).toEqual({ supply: 12, demand: 3 });
+    expect(c.housing).toEqual({ supply: 8, demand: 0 });
+    expect(c.happiness.supply).toBe(2);
   });
 });
 
@@ -95,7 +95,8 @@ describe('building', () => {
   });
 
   it('limits each building to half the Guild Hall level', () => {
-    const g = rich(fresh());
+    const g0 = rich(fresh());
+    const g = { ...g0, buildings: [...g0.buildings, { id: 'tv', type: 'tavern' as const, level: 1 }] };
     const tavern = bld(g, 'tavern')!;
     const lvl2 = { ...g, buildings: g.buildings.map((b) => (b.id === tavern.id ? { ...b, level: 1 } : b)) };
     expect(buildProblem(lvl2, 'tavern', tavern)).toMatch(/Guild Hall level 3/);
@@ -422,6 +423,6 @@ describe('saves from before the town', () => {
     expect(up.buildings.map((b) => b.type)).toContain('hall');
     expect(up.regions.mire).toEqual({ liberated: false, stones: 0 });
     expect(up.adventurers[0].gear).toEqual({});
-    expect(value(up, 'lodge')).toBe(4);
+    expect(rosterLimit(up)).toBe(3);
   });
 });

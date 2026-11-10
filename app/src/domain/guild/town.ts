@@ -2,9 +2,10 @@
 import type { BuildingId, ClassId, RegionId, StockKey } from './content';
 import {
   BUILDINGS, BUILDING_IDS, buildingCap, CLASSES, crewsFor, DAYS_PER_SEASON, DAYS_PER_YEAR, HALL_STEPS, LEGEND_CAP_PER_LEVEL, LEGEND_LEVEL, LEGEND_STAT,
-  MAX_BUILDING_LEVEL, MAX_HALL, maxOutFor, maxTierFor, OUTPOST_SLOTS, PHASES_PER_DAY, plotsFor, SEASON_COST, SINGLE, STONE_BONUS, STONE_MAX, workersFor,
+  MAX_BUILDING_LEVEL, MAX_HALL, maxOutFor, maxTierFor, OUTPOST_SLOTS, PHASES_PER_DAY, SEASON_COST, SINGLE, STONE_BONUS, STONE_MAX, workersFor,
 } from './content';
-import { PLOTS, PREFERRED } from './plots';
+import type { Multi } from './plots';
+import { isMulti, slotList, slotsFor } from './plots';
 import type { Building, Guild } from './types';
 
 // ── Looking things up ────────────────────────────────────────
@@ -23,7 +24,8 @@ export const seasonIndex = (t: number) => Math.floor((dayOf(t) % DAYS_PER_YEAR) 
 /** A running count of seasons since founding, for things that refresh each season. */
 export const seasonCount = (t: number) => Math.floor(dayOf(t) / DAYS_PER_SEASON);
 
-export const rosterLimit = (g: Guild) => value(g, 'lodge') || 4;
+/** Without a Lodge, a few cots in the Hall hold three. */
+export const rosterLimit = (g: Guild) => value(g, 'lodge') || 3;
 export const storageCap = (g: Guild) => Math.max(150, value(g, 'warehouse'));
 export const outposts = (g: Guild) => Object.values(g.regions).filter((r) => r.liberated).length * OUTPOST_SLOTS;
 export const outLimit = (g: Guild) => maxOutFor(hallLevel(g), outposts(g));
@@ -84,7 +86,8 @@ export function capacity(g: Guild, buildings: Building[] = g.buildings): Capacit
 const KEYS = ['food', 'housing', 'happiness', 'order'] as const;
 export const surplus = (c: Cap) => c.supply - c.demand;
 /** Recruits at the Tavern: its level, plus one for every 5 surplus Happiness. */
-export const tavernSize = (g: Guild) => (value(g, 'tavern') || 2) + Math.max(0, Math.floor(surplus(capacity(g).happiness) / 5));
+/** Without a Tavern, one hopeful at a time knocks on the Hall's door. */
+export const tavernSize = (g: Guild) => (value(g, 'tavern') || 1) + Math.max(0, Math.floor(surplus(capacity(g).happiness) / 5));
 export const happyTalent = (g: Guild) => Math.max(0, Math.floor(surplus(capacity(g).happiness) / 5));
 export const boardSize = (g: Guild, patrolling: number) => Math.min(8, 4 + Math.max(0, Math.floor(surplus(capacity(g).order) / 5)) + (patrolling > 0 ? 1 : 0));
 
@@ -109,7 +112,6 @@ export function costOf(g: Guild, type: BuildingId, level: number): Cost {
 /** The cost next season, to show "cheaper next season" hints. */
 export const costNextSeason = (g: Guild, type: BuildingId, level: number) => costOf({ ...g, t: g.t + DAYS_PER_SEASON * PHASES_PER_DAY * 3_600_000 }, type, level);
 
-export const plotsUsed = (g: Guild) => g.buildings.filter((b) => !BUILDINGS[b.type].noPlot).length + g.construction.filter((c) => !c.target && !BUILDINGS[c.type].noPlot).length;
 export const underway = (g: Guild, b: Building) => g.construction.some((c) => c.target === b.id);
 
 const afford = (g: Guild, c: Cost) => g.gold >= c.gold && g.stock.wood >= c.wood && g.stock.stone >= c.stone && g.stock.iron >= c.iron;
@@ -128,7 +130,7 @@ export function buildProblem(g: Guild, type: BuildingId, target?: Building): str
     if (!target && SINGLE.has(type) && (bld(g, type) || g.construction.some((c) => c.type === type && !c.target))) return 'Already built';
     if (target && level > Math.min(MAX_BUILDING_LEVEL, buildingCap(hall))) return level > MAX_BUILDING_LEVEL ? 'Already at its highest level' : 'Needs Guild Hall level ' + (level * 2 - 1);
     if (target && underway(g, target)) return 'Already being improved';
-    if (!target && !d.noPlot && plotsUsed(g) >= plotsFor(hall)) return 'No free plot (' + plotsFor(hall) + ' at this Hall level)';
+    if (!target && isMulti(type) && !freePlots(g, type).length) return 'No free plot for another ' + d.name + ' (' + slotsFor(hall) + ' at this Hall level)';
   }
   if (g.construction.length >= crews(g)) return 'Every crew is busy';
   const c = costOf(g, type, type === 'hall' ? hall + 1 : level);
@@ -162,17 +164,13 @@ export function production(g: Guild): Record<StockKey, number> {
 
 // ── Plots ────────────────────────────────────────────────────
 
-/** Plots the Guild Hall has opened so far. */
-export const openPlots = (g: Guild) => PLOTS.slice(0, plotsFor(hallLevel(g)));
-const taken = (g: Guild) => new Set<number>([...g.buildings.map((b) => b.plot), ...g.construction.map((c) => c.plot)].filter((n): n is number => n !== undefined));
-/** Indexes of open plots with nothing built or being built on them. */
-export function freePlots(g: Guild): number[] {
-  const used = taken(g);
-  return openPlots(g).flatMap((_, i) => (used.has(i) ? [] : [i]));
+/** Homes and Farms on the map, and how many slots for each the Hall has opened. */
+export const slotCount = (g: Guild) => slotsFor(hallLevel(g));
+export const countOf = (g: Guild, t: Multi) => g.buildings.filter((b) => b.type === t).length + g.construction.filter((c) => c.type === t && !c.target).length;
+/** Open slots for a Home or Farm with nothing built or being built on them. */
+export function freePlots(g: Guild, t: Multi): number[] {
+  const used = new Set<number>([...g.buildings.filter((b) => b.type === t).map((b) => b.plot), ...g.construction.filter((c) => c.type === t && !c.target).map((c) => c.plot)].filter((n): n is number => n !== undefined));
+  return slotList(t).slice(0, slotCount(g)).flatMap((_, i) => (used.has(i) ? [] : [i]));
 }
-/** The plot a new building takes when the player doesn't choose: the lowest free one in the zone it prefers, else the lowest free one. */
-export function pickPlot(g: Guild, type: BuildingId): number | undefined {
-  const free = freePlots(g);
-  const zone = PREFERRED[type];
-  return free.find((i) => PLOTS[i].zone === zone) ?? free[0];
-}
+/** The slot a new Home or Farm takes when the player doesn't choose: the nearest free one. Other buildings have a fixed spot. */
+export const pickPlot = (g: Guild, type: BuildingId): number | undefined => (isMulti(type) ? freePlots(g, type)[0] : undefined);
