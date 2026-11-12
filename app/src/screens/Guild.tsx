@@ -6,10 +6,10 @@ import {
 import { ageYears, clockLabel, fullName, phaseAt, ratingShown, realDuration } from '../domain/guild/adventurer';
 import { offerMinutes } from '../domain/guild/board';
 import { active, champion, condView, expeditionsOut } from '../domain/guild/engine';
-import { partyNames } from '../domain/guild/text';
+import { lowerFirst, partyNames } from '../domain/guild/text';
 import { TRAIT } from '../domain/guild/traits';
 import { CONVICTION, vowText } from '../domain/guild/vows';
-import { hallLevel, outLimit, rosterLimit, tierLimit } from '../domain/guild/town';
+import { hallLevel, levelOf, outLimit, rosterLimit, tierLimit } from '../domain/guild/town';
 import type { Guild as GuildT, Offer, Outing } from '../domain/guild/types';
 import { Crest } from '../components/Crest';
 import { Icon } from '../components/Icon';
@@ -260,9 +260,9 @@ function Tavern({ g }: { g: GuildT }) {
                   <span>{advSub(a)}</span><Stars n={a.talent} /><span>Rating {ratingShown(a)}</span>
                 </div>
                 <div style={{ fontSize: 13 }}>{a.traitIds.map((id) => TRAIT[id]?.name).filter(Boolean).join(' · ')}</div>
-                {a.vow && <div className="muted" style={{ fontSize: 13 }}>{CONVICTION[a.conviction ?? '']?.name ? CONVICTION[a.conviction!].name + ' · ' : ''}Vow: {vowText(a.vow).toLowerCase()}.</div>}
+                {a.vow && <div className="muted" style={{ fontSize: 13 }}>{CONVICTION[a.conviction ?? '']?.name ? CONVICTION[a.conviction!].name + ' · ' : ''}Vow: {lowerFirst(vowText(a.vow))}.</div>}
                 <div className="muted" style={{ fontSize: 13 }}>
-                  Age {ageYears(a, phase)} · would serve {a.career} years · {RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}. {CLASSES[a.cls].blurb}
+                  Age {ageYears(a, phase)} · would serve {a.career} years · {RACES[a.race].trait}: {lowerFirst(RACES[a.race].traitText)}. {CLASSES[a.cls].blurb}
                 </div>
                 <div className="muted tnum" style={{ fontSize: 12 }}>Might {a.attrs.might} · Finesse {a.attrs.finesse} · Wits {a.attrs.wits} · Spirit {a.attrs.spirit} · leaves in {leaves <= 1 ? 'a day' : leaves + ' days'}</div>
                 {r.fee === 0 && <div style={{ fontSize: 12, color: 'var(--q-moss)' }}>One of the family: joins for free.</div>}
@@ -275,7 +275,7 @@ function Tavern({ g }: { g: GuildT }) {
           );
         })}
         {!g.recruits.length && <Empty>Nobody looking for work right now.</Empty>}
-        {full && <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>The roster is full ({rosterLimit(g)}). Let someone go from their sheet, or enlarge the Adventurers’ Lodge.</p>}
+        {full && <p className="muted" style={{ margin: '8px 0 0', fontSize: 13 }}>The roster is full ({rosterLimit(g)}). Let someone go from their sheet, or {levelOf(g, 'lodge') ? 'raise' : 'build'} the Adventurers’ Lodge.</p>}
       </Section>
       <Section title="Post a notice" sub={NOTICE_FEE + ' gold'}>
         {g.notice

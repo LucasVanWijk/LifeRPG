@@ -187,6 +187,8 @@ export interface Outing {
   potions: Record<string, PotionKind[]>;
   /** Which phase of the day they left in (0–2). */
   phase: number;
+  /** Renown it earned, once back. */
+  renown?: number;
 }
 
 export type EntryKind =
@@ -269,4 +271,6 @@ export interface Guild {
   visitorTotals?: { people: number; gold: number };
   /** Which town layout the save is on (3: one of every building, Housing and Farms included). */
   layout?: number;
+  /** The size of a point of renown the save counts in (see RENOWN_UNIT); older saves are 1. */
+  renownUnit?: number;
 }

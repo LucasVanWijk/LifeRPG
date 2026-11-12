@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { CharterId, Slot, Stance } from '../domain/guild/content';
 import {
   ATTR_NAME, ATTRS, BUILDINGS, CHARTERS, CLASSES, CONDITIONS, DAYS_PER_YEAR, GRADES, GUILD_NAMES, OFFER_KIND, PRACTICE_PER_POINT, RACES, REGIONS, ROLE_NAME, SLOT_NAME, SLOTS, STAGE_ICON,
-  STAGE_NAME, STANCES, STOCK_NAME, TOWN_NAMES, xpToNext,
+  STAGE_NAME, STANCES, STOCK_NAME, TOWN_NAMES, xpToNext, MAX_LEVEL,
 } from '../domain/guild/content';
 import { ageYears, canGoOut, fullName, phaseAt, rating, ratingShown, realDuration, rolesOf, shortClock, yearsLeft } from '../domain/guild/adventurer';
 import { TRAIT } from '../domain/guild/traits';
@@ -11,7 +11,7 @@ import { byId, ctxFor, departure, found, recoveryMult, sendProblem, treatCost, t
 import { conditionFactor, fatigueFloor, SEVERITY_NAME, SOURCE_NAME, staminaCap, worst } from '../domain/guild/wounds';
 import { oddsRange } from '../domain/guild/resolve';
 import { hash } from '../domain/guild/rng';
-import { entryText, names, partyNames, stageLines } from '../domain/guild/text';
+import { entryText, lowerFirst, names, partyNames, stageLines } from '../domain/guild/text';
 import type { Adventurer, Duty, Entry, Guild, Item, Loot } from '../domain/guild/types';
 import { Crest } from '../components/Crest';
 import { Icon } from '../components/Icon';
@@ -104,7 +104,7 @@ export function AdventurerSheet({ id }: { id: string }) {
       </div>
       <p className="muted" style={{ margin: 0, fontSize: 14 }}>
         {live ? 'Age ' + ageYears(a, phase) + ' · sworn ' + yearsLeft(a, phase) + ' more ' + (yearsLeft(a, phase) === 1 ? 'year' : 'years') + ' · ' : ''}{st.text}.
-        {' '}{RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}{a.race === 'halfling' && a.luckUsed ? ' (used)' : ''}. {CLASSES[a.cls].blurb}
+        {' '}{RACES[a.race].trait}: {lowerFirst(RACES[a.race].traitText)}{a.race === 'halfling' && a.luckUsed ? ' (used)' : ''}. {CLASSES[a.cls].blurb}
       </p>
       {a.traitIds?.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -158,7 +158,7 @@ export function AdventurerSheet({ id }: { id: string }) {
             ? <div className="panel" style={{ padding: '10px 12px', fontSize: 13 }}>Your real-life XP, practice and a quarter of the gold go to {a.first}.</div>
             : <button className="btn btn-primary inked" onClick={() => actions.setChampion(a.id)} disabled={!!a.awayOn} style={{ minHeight: 44 }}><Icon n="crown" size={15} />Make Champion</button>}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
-            <span className="label">Level {a.level}{a.level < 20 ? ' · ' + Math.floor(a.xp) + ' / ' + xpToNext(a.level) + ' XP' : ''}</span>
+            <span className="label">Level {a.level}{a.level < MAX_LEVEL ? ' · ' + Math.floor(a.xp) + ' / ' + xpToNext(a.level) + ' XP' : ''}</span>
             <Bar value={a.xp} max={xpToNext(a.level)} color="var(--color-accent-500)" label="Experience" />
           </div>
         </div>
@@ -312,7 +312,7 @@ export function SendSheet({ id }: { id: string }) {
         <span className="seal" style={{ width: 40, height: 40, flex: 'none' }}><Icon n={offer.scale === 'odd' ? 'scroll' : offer.scale === 'odyssey' ? 'compass' : OFFER_KIND[offer.kind].icon} size={18} /></span>
       </Head>
       <OfferMeta o={offer} g={g} />
-      {offer.scale !== 'odd' && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{REGIONS[offer.region].blurb} Setting out in the {dep.fx.name.toLowerCase()}: {dep.fx.text.toLowerCase()}{g.regions[offer.region].liberated ? ' This region is free, so trips here are shorter and richer.' : ''}</p>}
+      {offer.scale !== 'odd' && <p className="muted" style={{ margin: 0, fontSize: 13 }}>{REGIONS[offer.region].blurb} Setting out {dep.fx.name === 'Noon' ? 'at noon' : 'in the ' + dep.fx.name.toLowerCase()}: {lowerFirst(dep.fx.text)}{g.regions[offer.region].liberated ? ' This region is free, so trips here are shorter and richer.' : ''}</p>}
       {offer.scale !== 'odd' && (
         <ol className="battle-log" style={{ display: 'flex', flexDirection: 'column', gap: 4, fontSize: 13 }}>
           {offer.stages.map((st, i) => <li key={i} style={{ display: 'flex', gap: 8, alignItems: 'center' }}><Icon n={STAGE_ICON[st.kind]} size={13} /><span><strong>{STAGE_NAME[st.kind]}</strong> · {st.title}</span></li>)}
@@ -363,6 +363,7 @@ export function SendSheet({ id }: { id: string }) {
           </div>
           <div className="tnum" style={{ fontSize: 14 }}>
             Loot about {lootText(lo.loot)}{lo.goldHigh > lo.goldLow ? ' (gold ' + lo.goldLow + '–' + lo.goldHigh + ')' : ''} · about {lo.xp} XP each
+            {offer.scale !== 'odd' && <> · about {Math.round(o.renown) === Math.round(lo.renown) ? Math.round(lo.renown) : Math.round(o.renown) + '–' + Math.round(lo.renown)} renown (a clean run earns double)</>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {party.map((x) => (
@@ -431,7 +432,7 @@ export function ReportSheet({ id }: { id: string }) {
       {o.done && (
         <div className="panel" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 14 }}>
           <span className="label">Brought home</span>
-          <span>{lootText(o.result.loot)}{o.result.chest ? ' (the chest held ' + lootText(o.result.chest) + ')' : ''}</span>
+          <span>{lootText(o.result.loot)}{o.result.chest ? ' (the chest held ' + lootText(o.result.chest) + ')' : ''}{o.renown ? ', and ' + o.renown + ' renown' : ''}</span>
           <span>{Object.entries(o.result.members).filter(([, m]) => !m.died).map(([k, m]) => byId(g, k)!.first + ' +' + m.xp + ' XP').join(' · ') || 'Nobody came back.'}</span>
           {injuredBack.map(([k, m]) => <span key={k} style={{ color: 'var(--q-wax)' }}>{byId(g, k)!.first}: {m.wounds?.length ? m.wounds.map((w) => w.severity + ' wound, ' + w.text).join('; ') : m.injury ? m.injury.text + ', ' + m.injury.days + ' days' : ''}.</span>)}
           {o.potions && Object.values(o.potions).some((x) => x.length) && <span className="muted">Potions drunk: {Object.entries(o.potions).filter(([, x]) => x.length).map(([k, x]) => byId(g, k)!.first + ' ' + x.join(', ')).join(' · ')}.</span>}
@@ -533,8 +534,8 @@ export function Founding() {
                   <span className="heading" style={{ fontSize: 18 }}>{fullName(a)}</span>
                   <span className="meta" style={{ marginTop: 0 }}><span>{advSub(a)}</span><Stars n={a.talent} /></span>
                   <span style={{ fontSize: 12 }}>{a.traitIds.map((id) => TRAIT[id]?.name).filter(Boolean).join(' · ')}{a.conviction ? ' · ' + CONVICTION[a.conviction]?.name : ''}</span>
-                  {a.vow && <span className="muted" style={{ fontSize: 12 }}>Vow: {vowText(a.vow).toLowerCase()}.</span>}
-                  <span className="muted" style={{ fontSize: 12 }}>{CLASSES[a.cls].blurb} Age {ageYears(a, 0)}, sworn {a.career} years. {RACES[a.race].trait}: {RACES[a.race].traitText.toLowerCase()}.</span>
+                  {a.vow && <span className="muted" style={{ fontSize: 12 }}>Vow: {lowerFirst(vowText(a.vow))}.</span>}
+                  <span className="muted" style={{ fontSize: 12 }}>{CLASSES[a.cls].blurb} Age {ageYears(a, 0)}, sworn {a.career} years. {RACES[a.race].trait}: {lowerFirst(RACES[a.race].traitText)}.</span>
                 </span>
               </button>
             ))}

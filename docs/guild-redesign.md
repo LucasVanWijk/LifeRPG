@@ -118,7 +118,7 @@ Later classes that cover two roles: Paladin (Tank + Healer), Druid (Healer + DPS
 
 ### 4.4 Numbers on an adventurer
 
-- **Level** 1–20. `xpToNext(L) = 100 × L`, so level 20 is reached at 19,000 XP.
+- **Level** 1–30. `xpToNext(L) = 80 × L`, so level 20 is reached at 15,200 XP and level 30 at 34,800. (The cap was 20 with `100 × L`; it was raised so adventurers keep growing past the tier 5 band.)
 - **Talent** ★1–5, visible. Each level-up gives `1 + floor(talent / 2)` attribute points, spread by class weights.
 - **Four attributes:** Might, Finesse, Wits, Spirit (1–20). Each class weights them into a **Role score**, plus level and gear.
 - **Health** (0–100) and **Fatigue** (0–100). They recover at home. Low Health raises death risk. Fatigue above 70 gives a penalty to every check.
@@ -194,11 +194,11 @@ Every Tavern refresh includes at least one Tank or Healer. A **Recruitment notic
 |---|---|
 | Complete a quest | `reward(q)` as today. XP and attribute practice go to the Champion or Standard-bearer. Gold × the Hall bonus, split 25/75. |
 | Check in a habit | `habitReward(h)` as today, the same way |
-| Complete a campaign | Campaign XP and gold the same way, plus a **monument** in the Garden of Valor and renown (S 5 · M 10 · L 20) |
+| Complete a campaign | Campaign XP and gold the same way, plus a **monument** in the Garden of Valor and renown (S 10 · M 20 · L 40) |
 | Reach a habit streak of 7 · 30 · 100 (daily) or 4 · 12 · 40 (weekly) | An **heirloom trinket** named after the habit (Rare · Epic · Legendary), once per habit per milestone, never taken away |
 | Undo any of these | Taken back from whoever received it (stored as `recipientId`), stopping at 0. If they're gone, it's taken from the guild treasury. Levels, attributes and heirlooms are never lost. |
 
-At the current quest values (20–105 XP, gold = XP / 3), about 5 real quests a day give the Champion about 250 XP and the guild about 55 gold before the Hall bonus. The Champion can reach level 20 in about 2.5 months of real life alone. That's well within a long career, which is the point of being Champion.
+At the current quest values (20–105 XP, gold = XP / 3), about 5 real quests a day give the Champion about 250 XP and the guild about 55 gold before the Hall bonus. The Champion can reach level 20 in about 2 months of real life alone, and level 30 in about 4.5; in practice you will switch Champions as careers end, so real-life XP keeps landing on someone who can use it. That's well within a long career, which is the point of being Champion.
 
 Removed: Hero XP, level, title and skill points. The Hero record shrinks to a profile: `name`, `portrait`, `reviewedWeek`.
 
@@ -289,7 +289,7 @@ Measured with the stage 1 numbers (400 simulated careers each): careful play los
   - Odd job: 5–15.
   - Expedition: `10 × tier² × stagesCleared / stages` (tier 1 = 10, tier 5 = 250, so higher tiers pay more per hour). ×1.5 on Bold. The Library and Martial charter add more.
   - Odyssey: the sum of its legs × 1.5.
-- **Renown**, which never decreases:
+- **Renown**, which never decreases (as built, see section 17: every expedition and odyssey earns renown, a flawless one twice as much):
   - Expedition full clear: its tier.
   - Odyssey: `10 × tier`.
   - Liberating a region: 100.
@@ -392,7 +392,7 @@ The Guild Hall sets the pace of the whole game. It's designed so that level 10 t
 | 9 | ~288 | Gold | 7,000 | 3,000 | 2,900 | 700 | 4,300 | Building level 5, +1 crew |
 | 10 | ~365 | Adamant | 9,500 | 4,000 | 4,000 | 1,000 | 5,500 | 6 out |
 
-- **Real-life bonus:** gold from real life × `1 + 0.1 × (level − 1)`, up to ×1.9 at level 10. Real life stays relevant as costs grow.
+- **Real-life bonus:** gold from real life × `1 + 0.15 × (level − 1)`, up to ×2.35 at level 10. Real life stays relevant as costs grow.
 - **Rank** (Copper → Adamant) is the guild's title and comes from the Hall's level.
 - All the numbers in this section are starting values. A **pacing test** (13.4) simulates a typical player and tunes them to hit the target days.
 
@@ -445,7 +445,7 @@ Every completed real campaign raises a monument: a plaque (S), a statue (M) or a
 
 ### 9.3 Hall of Heroes
 
-- **Legends:** retired at level 15 or higher, or with 3+ tier-5 clears or a region liberated. Each gives +1% to a guild stat tied to their class, up to +15% per stat.
+- **Legends:** retired at level 25 or higher (15 before the level cap rose to 30), or with 3+ tier-5 clears or a region liberated. Each gives +1% to a guild stat tied to their class, up to +15% per stat.
 - **Witness Stones and Tombs** (6.6).
 - **The Heirloom shelf** (10).
 - **Guild Records:** longest career, highest level, most outings, deadliest place, most gold brought home, longest-lived retiree, largest family.
@@ -665,9 +665,9 @@ The bottom tab **Adventure** becomes **Guild**, with a top segmented control:
 
 Where the build settled differently from the numbers above, or where the design was silent:
 
-- **Time and pacing.** A bot that plays the real engine (5 quests and 3 habits a day, a visit every 6 real hours, sensible builds) reaches Hall levels 2 to 10 on about days 4, 15, 40, 58, 110, 148, 224, 289 and 416. That is inside the ±25% pacing test against the targets in 8.3 (level 10 is a little late). Real life supplies about 57% of the guild's gold through Hall 6.
-- **Hall costs** were raised after the bot showed gold was not binding late on. The final table is `HALL_STEPS` in `content.ts` (level 10: 9,000 gold, 4,800 wood and stone, 1,400 iron, 2,400 renown). Every step still fits the Warehouse you can have a level earlier.
-- **Renown** per full expedition clear is `tier²` (1, 4, 9, 16, 25), an odyssey `10 × tier`, a freed region 100, and a finished campaign 5, 10 or 20.
+- **Time and pacing.** A bot that plays the real engine (5 quests and 3 habits a day, a visit every 6 real hours, sensible builds) reaches Hall levels 2 to 10 on about days 6, 19, 42, 68, 102, 153, 215, 273 and 359 (mean of 4 seeds), within about 10% of the targets in 8.3 and inside the ±25% pacing test. Real life supplies at least half of all the guild's gold through Hall 6 on every seed, counting expeditions, visitors and pensions against it. Progress follows real-life effort: a thorough bot doing 15 quests and habits a day reaches Hall 10 around day 250, one doing 3 a day Hall 9 around day 330, and one doing none only Hall 5 or 6 in 420 days.
+- **Hall costs** are `HALL_STEPS` in `content.ts`. Gold, materials, renown and build time all rise from one level to the next (a test checks it); level 10 costs 25,000 gold, 4,800 wood and stone, 1,400 iron and 8,000 renown. Every step still fits the Warehouse you can have a level earlier. Late on, renown and gold gate the Hall together: expeditions earn the one, real life most of the other.
+- **Renown** comes from every expedition and odyssey, not only flawless ones. An outing is worth `tier²` (1, 4, 9, 16, 25), or `10 × tier` for an odyssey; it earns that worth times the share of its checks the party passed (at least 1 if they passed any), and a flawless run (every stage, no failure) earns as much again. A freed region gives 200 and a finished campaign 10, 20 or 40. The odds panel shows the expected renown and the report what was earned. When only flawless runs counted, renown was the one thing holding the Hall back from level 6 on, a tired party earned nothing, and a bot that checked in every 12 hours progressed faster than one checking in every 6. These numbers are twice the old unit; older saves have their renown doubled once on load (`renownUnit`).
 - **Retirees pile up.** With careers of 3 to 15 years, a roster of 12 produces about 40 retirees a year, living 10 to 80 years afterwards. By day 380 the bot housed 68. Housing, food and order demand is therefore the real late-game limit, which is the point of Housing, Farms and the Watch House, and why those two have ten levels.
 - **Death rates.** Measured over 300 simulated careers with conditions in play: careful play loses 31%, Bold play 67% (Bold's death multiplier is ×2.2). Stacking two risks loses far more.
 - **Conditions** cost 1.2 on every non-rest check for each one nobody in the party counters (by class, race or a trinket). Evening departures always add Darkness.
@@ -680,4 +680,6 @@ Where the build settled differently from the numbers above, or where the design 
 - **Traits and backstories.** Every adventurer has two of 75 traits (28 good, 25 flaws, 22 quirks), never from the same family and rarely two flaws. Effects use one vocabulary (`Fx` in `traits.ts`): rating on every check or on one kind of stage, death, injury and fatigue, recovery, XP, gold and training, bonuses when Bold, Cautious, alone or in a big party, setting out in the morning or evening, and conditions they counter. Each trait also supplies a sentence for the backstory, built with where they were born and why they came to the guild. Adventurers from older saves get theirs on load. Careful play still loses about 32% and Bold play 67%.
 - **Two-role classes.** Paladin (Tank and Healer), Druid (Healer and DPS) and Bard (Healer and Scout) satisfy a party's needs for either role, count as a healer for saves, and give up 0.8 rating for it.
 - **Convictions and vows.** Each adventurer has one of 24 convictions (a small steady effect, such as The Shield: 5% less likely to die and helps the party) and one vow, drawn from 11 kinds: fully clear expeditions, clear high-tier ones, defeat bosses, bring the whole party home, go on expeditions in a region, bring home gold, reach a level, bring a fallen friend home, finish an odyssey, help free a region, or find someone to share the road with. Progress is counted as they play. Keeping a vow earns a permanent reward (listed in `VOW_REWARD`) and a chronicle line. Retiring or falling first leaves it unfulfilled, and the chronicle says so too. Vows are shown on recruits so hiring is a choice. Older saves get theirs on load.
+- **Visitors.** Strangers come once a game week (one real day), 10 at 800 renown and more slowly after that (20 at 3,200, 30 at 7,200). They pay a little for a room, entertainment, gear, healing or supplies, if the town has a building for it. When they came every game day and grew in step with renown they paid over 90% of a year's gold, leaving a million unspent; now a thorough player gets about 45% of a year's gold from them, mostly late, and real life still pays at least half of all gold through Hall 6. The pacing test counts every source (expeditions, visitors and pensions) against real life.
+- **Chronicle size.** Routine lines (returns, minor and trivial wounds, broken gear, seasons) are dropped after 4 game years (32 real days); everything else is kept for good, and eras only count lines that are kept. This keeps a year's save near 1 MB instead of over 2 MB. A save the browser refuses (storage full) is reported once, with a pointer to the backup.
 - **Still to do:** events, the paper map and town scene, the desktop layout, generated portraits beyond the crests.

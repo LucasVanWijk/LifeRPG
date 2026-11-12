@@ -129,6 +129,10 @@ export function buildProblem(g: Guild, type: BuildingId, target?: Building): str
   if (g.construction.length >= crews(g)) return 'Every crew is busy';
   const c = costOf(g, type, type === 'hall' ? hall + 1 : level);
   if (type === 'hall' && g.renown < c.renown) return 'Needs ' + c.renown + ' renown (you have ' + g.renown + ')';
+  // Production stops at the Warehouse's limit, so a cost above it can never be saved up: say so.
+  const cap = storageCap(g);
+  const over = (['wood', 'stone', 'iron'] as const).filter((k) => c[k] > cap && g.stock[k] < c[k]);
+  if (over.length) return 'Needs ' + over.map((k) => c[k] + ' ' + k).join(' and ') + ', more than the stores hold (' + cap + '): ' + (levelOf(g, 'warehouse') ? 'raise' : 'build') + ' the Warehouse';
   if (!afford(g, c)) return 'Not enough materials or gold';
   if (type !== 'hall' && !BUILDINGS[type].free) {
     const next = target ? g.buildings.map((b) => (b === target ? { ...b, level } : b)) : [...g.buildings, { id: '?', type, level: 1 }];

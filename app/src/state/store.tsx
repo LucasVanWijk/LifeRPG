@@ -199,12 +199,14 @@ function useStoreValue() {
   const saveTimer = useRef<number | undefined>(undefined);
   const latest = useRef(data);
   latest.current = data;
+  // A save that fails (storage full, or private mode) is reported once, rather than losing edits silently.
+  const [saveFailed, setSaveFailed] = useState(false);
   useEffect(() => {
     const save = () => {
       window.clearTimeout(saveTimer.current);
       saveTimer.current = undefined;
       savedAt.current = Date.now();
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(latest.current)); } catch { /* quota or private mode */ }
+      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(latest.current)); } catch { setSaveFailed(true); }
     };
     const wait = 5000 - (Date.now() - savedAt.current);
     if (wait <= 0) save();
@@ -267,6 +269,9 @@ function useStoreValue() {
     playNext();
   }, [playNext]);
   const showToast = useCallback((text: string, sub: string) => showToasts([{ text, sub }]), [showToasts]);
+  useEffect(() => {
+    if (saveFailed) showToast('Could not save on this device', 'The browser’s storage is full or blocked. Export a backup from Settings so nothing is lost.');
+  }, [saveFailed, showToast]);
 
   // Reads the latest data synchronously so completion side effects (toast, level-up) fire once.
   const dataRef = useRef(data);

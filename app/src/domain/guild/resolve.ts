@@ -3,7 +3,7 @@
 // short outings, and from a fixed set of 20,000 seeded runs for the long ones (odysseys).
 import type { CharterId, CondOrUnknown, ConditionId, Role, StageKind, StockKey } from './content';
 import {
-  BOLD_XP, BOSS_EXTRA, CLEAR_AT, COND_PENALTY, difficulty, MISSING_ROLE, ODYSSEY_XP, RACES, ROLE_WEIGHT, SIZE_BONUS, STAGE_GOLD, STAGE_HERBS,
+  BOLD_XP, BOSS_EXTRA, RENOWN, CLEAR_AT, COND_PENALTY, difficulty, MISSING_ROLE, ODYSSEY_XP, RACES, ROLE_WEIGHT, SIZE_BONUS, STAGE_GOLD, STAGE_HERBS,
   STAGE_MATERIALS, STANCES, STOCK_KEYS, STRAIN_AT, xpFor, CLASS_COUNTERS, RACE_COUNTERS,
 } from './content';
 import type { Stance } from './content';
@@ -197,6 +197,17 @@ function outingXp(ctx: Ctx, outcomes: Outcome[]): number {
   return xpFor(o.tier) * (cleared / checks) * (ctx.stance === 'bold' ? BOLD_XP : 1) * (o.scale === 'odyssey' ? ODYSSEY_XP : 1) * ctx.xpMult;
 }
 
+/** Renown an outing earns from how its stages went (see RENOWN): a share for every check passed, as much again when flawless. */
+export function outingRenown(offer: Pick<Offer, 'scale' | 'tier' | 'stages'>, outcomes: Outcome[]): number {
+  if (offer.scale === 'odd') return 0;
+  const worth = offer.scale === 'odyssey' ? RENOWN.odyssey * offer.tier : offer.tier * offer.tier;
+  const checks = offer.stages.filter((s) => s.kind !== 'rest').length;
+  const passed = outcomes.filter((x, i) => x !== 'fail' && offer.stages[i].kind !== 'rest').length;
+  if (!passed || !checks) return 0;
+  const flawless = outcomes.length === offer.stages.length && outcomes.every((x) => x !== 'fail');
+  return Math.max(1, Math.round((worth * RENOWN.share * passed) / checks)) + (flawless ? Math.round(worth * RENOWN.flawless) : 0);
+}
+
 // ── Rolling the real outcome ─────────────────────────────────
 
 export function resolve(ctx: Ctx, r: Rng): OutingResult {
@@ -250,6 +261,8 @@ export interface Odds {
   goldLow: number;
   goldHigh: number;
   xp: number;
+  /** Expected renown. */
+  renown: number;
 }
 
 /** Branches less likely than this are dropped; far below what the screen shows. */
@@ -272,7 +285,7 @@ export function oddsRange(ctx: Ctx, hidden: number): { lo: Odds; hi: Odds } {
 
 function sampled(ctx: Ctx): Odds {
   const n = ctx.members.length;
-  const out: Odds = { full: 0, turnBack: 0, anyMajor: 0, injury: {}, major: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0 };
+  const out: Odds = { full: 0, turnBack: 0, anyMajor: 0, injury: {}, major: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0, renown: 0 };
   for (const m of ctx.members) { out.injury[m.id] = 0; out.major[m.id] = 0; }
   const golds: number[] = [];
   let loot: Loot = emptyLoot(), xp = 0;
@@ -288,11 +301,12 @@ function sampled(ctx: Ctx): Odds {
       xp += mr.xp;
     }
     if (major) out.anyMajor++;
+    out.renown += outingRenown(ctx.offer, r.stages.map((s) => s.outcome));
     loot = addLoot(loot, { ...r.loot, items: undefined });
     golds.push(r.loot.gold);
   }
   const N = SAMPLES;
-  out.full /= N; out.turnBack /= N; out.anyMajor /= N;
+  out.full /= N; out.turnBack /= N; out.anyMajor /= N; out.renown /= N;
   for (const m of ctx.members) { out.injury[m.id] /= N; out.major[m.id] /= N; }
   golds.sort((a, b) => a - b);
   out.goldLow = golds[Math.floor(N * 0.1)]; out.goldHigh = golds[Math.floor(N * 0.9)];
@@ -303,7 +317,7 @@ function sampled(ctx: Ctx): Odds {
 
 function exact(ctx: Ctx): Odds {
   const n = ctx.members.length;
-  const out: Odds = { full: 0, turnBack: 0, anyMajor: 0, injury: {}, major: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0 };
+  const out: Odds = { full: 0, turnBack: 0, anyMajor: 0, injury: {}, major: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0, renown: 0 };
   for (const m of ctx.members) { out.injury[m.id] = 0; out.major[m.id] = 0; }
   const leaves: { p: number; gold: number }[] = [];
 
@@ -325,6 +339,7 @@ function exact(ctx: Ctx): Odds {
       }
       out.anyMajor += p * (1 - none);
       out.xp += p * xp;
+      out.renown += p * outingRenown(ctx.offer, outcomes);
       leaves.push({ p, gold: loot.gold });
       return;
     }

@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { PHASE_MS, PHASES_PER_YEAR, TUTORIAL_MINUTES } from './content';
+import { HALL_STEPS, MAX_LEVEL, PHASE_MS, PHASES_PER_YEAR, ROUTINE_KEEP_YEARS, TUTORIAL_MINUTES, xpToNext } from './content';
 import { rosterLimit } from './town';
-import { makeAdventurer, role } from './adventurer';
+import { addXp, makeAdventurer, role } from './adventurer';
 import { makeExpedition } from './board';
 import { woundStats } from './balance';
-import { advance, ctxFor, found, hire, payReal, refund, send, setChampion } from './engine';
-import { odds, resolve, snapshot } from './resolve';
+import { advance, ctxFor, found, hire, payReal, refund, send, setChampion, upgradeGuild } from './engine';
+import { odds, outingRenown, resolve, snapshot } from './resolve';
 import { staminaCap } from './wounds';
 import { rngFor } from './rng';
-import type { Guild } from './types';
+import { trimChronicle } from './util';
+import type { Guild, Offer, Outcome } from './types';
 
 const NOW = Date.UTC(2026, 10, 5, 12);
 const founding = { name: 'The Test Company', town: 'Testwick', charter: 'martial' as const, crestSeed: 1, seed: 42 };
@@ -61,6 +62,33 @@ describe('advance', () => {
       expect(a.career).toBeLessThanOrEqual(15);
       expect(a.retirePhase).toBe(a.career * PHASES_PER_YEAR);
     }
+  });
+});
+
+describe('the chronicle', () => {
+  it('drops routine lines once they are old, keeps everything that matters, and leaves a fresh chronicle alone', () => {
+    const g = fresh();
+    const year = PHASES_PER_YEAR * PHASE_MS;
+    g.t = (ROUTINE_KEEP_YEARS + 2) * year;
+    const old = 1 * year, recent = g.t - year;
+    g.chronicle = [
+      { at: old, k: 'back', o: 'x1', v: 12 }, { at: old, k: 'hurt', a: 'a1', t: 'a black eye', b: 'trivial', v: 1 },
+      { at: old, k: 'hurt', a: 'a1', t: 'a broken leg', b: 'major', v: 9 }, { at: old, k: 'hire', a: 'a1', v: 40 },
+      { at: old, k: 'season', v: 1 }, { at: old, k: 'retire', a: 'a1', v: 3 },
+      { at: recent, k: 'back', o: 'x2', v: 20 }, { at: recent, k: 'hurt', a: 'a1', t: 'a cough', b: 'trivial', v: 1 },
+    ];
+    trimChronicle(g);
+    expect(g.chronicle.map((e) => e.k + (e.b ? ':' + e.b : ''))).toEqual(['hurt:major', 'hire', 'retire', 'back', 'hurt:trivial']);
+    const kept = g.chronicle;
+    trimChronicle(g);
+    expect(g.chronicle).toBe(kept);
+  });
+
+  it('stays small over a long time away', () => {
+    const later = at(fresh(), (ROUTINE_KEEP_YEARS + 3) * PHASES_PER_YEAR);
+    const cutoff = later.t - ROUTINE_KEEP_YEARS * PHASES_PER_YEAR * PHASE_MS;
+    expect(later.chronicle.some((e) => e.k === 'season' && e.at < cutoff)).toBe(false);
+    expect(later.chronicle.some((e) => e.k === 'found')).toBe(true);
   });
 });
 
@@ -173,6 +201,80 @@ describe('hiring', () => {
     full = { ...full, recruits: [{ ...first, adv: { ...first.adv, id: 'again' } }] };
     const again = hire(full, 'again');
     expect(again.ok).toBe(false);
+  });
+});
+
+describe('renown', () => {
+  const offer = (tier: number, kinds: string[], scale: Offer['scale'] = 'expedition') =>
+    ({ scale, tier, stages: kinds.map((kind) => ({ kind, title: '' })) }) as Pick<Offer, 'scale' | 'tier' | 'stages'>;
+  const run = (...o: Outcome[]) => o;
+
+  it('comes from every expedition, in proportion to the checks passed, and a flawless run earns as much again', () => {
+    const t3 = offer(3, ['combat', 'hazard', 'rest', 'trap', 'combat', 'boss']);
+    expect(outingRenown(t3, run('clear', 'strain', 'clear', 'clear', 'strain', 'clear'))).toBe(18);
+    expect(outingRenown(t3, run('clear', 'fail', 'clear', 'clear', 'clear', 'clear'))).toBe(7);
+    expect(outingRenown(t3, run('fail', 'fail'))).toBe(0);
+    // Turned back at the trap, having passed one of the five checks (the third stage is a rest): a fifth of 9.
+    expect(outingRenown(t3, run('clear', 'fail', 'clear', 'fail'))).toBe(2);
+  });
+
+  it('gives a tier 1 expedition at least 1 for passing anything, and 2 for a flawless run', () => {
+    const t1 = offer(1, ['combat', 'hazard', 'boss']);
+    expect(outingRenown(t1, run('fail', 'clear', 'fail'))).toBe(1);
+    expect(outingRenown(t1, run('clear', 'clear', 'fail'))).toBe(1);
+    expect(outingRenown(t1, run('clear', 'strain', 'clear'))).toBe(2);
+  });
+
+  it('pays odysseys ten per tier for their share, and nothing for odd jobs', () => {
+    const ody = offer(4, ['combat', 'trap', 'rest', 'combat', 'boss'], 'odyssey');
+    expect(outingRenown(ody, run('clear', 'clear', 'clear', 'clear', 'clear'))).toBe(80);
+    expect(outingRenown(ody, run('clear', 'fail', 'clear', 'clear', 'fail'))).toBe(20);
+    expect(outingRenown(offer(0, ['combat'], 'odd'), run('clear'))).toBe(0);
+  });
+
+  it('is added when the party comes home, and the odds show what to expect', () => {
+    let g = fresh();
+    const exp = g.board.find((o) => o.scale === 'expedition')!;
+    const party = g.adventurers.map((a) => a.id).slice(0, exp.maxParty);
+    const expected = odds(ctxFor(g, exp, party, 'steady').ctx).renown;
+    expect(expected).toBeGreaterThan(0);
+    const r = send(g, exp.id, party, 'steady');
+    if (!r.ok) throw new Error(r.reason);
+    g = at(r.guild, 48);
+    const o = g.outings.find((x) => x.offer.id === exp.id)!;
+    expect(o.done).toBe(true);
+    expect(o.renown).toBe(outingRenown(o.offer, o.result.stages.map((s) => s.outcome)));
+    expect(g.renown).toBe(o.renown);
+  });
+
+  it('doubles the renown of saves from before, once, along with what campaigns paid', () => {
+    const g = fresh();
+    const old = { ...g, renown: 300, renownUnit: undefined, ledger: [{ ...payReal(g, { key: 'c:x', xp: 1, gold: 1, kind: 'campaign', title: 'X', date: '', attr: 'main', notable: false }).entry, renown: 10 }] } as Guild;
+    const up = upgradeGuild(old);
+    expect(up.renown).toBe(600);
+    expect(up.ledger[0].renown).toBe(20);
+    expect(upgradeGuild(up).renown).toBe(600);
+  });
+
+  it('raises the Guild Hall with costs that never go down from one level to the next', () => {
+    const steps = HALL_STEPS.filter((x) => x !== null);
+    for (let i = 1; i < steps.length; i++) for (const k of ['gold', 'wood', 'stone', 'iron', 'renown', 'phases'] as const) {
+      expect(steps[i]![k], k + ' for Hall ' + (i + 3)).toBeGreaterThanOrEqual(steps[i - 1]![k]);
+    }
+  });
+});
+
+describe('levels', () => {
+  it('go up to 30, each 80 XP times the level', () => {
+    expect(MAX_LEVEL).toBe(30);
+    expect(xpToNext(1)).toBe(80);
+    expect(xpToNext(19)).toBe(1520);
+    const a = makeAdventurer(rngFor(1, 'lv'), 'lv', 0, { level: 1 });
+    addXp(a, 80 * (19 * 20) / 2);
+    expect(a.level).toBe(20);
+    addXp(a, 1e6);
+    expect(a.level).toBe(30);
+    expect(a.xp).toBeLessThanOrEqual(xpToNext(30));
   });
 });
 
