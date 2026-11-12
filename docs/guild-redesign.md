@@ -445,7 +445,7 @@ Every completed real campaign raises a monument: a plaque (S), a statue (M) or a
 
 ### 9.3 Hall of Heroes
 
-- **Legends:** retired at level 15 or higher, or with 3+ tier-5 clears or a region liberated. Each gives +1% to a guild stat tied to their class, up to +15% per stat.
+- **Legends:** retired at level 25 or higher (15 before the level cap rose to 30), or with 3+ tier-5 clears or a region liberated. Each gives +1% to a guild stat tied to their class, up to +15% per stat.
 - **Witness Stones and Tombs** (6.6).
 - **The Heirloom shelf** (10).
 - **Guild Records:** longest career, highest level, most outings, deadliest place, most gold brought home, longest-lived retiree, largest family.

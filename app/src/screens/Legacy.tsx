@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { CLASSES, GRADES, LEGEND_STAT, MONUMENT, REGION_ORDER, REGIONS, SLOT_NAME, STONE_BONUS, STONE_MAX } from '../domain/guild/content';
+import { CLASSES, GRADES, LEGEND_LEVEL, LEGEND_STAT, MONUMENT, REGION_ORDER, REGIONS, SLOT_NAME, STONE_BONUS, STONE_MAX } from '../domain/guild/content';
 import type { IconName } from '../components/Icon';
 import { fullName, phaseAt, ratingShown } from '../domain/guild/adventurer';
 import { records } from '../domain/guild/legacy';
@@ -44,7 +44,7 @@ export function Legacy({ g, now }: { g: GuildT; now: number }) {
   return (
     <>
       <Section title="Hall of Heroes" sub={'bonuses up to +' + Math.round(legendCap(g) * 100) + '% (level ' + heroes + ')'}>
-        {legends.length === 0 && <Empty>No legends yet. An adventurer who retires at level 15, clears three tier 5 expeditions or frees a region is remembered here, and their class adds a small bonus to the whole guild.</Empty>}
+        {legends.length === 0 && <Empty>No legends yet. An adventurer who retires at level {LEGEND_LEVEL}, clears three tier 5 expeditions or frees a region is remembered here, and their class adds a small bonus to the whole guild.</Empty>}
         {legends.map(row)}
         {legends.length > 0 && (
           <div className="muted tnum" style={{ fontSize: 12, paddingTop: 8, display: 'flex', flexWrap: 'wrap', gap: '2px 14px' }}>
