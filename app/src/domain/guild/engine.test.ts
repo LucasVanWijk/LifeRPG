@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { PHASE_MS, PHASES_PER_YEAR, TUTORIAL_MINUTES } from './content';
+import { PHASE_MS, PHASES_PER_YEAR, ROUTINE_KEEP_YEARS, TUTORIAL_MINUTES } from './content';
 import { rosterLimit } from './town';
 import { makeAdventurer, role } from './adventurer';
 import { makeExpedition } from './board';
@@ -8,6 +8,7 @@ import { advance, ctxFor, found, hire, payReal, refund, send, setChampion } from
 import { odds, resolve, snapshot } from './resolve';
 import { staminaCap } from './wounds';
 import { rngFor } from './rng';
+import { trimChronicle } from './util';
 import type { Guild } from './types';
 
 const NOW = Date.UTC(2026, 10, 5, 12);
@@ -61,6 +62,33 @@ describe('advance', () => {
       expect(a.career).toBeLessThanOrEqual(15);
       expect(a.retirePhase).toBe(a.career * PHASES_PER_YEAR);
     }
+  });
+});
+
+describe('the chronicle', () => {
+  it('drops routine lines once they are old, keeps everything that matters, and leaves a fresh chronicle alone', () => {
+    const g = fresh();
+    const year = PHASES_PER_YEAR * PHASE_MS;
+    g.t = (ROUTINE_KEEP_YEARS + 2) * year;
+    const old = 1 * year, recent = g.t - year;
+    g.chronicle = [
+      { at: old, k: 'back', o: 'x1', v: 12 }, { at: old, k: 'hurt', a: 'a1', t: 'a black eye', b: 'trivial', v: 1 },
+      { at: old, k: 'hurt', a: 'a1', t: 'a broken leg', b: 'major', v: 9 }, { at: old, k: 'hire', a: 'a1', v: 40 },
+      { at: old, k: 'season', v: 1 }, { at: old, k: 'retire', a: 'a1', v: 3 },
+      { at: recent, k: 'back', o: 'x2', v: 20 }, { at: recent, k: 'hurt', a: 'a1', t: 'a cough', b: 'trivial', v: 1 },
+    ];
+    trimChronicle(g);
+    expect(g.chronicle.map((e) => e.k + (e.b ? ':' + e.b : ''))).toEqual(['hurt:major', 'hire', 'retire', 'back', 'hurt:trivial']);
+    const kept = g.chronicle;
+    trimChronicle(g);
+    expect(g.chronicle).toBe(kept);
+  });
+
+  it('stays small over a long time away', () => {
+    const later = at(fresh(), (ROUTINE_KEEP_YEARS + 3) * PHASES_PER_YEAR);
+    const cutoff = later.t - ROUTINE_KEEP_YEARS * PHASES_PER_YEAR * PHASE_MS;
+    expect(later.chronicle.some((e) => e.k === 'season' && e.at < cutoff)).toBe(false);
+    expect(later.chronicle.some((e) => e.k === 'found')).toBe(true);
   });
 });
 

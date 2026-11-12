@@ -1,5 +1,6 @@
 // Strangers who come to the village: unnamed people who use the town's buildings and pay a little gold.
-// How many come each day follows the guild's renown; what they want is drawn at random, and what the town can
+// They are counted once a game week (one real day), so they stay a small extra next to real life and expeditions.
+// How many come each week follows the guild's renown; what they want is drawn at random, and what the town can
 // give them (and how many it can take) follows the buildings and their levels.
 import type { BuildingId } from './content';
 import type { Rng } from './rng';
@@ -17,17 +18,22 @@ export const DESIRE_INFO: Record<Desire, { name: string; verb: string; weight: n
   supplies: { name: 'Supplies', verb: 'bought potions and herbs', weight: 0.08, gold: 4, from: ['stillroom'] },
 };
 
-/** Visitors a day at 200 renown. */
+/** Visitors a week at 200 renown. */
 export const VISITORS_AT_200 = 10;
-/** Visitors per day: 10 at 200 renown, in proportion. */
-export const visitorsPerDay = (renown: number) => Math.max(0, Math.round((VISITORS_AT_200 * renown) / 200));
-/** How many people a desire can take in a day: a few for the first level, more for each level after. */
+/** Visitors per week: in proportion to renown up to 10 at 200, then more slowly (20 at 800, 30 at 1,800), so they stay a small extra. */
+export const visitorsPerWeek = (renown: number) => {
+  const r = Math.max(0, renown) / 200;
+  return Math.round(VISITORS_AT_200 * (r <= 1 ? r : Math.sqrt(r)));
+};
+/** How many people a desire can take in a week: a few for the first level, more for each level after. */
 export const capacity = (level: number) => (level > 0 ? 3 + 3 * level : 0);
 
 /** The best level among the buildings that can serve a desire. */
 export const serviceLevel = (g: Guild, d: Desire) => Math.max(0, ...DESIRE_INFO[d].from.map((b) => levelOf(g, b)));
 
+/** One week's visitors (the name is from when they came daily; saves keep it). */
 export interface VisitDay {
+  /** The game day they were counted on, the first day of the week. */
   day: number;
   /** Who came, by what they wanted, and how many of them were served. */
   wanted: Record<Desire, number>;
@@ -37,9 +43,9 @@ export interface VisitDay {
 
 const zero = (): Record<Desire, number> => ({ lodging: 0, entertainment: 0, gear: 0, healing: 0, supplies: 0 });
 
-/** One day's visitors: draws what each wants, serves what the town can, and returns the day. */
-export function visitDay(g: Guild, day: number, r: Rng): VisitDay {
-  const n = visitorsPerDay(g.renown);
+/** One week's visitors: draws what each wants, serves what the town can, and returns the week. */
+export function visitWeek(g: Guild, day: number, r: Rng): VisitDay {
+  const n = visitorsPerWeek(g.renown);
   const wanted = zero(), served = zero();
   for (let i = 0; i < n; i++) wanted[r.weighted(DESIRES, (d) => DESIRE_INFO[d].weight)]++;
   let gold = 0;

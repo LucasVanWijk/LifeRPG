@@ -403,6 +403,11 @@ export const OUTPOST_SLOTS = 1;
 
 // ── Legacy ───────────────────────────────────────────────────
 
+/** Routine chronicle lines (returns, wounds, broken gear, seasons) are kept this long, then dropped so the save stays small.
+ * Everything else (hires, retirements, buildings, legends, births…) is kept for good; eras count only those. */
+export const ROUTINE_ENTRIES: ReadonlySet<string> = new Set(['back', 'hurt', 'broke', 'season']);
+export const ROUTINE_KEEP_YEARS = 4;
+
 export const COUPLE_SHARED = 6;
 export const COUPLE_CHANCE = 0.15;
 export const CHILD_CHANCE = 0.2;

@@ -22,10 +22,10 @@ import {
   boardSize, buildProblem, costOf, hallLevel, happyTalent, isLegend, legendBonus, levelOf, outLimit, production, rosterLimit, seasonCount,
   seasonIndex, staffMult, staffOf, staffSlots, stoneCut, storageCap, tavernSize, tierLimit, value, dayOf,
 } from './town';
-import { active, byId, champion, log, nextId } from './util';
+import { active, byId, champion, log, nextId, trimChronicle } from './util';
 import { AWAY_HEAL, FATIGUE_REGEN, fatigueFloor, SCAR_CHANCE, SCAR_CHANCE_TREATED, STAMINA_REGEN, staminaCap } from './wounds';
 import type { Wound, WoundSource } from './types';
-import { servedCount, visitDay } from './visitors';
+import { servedCount, visitWeek } from './visitors';
 import type { Adventurer, Duty, Entry, GameMs, Guild, Item, ItemDraft, LedgerEntry, Offer, Outing, Potion } from './types';
 
 export { active, byId, champion };
@@ -152,7 +152,9 @@ export function advance(g0: Guild, now: number): Advanced {
     } else break;
   }
   g.t = target;
-  return { guild: g, entries: g.chronicle.slice(before), elapsed: target - from };
+  const entries = g.chronicle.slice(before);
+  trimChronicle(g);
+  return { guild: g, entries, elapsed: target - from };
 }
 
 export function effectiveDuty(a: Adventurer, p: number): Exclude<Duty, 'auto'> {
@@ -258,11 +260,13 @@ function phaseTick(g: Guild, p: number) {
     }
   }
   g.recruits = g.recruits.filter((r) => r.leaves > p);
-  // Strangers come to town and pay a little for what it offers.
-  const visit = visitDay(g, day, rngFor(g.seed, 'visitors', day));
-  g.visitors = visit;
-  g.visitorTotals = { people: (g.visitorTotals?.people ?? 0) + servedCount(visit), gold: (g.visitorTotals?.gold ?? 0) + visit.gold };
-  g.gold += visit.gold;
+  // Once a week, strangers come to town and pay a little for what it offers.
+  if (day % WEEK_DAYS === 0) {
+    const visit = visitWeek(g, day, rngFor(g.seed, 'visitors', day));
+    g.visitors = visit;
+    g.visitorTotals = { people: (g.visitorTotals?.people ?? 0) + servedCount(visit), gold: (g.visitorTotals?.gold ?? 0) + visit.gold };
+    g.gold += visit.gold;
+  }
   if (day >= g.nextTavernDay) refreshTavern(g, p, day);
   if (value(g, 'market') && g.market.season !== seasonCount(g.t)) refreshMarket(g);
 

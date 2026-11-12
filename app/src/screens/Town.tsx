@@ -9,7 +9,7 @@ import { Seg } from '../components/common';
 import { TownMap } from '../components/TownMap';
 import { useStore } from '../state/store';
 import { Section } from './Guild';
-import { capacity as visitCap, DESIRE_INFO, DESIRES, serviceLevel, servedCount, visitorsPerDay, wantedCount } from '../domain/guild/visitors';
+import { capacity as visitCap, DESIRE_INFO, DESIRES, serviceLevel, servedCount, visitorsPerWeek, wantedCount } from '../domain/guild/visitors';
 
 const CAP_HINT: Record<string, string> = {
   food: 'Everyone in town eats: workers, retirees, children and adventurers.',
@@ -25,16 +25,16 @@ const loadView = (): View => { try { return localStorage.getItem(VIEW_KEY) === '
 /** Strangers who came to town: how many, what they wanted, and what they paid. */
 function Visitors({ g }: { g: GuildT }) {
   const v = g.visitors;
-  const perDay = visitorsPerDay(g.renown);
+  const perWeek = visitorsPerWeek(g.renown);
   return (
-    <Section title="Visitors" sub={perDay + ' a day at ' + g.renown + ' renown'}>
+    <Section title="Visitors" sub={perWeek + ' a week at ' + g.renown + ' renown'}>
       <div className="panel" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-          Travellers come to town in proportion to the guild's renown (10 a day at 200). Each wants something: a room, entertainment, gear, healing or supplies. They pay a little for what the town can give them, and each building takes only so many a day; bigger ones take more and charge a little more.
+          Travellers come to town once a week (a real day), in proportion to the guild's renown: 10 a week at 200, then more slowly (20 at 800). Each wants something: a room, entertainment, gear, healing or supplies. They pay a little for what the town can give them, and each building takes only so many a week; bigger ones take more and charge a little more. It is a small extra: real life and expeditions pay for the town.
         </p>
-        {v && perDay > 0 ? (
+        {v && perWeek > 0 ? (
           <>
-            <div className="tnum" style={{ fontSize: 14 }}>Yesterday: {wantedCount(v)} came, {servedCount(v)} were served, and they paid {v.gold} gold.</div>
+            <div className="tnum" style={{ fontSize: 14 }}>Last week: {wantedCount(v)} came, {servedCount(v)} were served, and they paid {v.gold} gold.</div>
             {DESIRES.map((d) => {
               const lvl = serviceLevel(g, d);
               return (
@@ -45,7 +45,7 @@ function Visitors({ g }: { g: GuildT }) {
               );
             })}
           </>
-        ) : <span className="muted" style={{ fontSize: 13, fontStyle: 'italic' }}>{perDay > 0 ? 'No visitors counted yet.' : 'Nobody has heard of the guild yet. Renown comes from finished expeditions and campaigns.'}</span>}
+        ) : <span className="muted" style={{ fontSize: 13, fontStyle: 'italic' }}>{perWeek > 0 ? 'No visitors counted yet. They come at the start of each week.' : 'Nobody has heard of the guild yet. Renown comes from finished expeditions and campaigns.'}</span>}
         {g.visitorTotals && g.visitorTotals.people > 0 && <span className="muted tnum" style={{ fontSize: 12 }}>So far: {g.visitorTotals.people} visitors served, {g.visitorTotals.gold} gold.</span>}
       </div>
     </Section>

@@ -92,6 +92,17 @@ describe('building', () => {
     expect(hallLevel(done)).toBe(2);
   });
 
+  it('says when a cost is more than the stores can ever hold, and names the Warehouse', () => {
+    // Hall 3 needs 200 wood; without a Warehouse the stores hold 150, so waiting would never be enough.
+    const g = fresh();
+    g.buildings.find((b) => b.type === 'hall')!.level = 2;
+    const r = { ...g, gold: 99999, renown: 9999, stock: { wood: storageCap(g), stone: storageCap(g), iron: 999, herbs: 0 } };
+    expect(buildProblem(r, 'hall')).toMatch(/200 wood.*stores hold \(150\).*build the Warehouse/);
+    // With room enough it is only a matter of saving up.
+    const w = { ...r, buildings: [...r.buildings, { id: 'bw', type: 'warehouse' as const, level: 1 }], stock: { ...r.stock, wood: 10 } };
+    expect(buildProblem(w, 'hall')).toBe('Not enough materials or gold');
+  });
+
   it('charges less in the cheap season and more in the dear one', () => {
     const g = fresh();
     const autumn = { ...g, t: 33 * PHASES_PER_DAY * PHASE_MS };

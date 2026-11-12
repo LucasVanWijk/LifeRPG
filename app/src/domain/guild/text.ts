@@ -13,6 +13,9 @@ import type { Entry, Guild, Outing } from './types';
 const nameOf = (g: Guild, id: string | undefined) => { const a = byId(g, id); return a ? fullName(a) : 'Someone'; };
 const firstOf = (g: Guild, id: string | undefined) => byId(g, id)?.first ?? 'Someone';
 
+/** A sentence to go mid-line: only its first letter is lowered, so names like Frostpeak and XP keep their capitals. */
+export const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
 /** "Bram", "Bram and Clover", "Bram, Clover and Gorm". */
 export function names(list: string[]) {
   if (list.length <= 1) return list[0] ?? '';

@@ -31,19 +31,21 @@ function pickParty(g: Guild, offer: Offer): string[] | null {
   return party.length >= offer.minParty ? party.map((a) => a.id) : null;
 }
 
-export interface PacingResult { hallDay: number[]; /** Share of the gold earned up to Hall 6 that came from real life. */ realShare: number; gold: number; renown: number; adventurers: number; fallen: number; buildings: number; end?: Guild }
+export interface PacingResult { hallDay: number[]; /** Share of all the gold earned up to Hall 6 (expeditions, visitors and pensions included) that came from real life. */ realShare: number; gold: number; renown: number; adventurers: number; fallen: number; buildings: number; end?: Guild }
 
 /** `days` real days of play. `hallDay[n]` is the real day the Hall reached level n+2. */
 export function simulate(days: number, style: PlayStyle = TYPICAL, seed = 3): PacingResult {
   let g = found({ name: 'Bot', town: 'Botton', charter: 'martial', crestSeed: 1, seed }, 0);
   g = (setChampion(g, g.adventurers[0].id) as { ok: true; guild: Guild }).guild;
   const hallDay: number[] = [];
-  let key = 0, real = 0, outGold = 0, shareAt6 = -1;
+  let key = 0, real = 0, outGold = 0, pensions = 0, shareAt6 = -1;
   const counted = new Set<string>();
   const steps = Math.round((days * 24) / style.visitEvery);
   for (let step = 1; step <= steps; step++) {
     const now = step * style.visitEvery * PHASE_MS;
+    const seen = g.chronicle.length;
     g = advance(g, now).guild;
+    for (const e of g.chronicle.slice(seen)) if (e.k === 'retire') pensions += e.v ?? 0;
     for (const o of g.outings) if (o.done && !counted.has(o.id)) { counted.add(o.id); outGold += o.result.loot.gold; }
     // Real life, once a day on the first visit after noon.
     if (Math.floor(now / PHASE_MS) % 24 < style.visitEvery) {
@@ -109,7 +111,8 @@ export function simulate(days: number, style: PlayStyle = TYPICAL, seed = 3): Pa
       if (!did) break;
     }
     const h = hallLevel(g);
-    if (h >= 6 && shareAt6 < 0) shareAt6 = real / Math.max(1, real + outGold);
+    // Every other source of gold counts against real life: expeditions, visitors and pensions.
+    if (h >= 6 && shareAt6 < 0) shareAt6 = real / Math.max(1, real + outGold + (g.visitorTotals?.gold ?? 0) + pensions);
     while (hallDay.length < h - 1) hallDay.push(Math.round(((step * style.visitEvery) / 24) * 10) / 10);
   }
   return { hallDay, realShare: shareAt6, gold: g.gold, renown: g.renown, adventurers: g.adventurers.filter((a) => a.state === 'active').length, fallen: g.adventurers.filter((a) => a.state === 'fallen').length, buildings: g.buildings.length, end: g };
