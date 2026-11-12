@@ -1,7 +1,8 @@
 import { LinkText } from '../components/RichText';
 import { useState } from 'react';
 import { weekdayDate } from '../domain/dates';
-import type { QuadKey, Quest, QuestNote, QuestStep } from '../domain/model';
+import { repeatText } from '../domain/quests';
+import type { QuadKey, Quest, QuestNote, QuestRepeat, QuestStep } from '../domain/model';
 import { QM, QUADS, reward, STATUS_NAME, STATUSES } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { StepChecklist, stepCount } from '../components/Steps';
@@ -52,6 +53,28 @@ function LineEditor<T extends { id: number; t: string }>({ label, items, set, ma
   );
 }
 
+/** Repeating quests: every N days, weeks, months or years, counted from the due date or from when it was finished. */
+function RepeatField({ q, set }: { q: Omit<Quest, 'id'>; set: (patch: Partial<Quest>) => void }) {
+  const r = q.repeat;
+  return (
+    <div className="field"><label htmlFor="q-rep">Repeats</label>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
+        <select id="q-rep" className="input" value={r?.unit ?? ''} onChange={(e) => set({ repeat: e.target.value ? { unit: e.target.value as QuestRepeat['unit'], n: r?.n ?? 1, from: r?.from ?? 'due' } : null })} style={{ minHeight: 44, flex: '1 1 130px' }}>
+          <option value="">Does not repeat</option>
+          <option value="day">Days</option><option value="week">Weeks</option><option value="month">Months</option><option value="year">Years</option>
+        </select>
+        {r && <>
+          <input className="input" type="number" min={1} max={99} aria-label="Every how many" value={r.n} onChange={(e) => set({ repeat: { ...r, n: Math.max(1, Math.min(99, Number(e.target.value) || 1)) } })} style={{ minHeight: 44, width: 70 }} />
+          <select className="input" aria-label="Counted from" value={r.from} onChange={(e) => set({ repeat: { ...r, from: e.target.value as QuestRepeat['from'] } })} style={{ minHeight: 44, flex: '1 1 150px' }}>
+            <option value="due">from the due date</option><option value="done">from when I finish it</option>
+          </select>
+        </>}
+      </div>
+      {r && <span className="muted" style={{ fontSize: 12 }}>{repeatText(r)}. Finishing it pays as usual and creates the next one, with its steps unticked. {r.from === 'due' && !q.due ? 'Without a due date it counts from when you finish.' : ''}</span>}
+    </div>
+  );
+}
+
 /** The quest form, shared by New Quest and Edit quest. */
 function QuestForm({ q, set, isNew, onStatus }: { q: Omit<Quest, 'id'>; set: (patch: Partial<Quest>) => void; isNew: boolean; onStatus?: (s: Quest['status']) => void }) {
   const { data } = useStore();
@@ -79,12 +102,21 @@ function QuestForm({ q, set, isNew, onStatus }: { q: Omit<Quest, 'id'>; set: (pa
         </div>
       </div>
       <div className="two-col">
-        <div className="field"><label htmlFor="q-due">Due date</label><input id="q-due" className="input" type="date" value={q.due || ''} onChange={(e) => set({ due: e.target.value || null })} style={{ minHeight: 44 }} /></div>
+        <div className="field"><label htmlFor="q-due">Due date</label><input id="q-due" className="input" type="date" value={q.due || ''} onChange={(e) => set(e.target.value ? { due: e.target.value } : { due: null, dueTime: undefined })} style={{ minHeight: 44 }} /></div>
         <div className="field"><label>Size</label>
           <Seg name="q-size" value={q.size} onChange={(s) => set({ size: s })} style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)', width: '100%' }}
             optStyle={{ justifyContent: 'center', minHeight: 42, padding: '6px 4px' }} options={(['S', 'M', 'L'] as const).map((k) => ({ key: k, label: k }))} />
         </div>
       </div>
+      {q.due && (
+        <div className="field"><label htmlFor="q-time">Time (optional)</label>
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input id="q-time" className="input" type="time" value={q.dueTime || ''} onChange={(e) => set({ dueTime: e.target.value || undefined })} style={{ minHeight: 44, flex: 1 }} />
+            {q.dueTime && <button className="btn btn-ghost" onClick={() => set({ dueTime: undefined })} style={{ minHeight: 44 }}>Clear</button>}
+          </div>
+        </div>
+      )}
+      <RepeatField q={q} set={set} />
       <div className="field"><label htmlFor="q-camp">Campaign</label>
         <select id="q-camp" className="input" value={q.campaign || ''} onChange={(e) => set({ campaign: e.target.value || null })} style={{ minHeight: 44 }}>
           <option value="">None</option>
@@ -190,10 +222,11 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', columnGap: 16, borderTop: '1px solid var(--q-rule)' }}>
             {[
               { k: 'Quadrant', v: QM[q.quad].name, color: QM[q.quad].color },
-              { k: 'Due', v: q.due ? weekdayDate(q.due) : 'No due date', color: q.due && q.due < today && !v.done ? 'var(--q-wax)' : 'var(--q-ink)' },
+              { k: 'Due', v: q.due ? weekdayDate(q.due) + (q.dueTime ? ' · ' + q.dueTime : '') : 'No due date', color: q.due && q.due < today && !v.done ? 'var(--q-wax)' : 'var(--q-ink)' },
               { k: 'Size', v: q.size },
               { k: 'Campaign', v: camp ? camp.name : 'None' },
-              { k: 'Status', v: STATUS_NAME[q.status], color: v.done ? 'var(--q-moss)' : undefined },
+              { k: 'Status', v: q.someday ? 'Someday' : STATUS_NAME[q.status], color: v.done ? 'var(--q-moss)' : undefined },
+              ...(q.repeat ? [{ k: 'Repeats', v: repeatText(q.repeat) }] : []),
             ].map((f) => (
               <div key={f.k} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 0', borderBottom: '1px solid var(--q-rule)' }}>
                 <span className="label">{f.k}</span>
@@ -201,6 +234,16 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
               </div>
             ))}
           </div>
+          {!v.done && (
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              {!q.someday && (
+                <button className="btn btn-secondary" aria-pressed={q.pick === today} style={{ minHeight: 40 }}
+                  onClick={() => upd({ pick: q.pick === today ? undefined : today })}><Icon n={q.pick === today ? 'check' : 'sun'} size={15} />{q.pick === today ? 'Picked for today' : 'Pick for today'}</button>
+              )}
+              <button className="btn btn-secondary" style={{ minHeight: 40 }}
+                onClick={() => upd(q.someday ? { someday: false } : { someday: true, pick: undefined })}><Icon n="moon" size={15} />{q.someday ? 'Bring back from Someday' : 'Move to Someday'}</button>
+            </div>
+          )}
           {q.companions.length > 0 && (
             <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
               <span className="label" style={{ marginRight: 4 }}>With</span>

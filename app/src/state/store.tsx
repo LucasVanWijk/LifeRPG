@@ -25,7 +25,7 @@ const STORAGE_KEY = 'questlog:v2';
 
 export type Tab = 'home' | 'quests' | 'calendar' | 'glossary' | 'guild';
 export type GuildTab = 'roster' | 'board' | 'town' | 'tavern' | 'legacy';
-export type QuestView = 'board' | 'campaign' | 'habits';
+export type QuestView = 'board' | 'campaign' | 'habits' | 'someday';
 export type GlossaryCat = 'companions' | 'tomes' | 'notes';
 export type { Toast };
 
@@ -102,7 +102,7 @@ function initialUi(today: string): Ui {
   const launch = readLaunch(window.location.search);
   return {
     tab: launch.action === 'checkin' ? 'quests' : pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
-    questView: launch.action === 'checkin' ? 'habits' : pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
+    questView: launch.action === 'checkin' ? 'habits' : pick('view', ['board', 'campaign', 'habits', 'someday'] as const, 'board'),
     hiddenCamps: loadHiddenCamps(),
     campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
@@ -555,6 +555,15 @@ function useStoreValue() {
         const fresh = list.filter((e) => !e.uid || !known.has(e.uid)).map((e) => ({ ...e, id: id++ }));
         commit({ ...cur, events: [...cur.events, ...fresh] });
         return fresh.length;
+      },
+      /** Ends the "Plan your day" card for today and picks the chosen quests; yesterday's picks that weren't chosen expire. */
+      planDay(ids: number[]) {
+        const cur = d();
+        commit({
+          ...cur,
+          quests: cur.quests.map((q) => (ids.includes(q.id) ? { ...q, pick: today } : q.pick && q.pick < today ? { ...q, pick: undefined } : q)),
+          profile: { ...cur.profile, plannedDay: today },
+        });
       },
       markReviewed(monday: string) { const cur = d(); commit({ ...cur, profile: { ...cur.profile, reviewedWeek: monday } }); setUi({ reviewOpen: false }); },
 

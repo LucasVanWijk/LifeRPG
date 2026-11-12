@@ -5,6 +5,7 @@ import type { Pay } from './guild/engine';
 import { awardStreak, payReal, refund } from './guild/engine';
 import { ATTR_NAME, QUAD_ATTR } from './guild/content';
 import { datedLines } from './notes';
+import { freshId, spawnNext } from './quests';
 
 /** undo: the toast offers to reverse the action that produced it. */
 export interface Toast { text: string; sub: string; undo?: boolean }
@@ -66,7 +67,10 @@ export function completeQuest(data: Data, id: number, today: string): Outcome | 
   if (!q || q.status === 'done') return null;
   const r = reward(q);
   const camp = q.campaign ? data.camps[q.campaign] : undefined;
-  const paid = pay(patchQuest(data, id, { status: 'done', doneOn: today, prevStatus: q.status }), {
+  // A repeating quest hands over to the next one, with the next due date.
+  const next = q.repeat ? spawnNext(q, today, freshId(data.quests)) : null;
+  const closed = patchQuest(data, id, { status: 'done', doneOn: today, prevStatus: q.status, pick: undefined, ...(next ? { spawned: next.id } : {}) });
+  const paid = pay(next ? { ...closed, quests: [...closed.quests, next] } : closed, {
     key: 'q:' + id, xp: r.xp, gold: r.gold, kind: 'quest', title: q.title, date: today, attr: QUAD_ATTR[q.quad],
     notable: q.quad === 'main' || q.size === 'L', bearerId: camp?.bearerId,
   }, q.title);
@@ -77,7 +81,11 @@ export function completeQuest(data: Data, id: number, today: string): Outcome | 
 export function undoQuest(data: Data, id: number, today: string): Outcome {
   const q = data.quests.find((x) => x.id === id);
   if (!q || q.status !== 'done') return none(data);
-  const reopened = patchQuest(data, id, { status: q.prevStatus && q.prevStatus !== 'done' ? q.prevStatus : 'todo', doneOn: null });
+  // The next round it created goes away again, if nobody has touched it.
+  const nextQ = q.spawned ? data.quests.find((x) => x.id === q.spawned) : undefined;
+  const untouched = !!nextQ && nextQ.status === 'todo' && !nextQ.steps.some((s) => s.done);
+  const back = untouched ? { ...data, quests: data.quests.filter((x) => x.id !== q.spawned) } : data;
+  const reopened = patchQuest(back, id, { status: q.prevStatus && q.prevStatus !== 'done' ? q.prevStatus : 'todo', doneOn: null, spawned: undefined });
   return settleCampaigns(takeBack(reopened, 'q:' + id), today);
 }
 

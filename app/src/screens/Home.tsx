@@ -17,6 +17,7 @@ import { questView, withNames } from '../components/common';
 import { stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
 import { useState, type ReactNode } from 'react';
+import { dayPoints, dayTooFull, FULL_DAY, isOpen, planCandidates, todayQuests } from '../domain/quests';
 import { backupDue, exportBackup, snoozeBackup } from '../backup';
 import { useStore } from '../state/store';
 
@@ -51,15 +52,13 @@ export function Home() {
     actions: <button className="btn btn-primary inked" style={{ minHeight: 38 }} onClick={() => setUi({ reviewOpen: true })}>Open</button>,
   });
 
-  const todayList = data.quests
-    .filter((q) => q.status !== 'done' && q.due && q.due <= today)
-    .map((q) => ({ q, checked: false }))
-    .sort((a, b) => (a.q.due || today).localeCompare(b.q.due || today));
+  const todayList = todayQuests(data.quests, today).map((q) => ({ q, checked: false }));
+  const full = dayTooFull(todayList.map((t) => t.q));
   const doneToday = data.quests.filter((q) => q.doneOn === today).length;
   const habitsDone = data.habits.filter((h) => habitDone(h, today)).length;
   const todayIds = new Set(todayList.map((t) => t.q.id));
   const upNext = data.quests
-    .filter((q) => q.quad === 'main' && q.status !== 'done' && !todayIds.has(q.id))
+    .filter((q) => q.quad === 'main' && isOpen(q) && !todayIds.has(q.id))
     .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.id - b.id);
 
   const dow = (parseDay(today).getDay() + 6) % 7;
@@ -87,6 +86,7 @@ export function Home() {
               {overdueCount > 0 && <span style={{ color: 'var(--q-wax)' }}>{overdueCount} overdue · </span>}{todayList.length} to do · {doneToday} done today
             </span>
           </div>
+          {full && <p role="status" style={{ margin: 0, padding: '6px 0 10px', fontSize: 13, color: 'var(--q-wax)' }}>This looks like a full day ({dayPoints(todayList.map((t) => t.q))} points; around {FULL_DAY} is a lot). Move something if you can.</p>}
           {todayList.map(({ q, checked }) => {
             const v = questView(q, today, data.camps);
             return (
@@ -101,6 +101,7 @@ export function Home() {
                     <span style={{ color: checked ? 'var(--q-moss)' : v.dueColor }}>{checked ? 'Completed today' : v.dueLabel}</span>
                     {v.campaignName && <span style={{ gap: 4, minWidth: 0, maxWidth: 200 }} title={v.campaignName}><Icon n="flag" size={11} /><span className="ellipsis">{v.campaignName}</span></span>}
                     {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+                    {q.pick === today && <span style={{ gap: 4 }}><Icon n="sun" size={11} />Picked</span>}
                     {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                   </div>
                 </div>
@@ -282,11 +283,50 @@ export function Home() {
           <span style={{ flex: 1, textAlign: 'left' }}>{sync.status === 'error' ? (sync.error ?? 'Sync failed') + ' · tap to retry' : gstate.status === 'error' && sync.status !== 'paused' ? (gstate.error ?? 'Calendar sync failed') + ' · tap to retry' : 'Sync paused · tap to resume'}</span>
         </button>
       )}
+      <PlanDay />
       <QuickAdd />
       <div className="home-grid">
         {layout.order.filter((k) => !layout.hidden.includes(k)).map((k) => sections[k])}
       </div>
     </div>
+  );
+}
+
+/** The first time the app is opened each day: pick what to do from yesterday's leftovers, Crisis quests and Main Quests. */
+function PlanDay() {
+  const { data, today, actions } = useStore();
+  const { carried, crisis, main } = planCandidates(data.quests, today);
+  const [chosen, setChosen] = useState<Set<number>>(() => new Set(carried.map((q) => q.id)));
+  const offered = [...carried, ...crisis, ...main];
+  if (data.profile.plannedDay === today || !offered.length) return null;
+  const picked = data.quests.filter((q) => chosen.has(q.id));
+  const load = todayQuests(data.quests, today).concat(picked);
+  const toggle = (id: number) => setChosen((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const done = () => actions.planDay([...chosen]);
+  const group = (title: string, list: typeof offered) => list.length > 0 && (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span className="label" style={{ padding: '6px 0 2px' }}>{title}</span>
+      {list.map((q) => (
+        <label key={q.id} className="toggle-row" style={{ minHeight: 40 }}>
+          <input type="checkbox" checked={chosen.has(q.id)} onChange={() => toggle(q.id)} />
+          <span style={{ flex: 1, minWidth: 0 }}>{q.title}</span>
+          <span className="tnum muted" style={{ fontSize: 12 }}>{q.size}{q.due ? ' · ' + shortDate(q.due) : ''}</span>
+        </label>
+      ))}
+    </div>
+  );
+  return (
+    <section className="panel" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <h3 style={{ fontSize: 22 }}>Plan your day</h3>
+        <button className="btn btn-ghost" onClick={() => actions.planDay([])} style={{ minHeight: 32 }}>Skip</button>
+      </div>
+      {group('Picked yesterday, not done', carried)}
+      {group('Crisis', crisis)}
+      {group('Main Quests', main.slice(0, 8))}
+      {dayTooFull(load) && <p role="status" style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--q-wax)' }}>That is a full day ({dayPoints(load)} points). You can still go ahead.</p>}
+      <button className="btn btn-primary inked" onClick={done} style={{ minHeight: 42, marginTop: 6 }}>{chosen.size ? 'Pick ' + chosen.size + ' for today' : 'Nothing extra today'}</button>
+    </section>
   );
 }
 

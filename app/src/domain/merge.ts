@@ -8,8 +8,8 @@ import type { Guild } from './guild/types';
 const DAY = 86_400_000;
 
 /** The quest fields that merge on their own. `status` also carries `doneOn` and `prevStatus`. */
-export const QUEST_FIELDS = ['title', 'quad', 'due', 'size', 'campaign', 'status', 'notes', 'steps', 'companions'] as const;
-const FIELD_OF: Record<string, string> = { doneOn: 'status', prevStatus: 'status' };
+export const QUEST_FIELDS = ['title', 'quad', 'due', 'dueTime', 'size', 'campaign', 'status', 'notes', 'steps', 'companions', 'pick', 'repeat', 'someday'] as const;
+const FIELD_OF: Record<string, string> = { doneOn: 'status', prevStatus: 'status', spawned: 'status' };
 
 type Collection = 'quests' | 'habits' | 'companions' | 'tomes' | 'notes' | 'events';
 const COLLECTIONS: [Collection, string][] = [['quests', 'quest'], ['habits', 'habit'], ['companions', 'companion'], ['tomes', 'tome'], ['notes', 'note'], ['events', 'event']];
@@ -94,11 +94,12 @@ function mergeQuest(a: Quest, b: Quest): Quest {
     if (f === 'status') {
       out.doneOn = win.doneOn;
       out.prevStatus = win.prevStatus;
+      out.spawned = win.spawned;
     }
   }
   // Fields outside the list (e.g. future ones) follow the newer copy as a whole.
   const newer = stampOf(b) > stampOf(a) ? b : a;
-  for (const k of Object.keys(newer) as (keyof Quest)[]) if (!(QUEST_FIELDS as readonly string[]).includes(k) && !['doneOn', 'prevStatus', 'fu', 'updated', 'id'].includes(k)) (out as unknown as Record<string, unknown>)[k] = newer[k];
+  for (const k of Object.keys(newer) as (keyof Quest)[]) if (!(QUEST_FIELDS as readonly string[]).includes(k) && !['doneOn', 'prevStatus', 'spawned', 'fu', 'updated', 'id'].includes(k)) (out as unknown as Record<string, unknown>)[k] = newer[k];
   out.fu = fu;
   out.updated = Math.max(stampOf(a), stampOf(b));
   return out;

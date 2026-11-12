@@ -3,6 +3,7 @@ import { addDays, shortDate } from '../domain/dates';
 import { bestStreak, checkedInToday, habitDone, habitProgress, habitStreak, habitTarget, periodOf } from '../domain/logic';
 import type { Data, Every, Habit, QuadKey, Quest, SizeKey, Status } from '../domain/model';
 import { EVERY_NAME, habitReward, QUADS, STATUSES, streakText } from '../domain/model';
+import { isOpen, somedayQuests } from '../domain/quests';
 import { StepChecklist, stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
 import { Icon } from '../components/Icon';
@@ -11,18 +12,18 @@ import { useStore } from '../state/store';
 
 export function Quests() {
   const { data, ui, setUi, isDesk } = useStore();
-  const activeCount = data.quests.filter((q) => q.status !== 'done').length;
-  const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : activeCount + (activeCount === 1 ? ' open quest' : ' open quests');
+  const activeCount = data.quests.filter(isOpen).length;
+  const kicker = ui.questView === 'habits' ? data.habits.length + (data.habits.length === 1 ? ' habit' : ' habits') : ui.questView === 'someday' ? somedayQuests(data.quests).length + ' someday' : activeCount + (activeCount === 1 ? ' open quest' : ' open quests');
   return (
     <div className={"screen" + (isDesk && ui.questView === "board" ? " screen-wide" : "")} style={{ flex: 1, gap: 14 }}>
       <ScreenHead count={kicker} title="Quests">
         <Seg name="quest-view" value={ui.questView} onChange={(v) => setUi({ questView: v, mobileZone: null })}
           optStyle={{ minHeight: 40, padding: isDesk ? '8px 16px' : '8px 12px', fontSize: 14 }}
-          options={[{ key: 'board', label: isDesk ? 'Quest Board' : 'Board' }, { key: 'campaign', label: 'Campaigns' }, { key: 'habits', label: 'Habits' }]} />
+          options={[{ key: 'board', label: isDesk ? 'Quest Board' : 'Board' }, { key: 'campaign', label: 'Campaigns' }, { key: 'habits', label: 'Habits' }, { key: 'someday', label: 'Someday' }]} />
       </ScreenHead>
       {ui.questView === 'board' && <CampaignFilter />}
       {ui.questView === 'board' && <QuickAdd />}
-      {ui.questView === 'habits' ? <HabitsView /> : ui.questView === 'campaign' ? <CampaignView /> : isDesk ? <DeskBoard /> : ui.mobileZone ? <MobileZone zone={ui.mobileZone} /> : <MobileGrid />}
+      {ui.questView === 'habits' ? <HabitsView /> : ui.questView === 'someday' ? <SomedayView /> : ui.questView === 'campaign' ? <CampaignView /> : isDesk ? <DeskBoard /> : ui.mobileZone ? <MobileZone zone={ui.mobileZone} /> : <MobileGrid />}
     </div>
   );
 }
@@ -48,14 +49,14 @@ const isWide = (q: Quest, hasDue: boolean, campaign?: string | null) =>
 /** The filter only applies while campaigns exist, so it can never hide quests with no way to show them. */
 const useHidden = () => { const { data, ui } = useStore(); return Object.keys(data.camps).length ? ui.hiddenCamps : []; };
 const shown = (q: Quest, hidden: string[]) => !hidden.includes(q.campaign || '');
-const activeIn = (quests: Quest[], quad: QuadKey, hidden: string[]) => quests.filter((q) => q.status !== 'done' && q.quad === quad && shown(q, hidden)).sort(byDue);
+const activeIn = (quests: Quest[], quad: QuadKey, hidden: string[]) => quests.filter((q) => isOpen(q) && q.quad === quad && shown(q, hidden)).sort(byDue);
 
 /** Choose which campaigns' quests the board displays. */
 function CampaignFilter() {
   const { data, ui, setUi } = useStore();
   const keys = Object.keys(data.camps);
   if (!keys.length) return null;
-  const open = data.quests.filter((q) => q.status !== 'done');
+  const open = data.quests.filter(isOpen);
   const toggle = (k: string) => setUi({ hiddenCamps: ui.hiddenCamps.includes(k) ? ui.hiddenCamps.filter((x) => x !== k) : [...ui.hiddenCamps, k], mobileZone: null });
   const items = [...keys.map((k) => ({ k, name: data.camps[k].name })), { k: '', name: 'No campaign' }];
   return (
@@ -254,6 +255,30 @@ function MobileZone({ zone }: { zone: QuadKey }) {
         })}
         {!list.length && <p style={{ margin: '40px 0', textAlign: 'center', fontStyle: 'italic', color: 'var(--color-accent-200)' }}>No quests in this zone.</p>}
       </div>
+    </div>
+  );
+}
+
+/** Things you might do but not now: off the board, never overdue. */
+function SomedayView() {
+  const { data, today, actions } = useStore();
+  const list = somedayQuests(data.quests);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', maxWidth: 760 }}>
+      <p className="muted" style={{ margin: '0 0 8px', fontSize: 14 }}>Someday quests stay off the board and never become overdue. Move a quest here from its sheet; bring it back when it is time.</p>
+      {!list.length && <Empty>Nothing parked. Open a quest and choose “Move to Someday”.</Empty>}
+      {list.map((q) => {
+        const v = questView(q, today, data.camps);
+        return (
+          <div key={q.id} className="today-row">
+            <div onClick={() => actions.openQuest(q.id)} style={{ flex: 1, minWidth: 0, padding: '10px 0', cursor: 'pointer' }}>
+              <div className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{q.title}</div>
+              <div className="meta"><span style={{ color: v.quad.color }}><span className="dot" />{v.quad.name}</span>{v.campaignName && <span>{v.campaignName}</span>}</div>
+            </div>
+            <button className="btn btn-secondary" style={{ minHeight: 36 }} onClick={() => actions.updateQuest(q.id, { someday: false })}>Bring back</button>
+          </div>
+        );
+      })}
     </div>
   );
 }

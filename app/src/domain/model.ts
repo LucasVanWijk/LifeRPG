@@ -10,12 +10,16 @@ export interface QuestNote { id: number; t: string }
 /** A step on a quest's checklist; steps are not cards of their own and pay nothing. */
 export interface QuestStep { id: number; t: string; done: boolean }
 
+export interface QuestRepeat { unit: 'day' | 'week' | 'month' | 'year'; n: number; from: 'due' | 'done' }
+
 /** A one-off task. Repeating things are Habits. */
 export interface Quest {
   id: number;
   title: string;
   quad: QuadKey;
   due: string | null;
+  /** Optional time of day (HH:MM) on the due date. */
+  dueTime?: string;
   size: SizeKey;
   campaign: string | null;
   status: Status;
@@ -23,6 +27,14 @@ export interface Quest {
   steps: QuestStep[];
   /** Ids of the companions this quest involves. */
   companions: string[];
+  /** The day this quest was picked for (shows on Today's Quests that day without changing its due date). */
+  pick?: string;
+  /** Comes back when finished: every N days, weeks, months or years, counted from the due date or from when it was done. */
+  repeat?: QuestRepeat | null;
+  /** Parked in the Someday list: not on the board, not open, never overdue. */
+  someday?: boolean;
+  /** The next quest this one created when it was finished (so undo can take it back). */
+  spawned?: number;
   /** Day the quest was completed (for Today's Quests + undo). */
   doneOn?: string | null;
   prevStatus?: Status | null;
@@ -61,6 +73,8 @@ export interface Profile {
   reviewedWeek?: string;
   /** Which sections Home shows and in what order. Stored with the data, so it syncs between devices. */
   home?: HomeLayout;
+  /** The last day the "Plan your day" card was dealt with. */
+  plannedDay?: string;
   updated?: number;
 }
 

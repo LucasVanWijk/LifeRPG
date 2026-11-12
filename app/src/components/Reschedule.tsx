@@ -1,5 +1,6 @@
 import { addDays } from '../domain/dates';
 import type { Quest } from '../domain/model';
+import { isOverdueQuest } from '../domain/quests';
 import { useStore } from '../state/store';
 
 /** Quick fixes for an overdue quest: move it to tomorrow or a week out, or drop the date. */
@@ -16,4 +17,4 @@ export function RescheduleButtons({ q, compact = false }: { q: Quest; compact?: 
   );
 }
 
-export const isOverdue = (q: Quest, today: string) => q.status !== 'done' && !!q.due && q.due < today;
+export const isOverdue = isOverdueQuest;

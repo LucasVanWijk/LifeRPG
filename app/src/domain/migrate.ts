@@ -45,6 +45,8 @@ export function migrate(raw: unknown, today: string): Data | null {
     out.notes = [...out.notes, ...codexToNotes(old, Date.now()).filter((n) => !have.has(n.id))];
   }
   delete (out as { codex?: unknown }).codex;
+  // Quests without an update time start counting from now (so "untouched for 30 days" has something to count from).
+  const t0 = Date.now();
   let nextHabitId = Math.max(0, ...out.habits.map((h) => h.id)) + 1;
   for (const q of d.quests) {
     const { recur, lastDone, prevDue, ...quest } = q;
@@ -59,5 +61,6 @@ export function migrate(raw: unknown, today: string): Data | null {
     const habit: Habit = { id: nextHabitId++, title: q.title, every, size: q.size, log: log.reverse(), created: log[0] ?? today };
     out.habits.push(habit);
   }
+  out.quests = out.quests.map((q) => (q.updated === undefined ? { ...q, updated: t0 } : q));
   return out;
 }

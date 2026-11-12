@@ -88,8 +88,8 @@ export function calendarItems(data: Pick<Data, 'events' | 'quests' | 'companions
   const items: CalItem[] = [];
   for (const e of data.events) items.push(...eventItems(e, from, to));
   for (const q of data.quests) {
-    if (q.status !== 'done' && q.due && q.due >= from && q.due <= to) {
-      items.push({ date: q.due, kind: 'deadline', title: q.title, allDay: true, companions: q.companions, target: 'quest:' + q.id });
+    if (q.status !== 'done' && !q.someday && q.due && q.due >= from && q.due <= to) {
+      items.push({ date: q.due, kind: 'deadline', title: q.title, allDay: !q.dueTime, time: q.dueTime, companions: q.companions, target: 'quest:' + q.id });
     }
   }
   for (const g of glossaryEvents(data as Data, from)) {
