@@ -70,3 +70,37 @@ describe('calendar', () => {
     expect(items[0]).toMatchObject({ time: '14:30', allDay: false });
   });
 });
+
+import { layoutDay, moveEventTo } from './calendar';
+import type { CalEvent } from './model';
+
+describe('day layout', () => {
+  const item = (time: string, endTime?: string) => ({ date: T, kind: 'event' as const, title: time, allDay: false, time, endTime, target: 'event:1' });
+  it('puts overlapping items side by side and leaves the rest full width', () => {
+    const p = layoutDay([item('09:00', '10:00'), item('09:30', '10:30'), item('09:45', '10:15'), item('12:00', '13:00')]);
+    expect(p.map((x) => [x.col, x.cols])).toEqual([[0, 3], [1, 3], [2, 3], [0, 1]]);
+  });
+  it('gives a quest at a time a short block and skips all-day items', () => {
+    const p = layoutDay([item('14:30'), { ...item('00:00'), allDay: true }]);
+    expect(p).toHaveLength(1);
+    expect(p[0].end - p[0].start).toBe(45);
+  });
+});
+
+describe('moving an event', () => {
+  const ev: CalEvent = { id: 1, title: 'x', start: '2026-11-12', end: '2026-11-12', allDay: false, startTime: '09:00', endTime: '10:30', repeat: null, location: '', notes: '', companions: [] };
+  it('keeps its length and can cross midnight', () => {
+    expect(moveEventTo(ev, '2026-11-14', 14 * 60)).toMatchObject({ start: '2026-11-14', startTime: '14:00', end: '2026-11-14', endTime: '15:30' });
+    expect(moveEventTo(ev, '2026-11-14', 23 * 60)).toMatchObject({ end: '2026-11-15', endTime: '00:30' });
+  });
+});
+
+import { prepQuest } from './quests';
+describe('preparation quests', () => {
+  const e = { id: 7, title: 'Dinner', start: '2026-11-20', startTime: '19:00', allDay: false, companions: ['sophie'] };
+  it('is due the day before, or the same day for an evening event, and carries the people', () => {
+    expect(prepQuest({ ...e, startTime: '10:00' })).toMatchObject({ due: '2026-11-19', event: 7, companions: ['sophie'] });
+    expect(prepQuest(e).due).toBe('2026-11-20');
+    expect(prepQuest({ ...e, allDay: true }).due).toBe('2026-11-19');
+  });
+});

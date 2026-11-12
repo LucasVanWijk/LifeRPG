@@ -389,3 +389,23 @@ button { font: inherit; }
 .auto-link { color: var(--color-accent-800); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
 .note-body { display: flex; flex-direction: column; gap: 6px; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
 .note-edit { min-height: 220px; font-size: 15px; line-height: 1.45; font-family: var(--font-body); resize: vertical; }
+
+/* Calendar: day and week views */
+.tg { padding: 0; overflow: hidden; }
+.tg-scroll-x { overflow-x: auto; }
+.tg-head, .tg-allday { display: grid; border-bottom: 1px solid var(--q-rule); }
+.tg-dayhead { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 6px 0; border-left: 1px solid var(--q-rule); }
+.tg-dayhead.today .heading { color: var(--q-wax); }
+.tg-allcell { display: flex; flex-direction: column; gap: 2px; padding: 3px; min-height: 28px; border-left: 1px solid var(--q-rule); min-width: 0; }
+.tg-scroll { max-height: 560px; overflow-y: auto; }
+.tg-body { position: relative; display: grid; }
+.tg-hours { position: relative; }
+.tg-hours span { position: absolute; right: 6px; font-size: 10px; color: var(--color-accent-700); }
+.tg-col { position: relative; border-left: 1px solid var(--q-rule); }
+.tg-col.today { background: color-mix(in srgb, var(--color-accent-300) 12%, transparent); }
+.tg-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--q-rule) 70%, transparent); }
+.tg-block { position: absolute; overflow: hidden; padding: 1px 5px; border: 0; border-left: 3px solid; border-radius: 3px; background: color-mix(in srgb, var(--color-accent-100) 90%, white); box-shadow: 0 0 0 1px color-mix(in srgb, var(--q-rule) 80%, transparent); font-family: var(--font-body); font-size: 12px; line-height: 1.25; text-align: left; color: var(--q-ink); cursor: pointer; }
+.tg-block:hover { background: var(--q-tint); }
+.tg-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--q-wax); pointer-events: none; }
+.tg-tray { padding: 10px 14px 12px; border-top: 1px solid var(--q-rule); }
+.cal-views { display: inline-flex; }

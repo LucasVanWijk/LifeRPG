@@ -33,6 +33,8 @@ export interface Quest {
   repeat?: QuestRepeat | null;
   /** Parked in the Someday list: not on the board, not open, never overdue. */
   someday?: boolean;
+  /** The calendar event this quest is preparation for. */
+  event?: number;
   /** The next quest this one created when it was finished (so undo can take it back). */
   spawned?: number;
   /** Day the quest was completed (for Today's Quests + undo). */

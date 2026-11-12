@@ -179,7 +179,7 @@ export function NewQuestSheet() {
 
 /** Quest detail (read-only, with steps, notes and completion) and Edit quest. */
 export function QuestSheet({ quest: q }: { quest: Quest }) {
-  const { data, ui, setUi, today, actions } = useStore();
+  const { data, cal, ui, setUi, today, actions } = useStore();
   const [noteDraft, setNoteDraft] = useState('');
   const [stepDraft, setStepDraft] = useState('');
   const v = questView(q, today, data.camps);
@@ -234,6 +234,11 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
               </div>
             ))}
           </div>
+          {q.event !== undefined && cal.events.some((x) => x.id === q.event) && (
+            <button className="chip" onClick={() => { close(); actions.openEvent(q.event!); }} style={{ alignSelf: 'flex-start', minHeight: 34, padding: '2px 10px', fontSize: 15 }}>
+              <Icon n="calendar" size={13} />For: {cal.events.find((x) => x.id === q.event)!.title}
+            </button>
+          )}
           {!v.done && (
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               {!q.someday && (

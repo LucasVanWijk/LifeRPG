@@ -5,6 +5,7 @@ import type { CalEvent, Repeat } from '../domain/model';
 import { Icon } from '../components/Icon';
 import { LinkText } from '../components/RichText';
 import { mapsUrl } from '../domain/notes';
+import { linkedQuests } from '../domain/quests';
 import { CloseBtn, Seg, Sheet } from '../components/common';
 import { KindMark } from '../screens/Calendar';
 import { useStore } from '../state/store';
@@ -28,6 +29,7 @@ export function EventSheet({ id }: { id: number | 'new' }) {
     const when = e.allDay
       ? (same ? weekdayDate(e.start) : weekdayDate(e.start) + ' – ' + weekdayDate(e.end)) + ' · all day'
       : weekdayDate(e.start) + ' ' + (e.startTime ?? '') + ' – ' + (same ? '' : weekdayDate(e.end) + ' ') + (e.endTime ?? '');
+    const prep = linkedQuests(data.quests, e.id);
     const people = e.companions.map((cid) => data.companions.find((c) => c.id === cid)).filter((c) => !!c);
     return (
       <Sheet onClose={close} label={e.title}>
@@ -42,6 +44,20 @@ export function EventSheet({ id }: { id: number | 'new' }) {
           <div><Icon n="repeat" size={16} /><span>{e.g?.series ? 'Part of a repeating event in Google Calendar' : repeatText(e, weekdayDate)}</span></div>
           {e.g && <div><Icon n="calendar" size={16} /><span>Google Calendar{calName ? ' · ' + calName : ''}{e.g.series && e.g.link ? <> · <a href={e.g.link} target="_blank" rel="noreferrer">Change the whole series in Google</a></> : ''}</span></div>}
           {e.location && <div><Icon n="pin" size={16} /><span><a className="auto-link" href={mapsUrl(e.location)} target="_blank" rel="noreferrer noopener">{e.location}</a></span></div>}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--q-rule)', paddingTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 4 }}>
+            <h3 style={{ flex: 1, fontSize: 21 }}>Preparation</h3>
+            <button className="btn btn-secondary" style={{ minHeight: 38 }} onClick={() => actions.addPrepQuest(e.id)}><Icon n="plus" size={14} />Add a quest for this</button>
+          </div>
+          {prep.map((q) => (
+            <button key={q.id} className="row-btn" onClick={() => { close(); actions.openQuest(q.id); }} style={{ gap: 10, minHeight: 44, padding: '6px 0' }}>
+              <span className={'checkbox' + (q.status === 'done' ? ' on' : '')} style={{ width: 18, height: 18, flex: 'none' }}>{q.status === 'done' && <Icon n="check" size={12} stroke={2.4} />}</span>
+              <span className="heading" style={{ flex: 1, minWidth: 0, fontSize: 17, textDecoration: q.status === 'done' ? 'line-through' : 'none' }}>{q.title}</span>
+              {q.due && <span className="muted tnum" style={{ fontSize: 12 }}>{weekdayDate(q.due)}</span>}
+            </button>
+          ))}
+          {!prep.length && <p className="muted" style={{ margin: 0, fontStyle: 'italic', fontSize: 14 }}>No quests yet. One is due the day before by default.</p>}
         </div>
         {people.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>

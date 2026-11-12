@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { todayISO } from '../domain/dates';
+import { addDays, dayDiff, todayISO } from '../domain/dates';
+import { linkedQuests, prepQuest } from '../domain/quests';
 import type { LevelUp, Outcome, Toast } from '../domain/logic';
 import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
@@ -50,6 +51,8 @@ export interface Ui {
   eventSheet: number | 'new' | null;
   eventMode: 'view' | 'edit';
   calDay: string;
+  /** Month, week or day; null picks the default (day on a phone, month on a computer). */
+  calView: 'month' | 'week' | 'day' | null;
   gCat: GlossaryCat;
   gSearch: string;
   gDetail: string | null;
@@ -116,6 +119,7 @@ function initialUi(today: string): Ui {
     eventSheet: null,
     eventMode: 'view',
     calDay: today,
+    calView: null,
     gCat: pick('cat', ['companions', 'tomes', 'notes'] as const, 'companions'),
     gSearch: '',
     gDetail: p.get('detail'),
@@ -501,8 +505,25 @@ function useStoreValue() {
         showToast('Event added', e.title);
       },
       updateEvent(id: number, patch: Partial<CalEvent>) {
-        if (id < 0) { void actions.editGoogleEvent(id, patch); return; }
-        commit({ ...d(), events: d().events.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+        const old = d().events.find((e) => e.id === id) ?? Object.values(gcacheRef.current).flat().find((e) => e.id === id);
+        if (id < 0) void actions.editGoogleEvent(id, patch);
+        else commit({ ...d(), events: d().events.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+        // Moving the event offers to move the quests prepared for it by the same amount.
+        if (old && patch.start && patch.start !== old.start) {
+          const shift = dayDiff(patch.start, old.start);
+          const linked = linkedQuests(dataRef.current.quests, id).filter((q) => q.status !== 'done' && q.due);
+          if (linked.length) setUi({ confirm: {
+            title: 'Move its quests too?', tone: 'go', cancelLabel: 'Leave them', confirmLabel: 'Move ' + linked.length + (linked.length === 1 ? ' quest' : ' quests'),
+            body: '“' + old.title + '” moved ' + Math.abs(shift) + (Math.abs(shift) === 1 ? ' day ' : ' days ') + (shift > 0 ? 'later' : 'earlier') + '. Move ' + (linked.length === 1 ? 'the quest' : 'the ' + linked.length + ' quests') + ' prepared for it by the same amount?',
+            onConfirm: () => commit({ ...dataRef.current, quests: dataRef.current.quests.map((q) => (linked.some((l) => l.id === q.id) ? { ...q, due: addDays(q.due!, shift) } : q)) }),
+          } });
+        }
+      },
+      /** A preparation quest for an event. */
+      addPrepQuest(eventId: number) {
+        const e = [...d().events, ...Object.values(gcacheRef.current).flat()].find((x) => x.id === eventId);
+        if (!e) return;
+        actions.createQuest(prepQuest(e));
       },
       deleteEvent(id: number) {
         if (id < 0) { void actions.deleteGoogleEvent(id); return; }

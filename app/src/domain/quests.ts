@@ -75,6 +75,18 @@ export function spawnNext(q: Quest, doneOn: string, id: number): Quest {
 
 export const freshId = (quests: { id: number }[]) => Math.max(Date.now(), ...quests.map((q) => q.id + 1));
 
+/** Preparation quest for an event: due the day before, or the same day for an evening event; carries the event's people. */
+export function prepQuest(e: { id: number; title: string; start: string; startTime?: string; allDay: boolean; companions: string[] }): Omit<Quest, 'id'> {
+  const evening = !e.allDay && !!e.startTime && e.startTime >= '17:00';
+  return {
+    title: 'Prepare for ' + e.title, quad: 'main', due: evening ? e.start : addDays(e.start, -1), size: 'S', campaign: null, status: 'todo',
+    notes: [], steps: [], companions: [...e.companions], event: e.id,
+  };
+}
+
+/** Open quests prepared for an event that have a due date (the ones to offer to move along with it). */
+export const linkedQuests = (quests: Quest[], eventId: number) => quests.filter((q) => q.event === eventId);
+
 /** The whole quests list of a log, as the Quests screens show it. */
 export const openCount = (d: Pick<Data, 'quests'>) => d.quests.filter(isOpen).length;
 export { dayDiff };

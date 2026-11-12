@@ -8,7 +8,7 @@ import type { Guild } from './guild/types';
 const DAY = 86_400_000;
 
 /** The quest fields that merge on their own. `status` also carries `doneOn` and `prevStatus`. */
-export const QUEST_FIELDS = ['title', 'quad', 'due', 'dueTime', 'size', 'campaign', 'status', 'notes', 'steps', 'companions', 'pick', 'repeat', 'someday'] as const;
+export const QUEST_FIELDS = ['title', 'quad', 'due', 'dueTime', 'size', 'campaign', 'status', 'notes', 'steps', 'companions', 'pick', 'repeat', 'someday', 'event'] as const;
 const FIELD_OF: Record<string, string> = { doneOn: 'status', prevStatus: 'status', spawned: 'status' };
 
 type Collection = 'quests' | 'habits' | 'companions' | 'tomes' | 'notes' | 'events';
