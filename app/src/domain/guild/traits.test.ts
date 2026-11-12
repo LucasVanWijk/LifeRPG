@@ -58,10 +58,10 @@ describe('traits', () => {
     const death = (ids: string[]) => {
       const guild = structuredClone(g.guild);
       for (const a of guild.adventurers) a.traitIds = ids;
-      const { ctx } = ctxFor(guild, offer, party, 'bold');
+      const { ctx } = ctxFor(guild, offer, party, 'steady');
       ctx.members = ctx.members.map((m) => ({ ...m, rating: m.rating - 6 }));
       const o = odds(ctx);
-      return party.reduce((n, id) => n + o.death[id], 0);
+      return party.reduce((n, id) => n + o.major[id], 0);
     };
     expect(death(['steady'])).toBeLessThan(death([]));
     expect(death(['reckless'])).toBeGreaterThan(death([]));

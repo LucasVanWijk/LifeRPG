@@ -52,8 +52,10 @@ export const yearsLeft = (a: Adventurer, phase: number) => Math.max(0, Math.ceil
 export const isActive = (a: Adventurer) => a.state === 'active';
 export const isResident = (a: Adventurer) => a.state === 'retired' || a.state === 'child';
 export const isHome = (a: Adventurer) => a.state === 'active' && !a.awayOn;
-export const injured = (a: Adventurer, phase: number) => !!a.injury && a.injury.until > phase;
-export const canGoOut = (a: Adventurer, phase: number) => (isHome(a) && !injured(a, phase)) || canRecall(a);
+/** Has any wound at all. */
+export const injured = (a: Pick<Adventurer, 'wounds'>, _phase?: number) => a.wounds.length > 0;
+/** Wounded people can go out (a major wound costs them dearly), but not while they are already away. */
+export const canGoOut = (a: Adventurer, _phase?: number) => isHome(a) || canRecall(a);
 
 /** Class-weighted attributes, 1–20. */
 export const weighted = (a: Pick<Adventurer, 'cls' | 'attrs'>) => ATTRS.reduce((n, k) => n + CLASSES[a.cls].weights[k] * a.attrs[k], 0);
@@ -116,7 +118,7 @@ export function makeAdventurer(r: Rng, id: string, phase: number, opts: RecruitO
     bornPhase: phase - age * PHASES_PER_YEAR - r.int(0, PHASES_PER_YEAR - 1),
     joinedPhase: phase, career, retirePhase: phase + career * PHASES_PER_YEAR,
     level, xp: 0, talent, attrs, practice: { might: 0, finesse: 0, wits: 0, spirit: 0 },
-    health: 100, fatigue: 0, injury: null, scars: [], purse: 0, duty: 'auto', state: 'active', awayOn: null,
+    stamina: 100, fatigue: 0, wounds: [], scars: [], purse: 0, duty: 'auto', state: 'active', awayOn: null,
     outings: 0, chapter: { quests: 0, habits: 0, campaigns: [], notable: [] }, traitIds: [],
     gear: {}, autoBuy: true, staffAt: null, shared: {}, clears5: 0, liberated: 0,
   };

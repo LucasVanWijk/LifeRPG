@@ -661,6 +661,8 @@ function useStoreValue() {
         setUi({ tab: 'guild', guildTab: 'board' });
       },
       hire(id: string) { guildDo((g) => G.hire(g, id), (g) => showToast('Welcome to the guild', g.adventurers.at(-1)!.first + ' signs the roster')); },
+      retire(id: string) { guildDo((g) => G.retireNow(g, id), (g) => { setUi({ advSheet: null }); showToast('Retired', G.byId(g, id)!.first + ' joins the retirees'); }); },
+      treat(advId: string, woundId: string) { guildDo((g) => G.treat(g, advId, woundId), () => showToast('Treated', 'The wound will heal faster')); },
       release(id: string) { guildDo((g) => G.release(g, id), () => setUi({ advSheet: null })); },
       setChampion(id: string) {
         let levels = 0;

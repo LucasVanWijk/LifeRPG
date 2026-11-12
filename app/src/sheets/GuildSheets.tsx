@@ -4,10 +4,11 @@ import {
   ATTR_NAME, ATTRS, BUILDINGS, CHARTERS, CLASSES, CONDITIONS, DAYS_PER_YEAR, GRADES, GUILD_NAMES, OFFER_KIND, PRACTICE_PER_POINT, RACES, REGIONS, ROLE_NAME, SLOT_NAME, SLOTS, STAGE_ICON,
   STAGE_NAME, STANCES, STOCK_NAME, TOWN_NAMES, xpToNext,
 } from '../domain/guild/content';
-import { ageYears, canGoOut, fullName, injured, phaseAt, rating, ratingShown, realDuration, rolesOf, shortClock, yearsLeft } from '../domain/guild/adventurer';
+import { ageYears, canGoOut, fullName, phaseAt, rating, ratingShown, realDuration, rolesOf, shortClock, yearsLeft } from '../domain/guild/adventurer';
 import { TRAIT } from '../domain/guild/traits';
 import { CONVICTION, VOW_REWARD_TEXT, vowText } from '../domain/guild/vows';
-import { byId, ctxFor, departure, found, sendProblem } from '../domain/guild/engine';
+import { byId, ctxFor, departure, found, recoveryMult, sendProblem, treatCost, treatProblem } from '../domain/guild/engine';
+import { conditionFactor, fatigueFloor, SEVERITY_NAME, SOURCE_NAME, staminaCap, worst } from '../domain/guild/wounds';
 import { oddsRange } from '../domain/guild/resolve';
 import { hash } from '../domain/guild/rng';
 import { entryText, names, partyNames, stageLines } from '../domain/guild/text';
@@ -182,16 +183,38 @@ export function AdventurerSheet({ id }: { id: string }) {
       {live && (
         <>
           <div className="two-col">
-            <div><span className="label">Health {Math.round(a.health)}</span><Bar value={a.health} color="var(--q-moss)" label="Health" /></div>
+            <div><span className="label">Stamina {Math.round(a.stamina)}{staminaCap(a.wounds) < 100 ? ' of ' + staminaCap(a.wounds) : ''}</span><Bar value={a.stamina} color="var(--q-moss)" label="Stamina" /></div>
             <div><span className="label">Fatigue {Math.round(a.fatigue)}</span><Bar value={a.fatigue} color="var(--color-accent-500)" label="Fatigue" /></div>
           </div>
-          {injured(a, phase) && <p style={{ margin: 0, color: 'var(--q-wax)', fontSize: 14 }}>Recovering from {a.injury!.text}.</p>}
+          <p className="muted" style={{ margin: 0, fontSize: 12 }}>
+            Stamina is energy right now: outings drain it and rest brings it back. Fatigue is the slow weariness of the work; it builds with age and outings, mends slowly, and never drops below what the years have taken (about {Math.round(fatigueFloor(a, phase))} now). Both lower what {a.first} brings to a check, stamina most: at the moment {a.first} performs at {Math.round(conditionFactor(a) * 100)}%.
+          </p>
+          {a.wounds.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span className="label">Wounds</span>
+              {a.wounds.map((w) => {
+                const problem = treatProblem(g, a, w);
+                return (
+                  <div key={w.id} className="panel" style={{ padding: '8px 10px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+                    <span className="pill" style={{ color: w.severity === 'major' ? 'var(--q-wax)' : 'var(--color-accent-800)' }}>{SEVERITY_NAME[w.severity]}</span>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>{w.text}<span className="muted" style={{ fontSize: 12 }}> · {SOURCE_NAME[w.source].toLowerCase()} · about {Math.max(1, Math.ceil(w.left / recoveryMult(g, w.source) / 3))} {Math.ceil(w.left / recoveryMult(g, w.source) / 3) === 1 ? 'day' : 'days'} to heal{w.treated ? ' · treated' : ''}</span></span>
+                    {w.severity === 'major' && !w.treated && (
+                      <button className="btn btn-secondary" disabled={!!problem} title={problem ?? undefined} onClick={() => actions.treat(a.id, w.id)} style={{ minHeight: 34, fontSize: 13 }}>
+                        Treat · {treatCost(g, w)}g
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              {a.wounds.some((w) => w.severity === 'major') && <span className="muted" style={{ fontSize: 12 }}>Major wounds heal slowly and can leave a scar. The Infirmary treats physical wounds and disease, the Temple magical ones: treatment halves the time and makes a scar much less likely. Healers, rest, good housing and a lively tavern all speed recovery; away from home, wounds heal at a third of the pace.</span>}
+            </div>
+          )}
           {!a.awayOn && (
             <div className="field"><label>At home</label>
               <Seg<Duty> name="duty" value={a.duty} onChange={(v) => actions.setDuty(a.id, v)} style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)' }} optStyle={{ justifyContent: 'center', minHeight: 40, fontSize: 13, padding: '0 2px' }}
                 options={[{ key: 'auto', label: 'Auto' }, { key: 'train', label: 'Train' }, { key: 'rest', label: 'Rest' }, { key: 'labour', label: 'Labour' }, { key: 'patrol', label: 'Patrol' }]} />
               <span className="muted" style={{ fontSize: 12 }}>
-                Auto rests when health is under 60 or fatigue over 40, and trains otherwise. Labour speeds up construction (+5%), Patrol gathers a little wood and stone and adds an expedition to the board. The wounded always rest.
+                Auto rests when stamina is under 60 or fatigue is well above what the years have taken, and trains otherwise. Labour speeds up construction (+5%), Patrol gathers a little wood and stone and adds an expedition to the board. Anyone with a minor or major wound rests.
               </span>
             </div>
           )}
@@ -243,6 +266,12 @@ export function AdventurerSheet({ id }: { id: string }) {
       </div>
 
       {live && !a.awayOn && (
+        <button className="btn btn-secondary" onClick={() => actions.confirm({
+          title: 'Retire ' + a.first + ' now?', tone: 'go', confirmLabel: 'Retire', body: a.first + ' retires with their purse (' + a.purse + 'g) and joins the retirees, who can work at the town\'s buildings and be called back once for a last job.',
+          onConfirm: () => actions.retire(a.id),
+        })}>Retire {a.first}</button>
+      )}
+      {live && !a.awayOn && (
         <button className="danger-btn" onClick={() => actions.confirm({
           title: 'Let ' + a.first + ' go?', body: a.first + ' leaves the guild for good. Their purse (' + a.purse + 'g) and gear stay with the guild.', confirmLabel: 'Let them go',
           onConfirm: () => actions.release(a.id),
@@ -274,10 +303,6 @@ export function SendSheet({ id }: { id: string }) {
   const lo = calc?.lo;
   const toggle = (aid: string) => setParty((p) => (p.includes(aid) ? p.filter((x) => x !== aid) : p.length >= offer.maxParty ? p : [...p, aid]));
   const rangePct = (a: number, b: number) => (calc && calc.hidden && Math.abs(a - b) >= 0.0005 ? pct(Math.min(a, b)) + '–' + pct(Math.max(a, b)) : pct(Math.max(a, b)));
-  const deathOf = (x: Record<string, number>, ids: string[]) => ids.reduce((n, k) => n + (x[k] ?? 0), 0) / Math.max(1, ids.length);
-  const deathAvg = o && lo ? Math.max(deathOf(o.death, party), deathOf(lo.death, party)) : 0;
-  const yearsAvg = party.reduce((n, x) => n + yearsLeft(byId(g, x)!, phase), 0) / Math.max(1, party.length);
-  const outlook = 1 - Math.pow(1 - deathAvg, yearsAvg * (DAYS_PER_YEAR / 8) * 1.5);
   const dep = departure(g, offer);
   const members = calc?.ctx.members ?? [];
   const countered = (c: string) => members.some((m) => m.counters.includes(c as never));
@@ -313,7 +338,7 @@ export function SendSheet({ id }: { id: string }) {
                 <AdvCrest a={a} size={26} />
                 <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
                   <span className="heading" style={{ fontSize: 16 }}>{a.first}{g.championId === a.id ? ' ♛' : ''}{a.state === 'retired' ? ' · one last job' : ''}</span>
-                  <span className="muted" style={{ fontSize: 12 }}>{advSub(a)} · {free ? 'health ' + Math.round(a.health) + ', fatigue ' + Math.round(a.fatigue) : status(g, a, phase, g.t).text}</span>
+                  <span className="muted" style={{ fontSize: 12 }}>{advSub(a)} · {free ? 'stamina ' + Math.round(a.stamina) + ', fatigue ' + Math.round(a.fatigue) + (a.wounds.length ? ', ' + (worst(a.wounds) === 'major' ? 'badly wounded' : 'wounded') : '') : status(g, a, phase, g.t).text}</span>
                 </span>
                 <span className="heading tnum" style={{ fontSize: 17 }}>{ratingShown(a)}</span>
               </button>
@@ -334,7 +359,7 @@ export function SendSheet({ id }: { id: string }) {
         <div className="panel" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span className="label">The odds{calc!.hidden > 0 ? ' · a range, because something is hidden' : ''}</span>
           <div className="tnum" style={{ fontSize: 14 }}>
-            {offer.scale !== 'odd' ? <>Clean run {rangePct(lo.full, o.full)} · turn back {rangePct(lo.turnBack, o.turnBack)} · someone dies {rangePct(lo.anyDeath, o.anyDeath)}</> : <>Goes well {rangePct(lo.full, o.full)}</>}
+            {offer.scale !== 'odd' ? <>Clean run {rangePct(lo.full, o.full)} · turn back {rangePct(lo.turnBack, o.turnBack)} · someone comes home with a major wound {rangePct(lo.anyMajor, o.anyMajor)}</> : <>Goes well {rangePct(lo.full, o.full)}</>}
           </div>
           <div className="tnum" style={{ fontSize: 14 }}>
             Loot about {lootText(lo.loot)}{lo.goldHigh > lo.goldLow ? ' (gold ' + lo.goldLow + '–' + lo.goldHigh + ')' : ''} · about {lo.xp} XP each
@@ -343,12 +368,12 @@ export function SendSheet({ id }: { id: string }) {
             {party.map((x) => (
               <div key={x} className="tnum" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, padding: '3px 0', borderTop: '1px solid var(--q-rule)' }}>
                 <span>{byId(g, x)!.first}</span>
-                <span>injury {rangePct(lo.injury[x], o.injury[x])} · <span style={{ color: Math.max(o.death[x], lo.death[x]) > 0.01 ? 'var(--q-wax)' : undefined }}>death {rangePct(lo.death[x], o.death[x])}</span></span>
+                <span>wounded {rangePct(lo.injury[x], o.injury[x])} · <span style={{ color: Math.max(o.major[x], lo.major[x]) > 0.05 ? 'var(--q-wax)' : undefined }}>major {rangePct(lo.major[x], o.major[x])}</span></span>
               </div>
             ))}
           </div>
-          {deathAvg > 0 && offer.scale !== 'odd' && (
-            <span className="muted" style={{ fontSize: 12 }}>If they went out like this every time, about {Math.round(outlook * 10)} in 10 would not live to retire.</span>
+          {offer.scale !== 'odd' && party.some((x) => worst(byId(g, x)!.wounds) === 'major') && (
+            <span style={{ color: 'var(--q-wax)', fontSize: 12 }}>Someone in this party has a major wound: it takes a large share of their stamina and rating, and heals slowly away from home.</span>
           )}
           {offer.scale !== 'odd' && <span className="muted" style={{ fontSize: 12 }}>Gear is lent from the racks, and adventurers with gold buy potions and better gear themselves.</span>}
         </div>
@@ -373,7 +398,7 @@ export function ReportSheet({ id }: { id: string }) {
   useEffect(() => { if (o?.done && !o.read) actions.markRead(o.id); }, [o?.done, o?.read, o?.id, actions]);
   if (!o) return null;
   const seen = o.done ? o.result.stages.length : o.stageAt.filter((t) => t <= now).length;
-  const injuredBack = Object.entries(o.result.members).filter(([, m]) => m.injury);
+  const injuredBack = Object.entries(o.result.members).filter(([, m]) => m.wounds?.length || m.injury);
   const fell = o.result.stages.filter((s) => s.died).map((s) => byId(g, s.died)!.first);
   return (
     <Sheet onClose={close} label={o.offer.name}>
@@ -408,7 +433,7 @@ export function ReportSheet({ id }: { id: string }) {
           <span className="label">Brought home</span>
           <span>{lootText(o.result.loot)}{o.result.chest ? ' (the chest held ' + lootText(o.result.chest) + ')' : ''}</span>
           <span>{Object.entries(o.result.members).filter(([, m]) => !m.died).map(([k, m]) => byId(g, k)!.first + ' +' + m.xp + ' XP').join(' · ') || 'Nobody came back.'}</span>
-          {injuredBack.map(([k, m]) => <span key={k} style={{ color: 'var(--q-wax)' }}>{byId(g, k)!.first}: {m.injury!.text}, {m.injury!.days} days{m.scar ? '. A scar for life: ' + m.scar.toLowerCase() : ''}.</span>)}
+          {injuredBack.map(([k, m]) => <span key={k} style={{ color: 'var(--q-wax)' }}>{byId(g, k)!.first}: {m.wounds?.length ? m.wounds.map((w) => w.severity + ' wound, ' + w.text).join('; ') : m.injury ? m.injury.text + ', ' + m.injury.days + ' days' : ''}.</span>)}
           {o.potions && Object.values(o.potions).some((x) => x.length) && <span className="muted">Potions drunk: {Object.entries(o.potions).filter(([, x]) => x.length).map(([k, x]) => byId(g, k)!.first + ' ' + x.join(', ')).join(' · ')}.</span>}
           {o.offer.recover && o.done && byId(g, o.offer.recover)?.tomb && <span style={{ color: 'var(--q-moss)' }}>{byId(g, o.offer.recover)!.first} was brought home and laid to rest.</span>}
           {o.offer.scale === 'odyssey' && g.regions[o.offer.region].liberated && o.done && <span style={{ color: 'var(--q-moss)', fontWeight: 600 }}>{REGIONS[o.offer.region].name} is free. The guild has an outpost there.</span>}

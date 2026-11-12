@@ -3,9 +3,10 @@ import { PHASE_MS, PHASES_PER_YEAR, TUTORIAL_MINUTES } from './content';
 import { rosterLimit } from './town';
 import { makeAdventurer, role } from './adventurer';
 import { makeExpedition } from './board';
-import { CAREFUL, deathShare, RISKY } from './balance';
+import { woundStats } from './balance';
 import { advance, ctxFor, found, hire, payReal, refund, send, setChampion } from './engine';
 import { odds, resolve, snapshot } from './resolve';
+import { staminaCap } from './wounds';
 import { rngFor } from './rng';
 import type { Guild } from './types';
 
@@ -79,30 +80,49 @@ describe('outings', () => {
     expect(back.adventurers[0].awayOn).toBeNull();
   });
 
-  it('applies a death at its stage, pays insurance and clears the Champion', () => {
-    let g = fresh();
-    // Find an expedition seed where the Champion dies, by trying parties on fresh guilds.
-    for (let s = 0; s < 400; s++) {
+  it('still applies a death recorded before wounds existed, pays insurance and clears the Champion', () => {
+    const base = found(founding, NOW);
+    const c = setChampion(base, base.adventurers[0].id);
+    if (!c.ok) throw new Error(c.reason);
+    const exp = c.guild.board.find((o) => o.scale === 'expedition' && o.needs.length === 0)!;
+    const sent = send(c.guild, exp.id, [base.adventurers[0].id, base.adventurers[2].id], 'bold');
+    if (!sent.ok) throw new Error(sent.reason);
+    const g = structuredClone(sent.guild);
+    g.outings[0].result.stages[0].died = base.adventurers[0].id;
+    const gold = g.gold;
+    const after = advance(g, NOW + g.outings[0].stageAt[0] + 1).guild;
+    expect(after.adventurers.find((a) => a.id === base.adventurers[0].id)!.state).toBe('fallen');
+    expect(after.championId).toBeNull();
+    expect(after.gold).toBeGreaterThan(gold);
+  });
+
+  it('nobody dies on an outing any more: they come home wounded instead', () => {
+    for (let s = 0; s < 40; s++) {
       const base = found({ ...founding, seed: s }, NOW);
       const c = setChampion(base, base.adventurers[0].id);
       if (!c.ok) continue;
       const exp = c.guild.board.find((o) => o.scale === 'expedition' && o.needs.length === 0)!;
-      const sent = send(c.guild, exp.id, [base.adventurers[0].id, base.adventurers[2].id], 'bold');
+      const sent = send(c.guild, exp.id, base.adventurers.map((a) => a.id), 'bold');
       if (!sent.ok) continue;
-      const o = sent.guild.outings[0];
-      const k = o.result.stages.findIndex((st) => st.died === base.adventurers[0].id);
-      if (k < 0) continue;
-      g = sent.guild;
-      const gold = g.gold;
-      const after = advance(g, NOW + o.stageAt[k] + 1).guild;
-      const dead = after.adventurers.find((a) => a.id === base.adventurers[0].id)!;
-      expect(dead.state).toBe('fallen');
-      expect(after.championId).toBeNull();
-      expect(after.gold).toBeGreaterThan(gold);
-      expect(after.chronicle.some((e) => e.k === 'fell')).toBe(true);
-      return;
+      expect(sent.guild.outings[0].result.stages.every((st) => !st.died)).toBe(true);
     }
-    throw new Error('no death found in 400 seeds');
+  });
+
+  it('turns wounds into healing time, stamina cost and a slower mend away from home', () => {
+    let g = fresh();
+    const a = g.adventurers[0];
+    a.wounds.push({ id: 'w1', source: 'physical', severity: 'minor', text: 'a deep cut', left: 12, total: 12 });
+    a.wounds.push({ id: 'w2', source: 'physical', severity: 'trivial', text: 'bruised ribs', left: 3, total: 3 });
+    expect(staminaCap(a.wounds)).toBe(80);
+    g = at(g, 30);
+    const healed = g.adventurers[0];
+    expect(healed.wounds.length).toBeLessThan(2);
+  });
+
+  it('lets a Hospitaller guild, a healer and armour all make wounds rarer, and a Bold stance worse', () => {
+    const steady = woundStats('steady', 2, 0, 400, 3).any, bold = woundStats('bold', 2, 0, 400, 3).any, caut = woundStats('cautious', 2, 0, 400, 3).any;
+    expect(caut).toBeLessThan(steady);
+    expect(steady).toBeLessThan(bold);
   });
 
   it('gives odds that match the rolled outcomes', () => {
@@ -112,22 +132,22 @@ describe('outings', () => {
     const party = g.adventurers.map((a) => a.id);
     const { ctx } = ctxFor(g, offer, party, 'bold');
     // Push them below their tier so deaths are common enough to measure.
-    ctx.members = ctx.members.map((m) => ({ ...m, rating: m.rating - 6, health: 70 }));
+    ctx.members = ctx.members.map((m) => ({ ...m, rating: m.rating - 6, stamina: 70 }));
     const o = odds(ctx);
     const N = 20000;
-    let full = 0, anyDeath = 0;
-    const deaths: Record<string, number> = {}, hurt: Record<string, number> = {};
+    let full = 0, anyMajor = 0;
+    const hurt: Record<string, number> = {}, major: Record<string, number> = {};
     for (let i = 0; i < N; i++) {
       const r = resolve(ctx, rngFor(99, i));
       if (r.stages.length === offer.stages.length && r.stages.every((s) => s.outcome !== 'fail')) full++;
-      if (Object.values(r.members).some((m) => m.died)) anyDeath++;
-      for (const [id, m] of Object.entries(r.members)) { if (m.died) deaths[id] = (deaths[id] ?? 0) + 1; if (m.injury) hurt[id] = (hurt[id] ?? 0) + 1; }
+      if (Object.values(r.members).some((m) => m.wounds?.some((w) => w.severity === 'major'))) anyMajor++;
+      for (const [id, m] of Object.entries(r.members)) { if (m.wounds?.length) hurt[id] = (hurt[id] ?? 0) + 1; if (m.wounds?.some((w) => w.severity === 'major')) major[id] = (major[id] ?? 0) + 1; }
     }
     const close = (a: number, b: number) => expect(Math.abs(a - b)).toBeLessThan(0.012);
     close(full / N, o.full);
-    close(anyDeath / N, o.anyDeath);
-    for (const id of party) { close((deaths[id] ?? 0) / N, o.death[id]); close((hurt[id] ?? 0) / N, o.injury[id]); }
-    expect(o.anyDeath).toBeGreaterThan(0.02);
+    close(anyMajor / N, o.anyMajor);
+    for (const id of party) { close((hurt[id] ?? 0) / N, o.injury[id]); close((major[id] ?? 0) / N, o.major[id]); }
+    expect(o.anyMajor).toBeGreaterThan(0.02);
   });
 
   it('snapshots the party at departure', () => {
@@ -203,14 +223,16 @@ describe('real-life rewards', () => {
 });
 
 describe('balance', () => {
-  it('lets about 2/3 of careful players’ adventurers retire, and about 1/3 of risky ones', () => {
-    const careful = deathShare(CAREFUL, 120);
-    const risky = deathShare(RISKY, 120);
-    expect(careful).toBeGreaterThan(0.2);
-    expect(careful).toBeLessThan(0.45);
-    expect(risky).toBeGreaterThan(0.5);
-    expect(risky).toBeLessThan(0.82);
-  }, 120_000);
+  it('wounds an easy outing a little, with a small chance of a major wound, and a dangerous one a lot', () => {
+    const easy = woundStats('steady', 3, 0, 500, 7, 6);
+    expect(easy.any).toBeGreaterThan(0.2);
+    expect(easy.any).toBeLessThan(0.55);
+    expect(easy.major).toBeGreaterThan(0.004);
+    expect(easy.major).toBeLessThan(0.05);
+    const hard = woundStats('steady', 2, 2, 500, 7);
+    expect(hard.any).toBeGreaterThan(0.8);
+    expect(hard.major).toBeGreaterThan(0.1);
+  });
 });
 
 it('advances at most one hour of phases per hour of real time', () => {

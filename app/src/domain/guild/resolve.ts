@@ -3,8 +3,7 @@
 // short outings, and from a fixed set of 20,000 seeded runs for the long ones (odysseys).
 import type { CharterId, CondOrUnknown, ConditionId, Role, StageKind, StockKey } from './content';
 import {
-  BOLD_XP, BOSS_EXTRA, CLEAR_AT, COND_PENALTY, DEATH_BASE, difficulty, EXPOSURE, FATIGUE_GAIN, HEALER_SAVE, HEALTH_LOSS, INJURIES, INJURY_CHANCE,
-  INJURY_DAYS, INJURY_HEALER_MULT, MISSING_ROLE, ODYSSEY_XP, RACES, ROLE_WEIGHT, SCAR_CHANCE, SCARS, SIZE_BONUS, STAGE_GOLD, STAGE_HERBS,
+  BOLD_XP, BOSS_EXTRA, CLEAR_AT, COND_PENALTY, difficulty, MISSING_ROLE, ODYSSEY_XP, RACES, ROLE_WEIGHT, SIZE_BONUS, STAGE_GOLD, STAGE_HERBS,
   STAGE_MATERIALS, STANCES, STOCK_KEYS, STRAIN_AT, xpFor, CLASS_COUNTERS, RACE_COUNTERS,
 } from './content';
 import type { Stance } from './content';
@@ -15,12 +14,23 @@ import { fxFor } from './vows';
 import { dropGrade, itemInjuryCut, makeDraft } from './gear';
 import type { Rng } from './rng';
 import { rng } from './rng';
-import type { Adventurer, Loot, MemberResult, Offer, Outcome, OutingResult, StageResult } from './types';
+import type { Adventurer, Loot, MemberResult, NewWound, Offer, Outcome, OutingResult, StageResult } from './types';
+import {
+  FATIGUE_GAIN, fatigueFactor, healerDowngrade, keepWorst, makeWound, rollSeverity, rollSource, STAMINA_COST, staminaCap, staminaFactor, woundDist, woundFactor,
+} from './wounds';
+import type { WoundDist } from './wounds';
 
 /** A party member as they were when the party left. */
 export interface Member {
-  id: string; role: Role; roles: Role[]; fx: TraitFx; rating: number; health: number; fatigue: number; injuryMult: number; xpMult: number;
-  lucky: boolean; elf: boolean; ward: boolean; counters: ConditionId[]; partner: string | null;
+  id: string; role: Role; roles: Role[]; fx: TraitFx;
+  /** Rating before stamina, fatigue and wounds (those change during the outing). */
+  rating: number;
+  stamina: number; fatigue: number;
+  /** What their wounds leave of their rating (1 = none), and the most stamina they can have. */
+  woundFactor: number; cap: number;
+  injuryMult: number; xpMult: number;
+  /** A ward or a halfling's luck: major wounds are rarer. */
+  soften: boolean; elf: boolean; counters: ConditionId[]; partner: string | null;
 }
 export interface Ctx {
   offer: Offer; stance: Stance; charter: CharterId; members: Member[];
@@ -28,66 +38,63 @@ export interface Ctx {
   conditions: CondOrUnknown[];
   /** Multipliers on loot and XP from the phase, region, charter, legends and library. */
   lootMult: number; goldMult: number; matMult: number; xpMult: number;
-  /** Multipliers on danger: chapel and witness stones, and legends of the Guardian class. */
-  deathMult: number; injuryMult: number;
+  /** Multiplier on the chance of wounds: witness stones, and legends of the Guardian class. */
+  injuryMult: number;
   /** Which phase of the day they set out in: 0 morning, 1 noon, 2 evening. */
   phase: number;
 }
 
-export const NEUTRAL = { lootMult: 1, goldMult: 1, matMult: 1, xpMult: 1, deathMult: 1, injuryMult: 1, phase: 1 };
+export const NEUTRAL = { lootMult: 1, goldMult: 1, matMult: 1, xpMult: 1, injuryMult: 1, phase: 1 };
 
 export interface SnapshotOpts { ward?: boolean; heal?: boolean; penalty?: number }
 export const snapshot = (a: Adventurer, o: SnapshotOpts = {}): Member => {
   const trinket = a.gear.trinket?.counters;
   const cut = a.gear.armour ? itemInjuryCut(a.gear.armour) : 0;
   const fx = fxFor(a);
+  const cap = staminaCap(a.wounds);
   return {
-    id: a.id, role: role(a), roles: rolesOf(a), fx, rating: rating(a) - (o.penalty ?? 0), health: o.heal ? Math.min(100, a.health + 40) : a.health, fatigue: a.fatigue,
-    injuryMult: RACES[a.race].injuryMult * (1 - cut), xpMult: RACES[a.race].xpMult * (1 + fx.x), lucky: a.race === 'halfling' && !a.luckUsed, elf: a.race === 'elf',
-    ward: !!o.ward, counters: [...CLASS_COUNTERS[a.cls], ...(RACE_COUNTERS[a.race] ?? []), ...fx.cnt, ...(trinket ? [trinket] : [])], partner: a.partnerId ?? null,
+    id: a.id, role: role(a), roles: rolesOf(a), fx, rating: rating(a) - (o.penalty ?? 0),
+    stamina: Math.min(cap, o.heal ? a.stamina + 40 : a.stamina), fatigue: a.fatigue, woundFactor: woundFactor(a.wounds), cap,
+    injuryMult: RACES[a.race].injuryMult * (1 - cut), xpMult: RACES[a.race].xpMult * (1 + fx.x), soften: !!o.ward || a.race === 'halfling', elf: a.race === 'elf',
+    counters: [...CLASS_COUNTERS[a.cls], ...(RACE_COUNTERS[a.race] ?? []), ...fx.cnt, ...(trinket ? [trinket] : [])], partner: a.partnerId ?? null,
   };
 };
 
-interface State { alive: boolean[]; health: number[]; fatigue: number[]; fails: number; luck: boolean[]; ward: boolean[] }
+interface State { stamina: number[]; fatigue: number[]; fails: number }
 
-const start = (ctx: Ctx): State => ({
-  alive: ctx.members.map(() => true), health: ctx.members.map((m) => m.health), fatigue: ctx.members.map((m) => m.fatigue),
-  fails: 0, luck: ctx.members.map((m) => m.lucky), ward: ctx.members.map((m) => m.ward),
-});
-const copy = (s: State): State => ({ alive: [...s.alive], health: [...s.health], fatigue: [...s.fatigue], fails: s.fails, luck: [...s.luck], ward: [...s.ward] });
-const living = (s: State) => s.alive.flatMap((a, i) => (a ? [i] : []));
+const start = (ctx: Ctx): State => ({ stamina: ctx.members.map((m) => m.stamina), fatigue: ctx.members.map((m) => m.fatigue), fails: 0 });
+const copy = (s: State): State => ({ stamina: [...s.stamina], fatigue: [...s.fatigue], fails: s.fails });
+const everyone = (s: State) => s.stamina.map((_, i) => i);
 const avg = (xs: number[]) => xs.reduce((n, x) => n + x, 0) / Math.max(1, xs.length);
 
 // ── The rules of one stage ───────────────────────────────────
 
-/** Conditions that nobody still standing counters. */
-export function uncountered(ctx: Ctx, s: State): number {
-  const idx = living(s);
-  return ctx.conditions.filter((c) => c === 'unknown' || !idx.some((i) => ctx.members[i].counters.includes(c))).length;
+/** Conditions that nobody in the party counters. */
+export function uncountered(ctx: Ctx, _s?: State): number {
+  return ctx.conditions.filter((c) => c === 'unknown' || !ctx.members.some((m) => m.counters.includes(c))).length;
 }
 
-/** One member's rating for this kind of check, with what their traits do in this party and this setting. */
-function memberRating(ctx: Ctx, m: Member, kind: Exclude<StageKind, 'rest'>, n: number): number {
+/** One member's rating for this kind of check: what their traits do in this party and setting, times how fit they are right now. */
+function memberRating(ctx: Ctx, m: Member, kind: Exclude<StageKind, 'rest'>, n: number, stamina: number, fatigue: number): number {
   const f = m.fx, k = KIND_KEY[kind];
-  return m.rating + f.r + (k ? f[k] : 0) + (ctx.stance === 'bold' ? f.bold : ctx.stance === 'cautious' ? f.caut : 0)
+  const base = m.rating + f.r + (k ? f[k] : 0) + (ctx.stance === 'bold' ? f.bold : ctx.stance === 'cautious' ? f.caut : 0)
     + (n <= 2 ? f.solo : 0) + f.team * (Math.min(n, 5) - 1) + (ctx.phase === 2 ? f.eve : ctx.phase === 0 ? f.morn : 0);
+  return base * staminaFactor(stamina) * fatigueFactor(fatigue) * m.woundFactor;
 }
 
 /** What the party brings to a check of this kind. */
 export function partyScore(ctx: Ctx, s: State, kind: Exclude<StageKind, 'rest'>): number {
-  const idx = living(s);
+  const idx = everyone(s);
   const w = ROLE_WEIGHT[kind];
   let sum = 0, weights = 0;
-  for (const i of idx) { const m = ctx.members[i]; const wt = Math.max(...m.roles.map((r) => w[r])); sum += wt * memberRating(ctx, m, kind, idx.length); weights += wt; }
+  for (const i of idx) { const m = ctx.members[i]; const wt = Math.max(...m.roles.map((r) => w[r])); sum += wt * memberRating(ctx, m, kind, idx.length, s.stamina[i], s.fatigue[i]); weights += wt; }
   let score = sum / Math.max(1e-9, weights) + SIZE_BONUS * Math.min(5, idx.length - 1);
   const miss = MISSING_ROLE[kind];
   if (miss && !idx.some((i) => ctx.members[i].roles.includes(miss.role))) score -= miss.penalty;
   if ((kind === 'hazard' || kind === 'trap') && idx.some((i) => ctx.members[i].elf)) score += 1;
   if (idx.some((i) => ctx.members[i].partner && idx.some((j) => ctx.members[j].id === ctx.members[i].partner))) score += 1;
   score -= COND_PENALTY * uncountered(ctx, s);
-  const fat = avg(idx.map((i) => s.fatigue[i]));
-  if (fat > 70) score -= 2;
-  if (kind === 'endurance') score -= fat / 20 + (100 - avg(idx.map((i) => s.health[i]))) / 25;
+  if (kind === 'endurance') score -= avg(s.fatigue) / 30 + (100 - avg(s.stamina)) / 40;
   return score;
 }
 
@@ -106,45 +113,31 @@ function margin(ctx: Ctx, s: State, kind: StageKind): number {
   return partyScore(ctx, s, kind) - difficulty(o.tier) - (kind === 'boss' ? BOSS_EXTRA : 0);
 }
 
-const healerAlive = (ctx: Ctx, s: State) => living(s).some((i) => ctx.members[i].roles.includes('healer'));
-
-function injuryChance(ctx: Ctx, s: State, i: number, outcome: Outcome): number {
-  if (outcome === 'clear' || ctx.offer.tutorial) return 0;
-  const base = INJURY_CHANCE[outcome] * (ctx.offer.scale === 'odd' ? 0.5 : 1);
-  return Math.min(0.9, base * ctx.members[i].injuryMult * Math.max(0.2, 1 + ctx.members[i].fx.i) * ctx.injuryMult * STANCES[ctx.stance].injury * (healerAlive(ctx, s) ? INJURY_HEALER_MULT : 1));
+/** One member's chances of no wound, or a trivial, minor or major one, at a stage. Healers in the party soften them. */
+function wounds(ctx: Ctx, s: State, i: number, outcome: Outcome, kind: StageKind): WoundDist {
+  const m = ctx.members[i];
+  if (kind === 'rest' || ctx.offer.tutorial) return { none: 1, trivial: 0, minor: 0, major: 0 };
+  const healers = ctx.members.filter((x) => x.roles.includes('healer')).map((x) => x.rating);
+  const charter = ctx.charter === 'hospitaller' ? 0.8 : 1;
+  // Higher tiers hurt more, and a trait that used to make death likelier now makes wounds worse.
+  const tier = ctx.offer.scale === 'odd' ? 0.7 : 0.7 + 0.1 * ctx.offer.tier;
+  const mult = m.injuryMult * Math.max(0.2, 1 + m.fx.i + m.fx.d) * ctx.injuryMult * STANCES[ctx.stance].injury * charter * tier;
+  return woundDist({ outcome, kind, mult, fatigue: s.fatigue[i], stamina: s.stamina[i], downgrade: healerDowngrade(healers), soften: m.soften, odd: ctx.offer.scale === 'odd' });
 }
 
-/** On a failed stage one member is struck: who, and how likely they die or are saved. */
-function strikes(ctx: Ctx, s: State) {
-  if (ctx.offer.scale === 'odd') return [];
-  const idx = living(s);
-  const w = idx.map((i) => EXPOSURE[ctx.members[i].role] * (1 + (100 - s.health[i]) / 100));
-  const total = w.reduce((n, x) => n + x, 0);
-  const healers = idx.filter((i) => ctx.members[i].roles.includes('healer'));
-  const heal = healers.length ? Math.min(HEALER_SAVE.max, HEALER_SAVE.base + HEALER_SAVE.perRating * Math.max(...healers.map((i) => ctx.members[i].rating))) : 0;
-  const charter = ctx.charter === 'hospitaller' ? 0.2 : 0;
-  return idx.map((i, k) => {
-    const raw = Math.min(0.95, DEATH_BASE * STANCES[ctx.stance].death * ctx.deathMult * Math.max(0.2, 1 + ctx.members[i].fx.d) * (1 + (100 - s.health[i]) / 50));
-    const hit = (w[k] / total) * raw;
-    const byHealer = hit * heal;
-    const byCharter = hit * (1 - heal) * charter;
-    const fatal = hit * (1 - heal) * (1 - charter);
-    return { i, byHealer, byCharter, byWard: s.ward[i] ? fatal : 0, byLuck: !s.ward[i] && s.luck[i] ? fatal : 0, die: s.ward[i] || s.luck[i] ? 0 : fatal };
-  });
-}
-
-/** Health and fatigue after the stage, for everyone still standing. */
+/** Stamina and fatigue after the stage. */
 function afterStage(ctx: Ctx, s: State, kind: StageKind, outcome: Outcome) {
   const f = STANCES[ctx.stance].fatigue;
-  for (const i of living(s)) {
-    if (kind === 'rest') { s.health[i] = Math.min(100, s.health[i] + 10); s.fatigue[i] = Math.max(0, s.fatigue[i] - 10); continue; }
-    if (outcome !== 'clear') s.health[i] = Math.max(0, s.health[i] - HEALTH_LOSS[outcome]);
-    s.fatigue[i] = Math.min(100, s.fatigue[i] + FATIGUE_GAIN[outcome] * f * Math.max(0.2, 1 + ctx.members[i].fx.f));
+  for (const i of everyone(s)) {
+    if (kind === 'rest') { s.stamina[i] = Math.min(ctx.members[i].cap, s.stamina[i] + 10); s.fatigue[i] = Math.max(0, s.fatigue[i] - 2); continue; }
+    const fx = Math.max(0.2, 1 + ctx.members[i].fx.f);
+    s.stamina[i] = Math.max(0, s.stamina[i] - STAMINA_COST[outcome] * f * fx);
+    s.fatigue[i] = Math.min(100, s.fatigue[i] + FATIGUE_GAIN[outcome] * f * fx);
   }
   if (outcome === 'fail') s.fails++;
 }
 
-const over = (ctx: Ctx, s: State) => s.fails >= STANCES[ctx.stance].turnBackAt || !s.alive.some(Boolean);
+const over = (ctx: Ctx, s: State) => s.fails >= STANCES[ctx.stance].turnBackAt;
 
 // ── Loot and XP ──────────────────────────────────────────────
 
@@ -210,28 +203,22 @@ export function resolve(ctx: Ctx, r: Rng): OutingResult {
   const s = start(ctx);
   const stages: StageResult[] = [];
   const outcomes: Outcome[] = [];
-  const injuredAt: Record<string, boolean> = {};
+  const got: Record<string, NewWound[]> = {};
   let loot: Loot = emptyLoot(), chest: Loot | null = null;
   for (const plan of ctx.offer.stages) {
     const [pc, ps] = outcomeChances(margin(ctx, s, plan.kind));
     const u = r.next();
     const outcome: Outcome = plan.kind === 'rest' ? 'clear' : u < pc ? 'clear' : u < pc + ps ? 'strain' : 'fail';
-    const res: StageResult = { outcome, injured: [], loot: stageLoot(ctx, plan.kind, outcome, r) };
-    for (const i of living(s)) if (r.chance(injuryChance(ctx, s, i, outcome))) res.injured.push(ctx.members[i].id);
-    if (outcome === 'fail') {
-      let u2 = r.next();
-      for (const st of strikes(ctx, s)) {
-        const id = ctx.members[st.i].id;
-        if ((u2 -= st.die) < 0) { res.died = id; s.alive[st.i] = false; break; }
-        if ((u2 -= st.byWard) < 0) { res.saved = { id, by: 'ward' }; s.ward[st.i] = false; break; }
-        if ((u2 -= st.byLuck) < 0) { res.saved = { id, by: 'luck' }; s.luck[st.i] = false; break; }
-        if ((u2 -= st.byHealer) < 0) { res.saved = { id, by: 'healer' }; break; }
-        if ((u2 -= st.byCharter) < 0) { res.saved = { id, by: 'charter' }; break; }
-      }
-      if (res.saved && !res.injured.includes(res.saved.id)) res.injured.push(res.saved.id);
+    const res: StageResult = { outcome, injured: [], hurt: [], loot: stageLoot(ctx, plan.kind, outcome, r) };
+    for (const i of everyone(s)) {
+      const sev = rollSeverity(wounds(ctx, s, i, outcome, plan.kind), r.next());
+      if (!sev) continue;
+      const source = rollSource(r, plan.kind);
+      const id = ctx.members[i].id;
+      (got[id] ??= []).push(makeWound(r, source, sev));
+      res.injured.push(id);
+      res.hurt!.push({ id, severity: sev, source });
     }
-    res.injured = res.injured.filter((id) => id !== res.died);
-    for (const id of res.injured) injuredAt[id] = true;
     loot = addLoot(loot, res.loot);
     if (r.chance(chestChance(ctx, plan.kind, outcome))) { chest = roundLoot(chestLoot(ctx, r)); loot = addLoot(loot, chest); }
     afterStage(ctx, s, plan.kind, outcome);
@@ -242,14 +229,9 @@ export function resolve(ctx: Ctx, r: Rng): OutingResult {
   const xp = outingXp(ctx, outcomes);
   const members: Record<string, MemberResult> = {};
   ctx.members.forEach((m, i) => {
-    const res: MemberResult = { health: Math.round(s.health[i]), fatigue: Math.round(s.fatigue[i]), died: !s.alive[i], xp: s.alive[i] ? Math.round(xp * m.xpMult) : 0 };
-    if (s.alive[i] && injuredAt[m.id]) {
-      res.injury = { text: r.pick(INJURIES), days: r.int(INJURY_DAYS[0], INJURY_DAYS[1]) };
-      if (r.chance(SCAR_CHANCE)) res.scar = r.pick(SCARS).text;
-    }
-    members[m.id] = res;
+    members[m.id] = { stamina: Math.round(s.stamina[i]), fatigue: Math.round(s.fatigue[i] * 10) / 10, died: false, xp: Math.round(xp * m.xpMult), wounds: keepWorst(got[m.id] ?? []) };
   });
-  return { stages, turnedBack: stages.length < ctx.offer.stages.length && s.alive.some(Boolean), chest, loot: roundLoot(loot), members };
+  return { stages, turnedBack: stages.length < ctx.offer.stages.length, chest, loot: roundLoot(loot), members };
 }
 
 // ── Odds ─────────────────────────────────────────────────────
@@ -258,9 +240,11 @@ export interface Odds {
   /** Every stage played without a failure. */
   full: number;
   turnBack: number;
-  anyDeath: number;
-  death: Record<string, number>;
+  /** The chance somebody comes home with a major wound. */
+  anyMajor: number;
+  /** For each member: the chance of any wound, and of a major one. */
   injury: Record<string, number>;
+  major: Record<string, number>;
   /** Expected loot, and the gold range between the 10th and 90th percentile. */
   loot: Loot;
   goldLow: number;
@@ -288,28 +272,28 @@ export function oddsRange(ctx: Ctx, hidden: number): { lo: Odds; hi: Odds } {
 
 function sampled(ctx: Ctx): Odds {
   const n = ctx.members.length;
-  const out: Odds = { full: 0, turnBack: 0, anyDeath: 0, death: {}, injury: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0 };
-  for (const m of ctx.members) { out.death[m.id] = 0; out.injury[m.id] = 0; }
+  const out: Odds = { full: 0, turnBack: 0, anyMajor: 0, injury: {}, major: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0 };
+  for (const m of ctx.members) { out.injury[m.id] = 0; out.major[m.id] = 0; }
   const golds: number[] = [];
   let loot: Loot = emptyLoot(), xp = 0;
   for (let k = 0; k < SAMPLES; k++) {
     const r = resolve(ctx, rng(0x9e3779b9 ^ (k * 2654435761)));
     if (r.stages.length === ctx.offer.stages.length && r.stages.every((s) => s.outcome !== 'fail')) out.full++;
     if (r.turnedBack) out.turnBack++;
-    let dead = false;
+    let major = false;
     for (const m of ctx.members) {
       const mr = r.members[m.id];
-      if (mr.died) { out.death[m.id]++; dead = true; }
-      if (mr.injury) out.injury[m.id]++;
+      if (mr.wounds?.length) out.injury[m.id]++;
+      if (mr.wounds?.some((w) => w.severity === 'major')) { out.major[m.id]++; major = true; }
       xp += mr.xp;
     }
-    if (dead) out.anyDeath++;
+    if (major) out.anyMajor++;
     loot = addLoot(loot, { ...r.loot, items: undefined });
     golds.push(r.loot.gold);
   }
   const N = SAMPLES;
-  out.full /= N; out.turnBack /= N; out.anyDeath /= N;
-  for (const m of ctx.members) { out.death[m.id] /= N; out.injury[m.id] /= N; }
+  out.full /= N; out.turnBack /= N; out.anyMajor /= N;
+  for (const m of ctx.members) { out.injury[m.id] /= N; out.major[m.id] /= N; }
   golds.sort((a, b) => a - b);
   out.goldLow = golds[Math.floor(N * 0.1)]; out.goldHigh = golds[Math.floor(N * 0.9)];
   out.loot = roundLoot({ gold: loot.gold / N, wood: (loot.wood ?? 0) / N, stone: (loot.stone ?? 0) / N, iron: (loot.iron ?? 0) / N, herbs: (loot.herbs ?? 0) / N });
@@ -319,26 +303,28 @@ function sampled(ctx: Ctx): Odds {
 
 function exact(ctx: Ctx): Odds {
   const n = ctx.members.length;
-  const out: Odds = { full: 0, turnBack: 0, anyDeath: 0, death: {}, injury: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0 };
-  for (const m of ctx.members) { out.death[m.id] = 0; out.injury[m.id] = 0; }
+  const out: Odds = { full: 0, turnBack: 0, anyMajor: 0, injury: {}, major: {}, loot: emptyLoot(), goldLow: 0, goldHigh: 0, xp: 0 };
+  for (const m of ctx.members) { out.injury[m.id] = 0; out.major[m.id] = 0; }
   const leaves: { p: number; gold: number }[] = [];
 
-  const walk = (k: number, s: State, p: number, notHurt: number[], loot: Loot, outcomes: Outcome[], deaths: number) => {
+  // Wounds don't change how the rest of the outing goes, so each member's chance of none, or of no major one, just multiplies along the way.
+  const walk = (k: number, s: State, p: number, notHurt: number[], notMajor: number[], loot: Loot, outcomes: Outcome[]) => {
     if (p < PRUNE) return;
     const done = k >= ctx.offer.stages.length || (k > 0 && over(ctx, s));
     if (done) {
       if (outcomes.every((o) => o !== 'fail') && k === ctx.offer.stages.length) out.full += p;
-      if (k < ctx.offer.stages.length && s.alive.some(Boolean)) out.turnBack += p;
-      if (deaths) out.anyDeath += p;
+      if (k < ctx.offer.stages.length) out.turnBack += p;
       out.loot = addLoot(out.loot, loot, p);
       const xp = outingXp(ctx, outcomes);
-      let alive = 0;
+      let none = 1;
       for (let i = 0; i < n; i++) {
         const id = ctx.members[i].id;
-        if (!s.alive[i]) out.death[id] += p;
-        else { out.injury[id] += p * (1 - notHurt[i]); alive++; }
+        out.injury[id] += p * (1 - notHurt[i]);
+        out.major[id] += p * (1 - notMajor[i]);
+        none *= notMajor[i];
       }
-      out.xp += p * xp * (alive ? 1 : 0);
+      out.anyMajor += p * (1 - none);
+      out.xp += p * xp;
       leaves.push({ p, gold: loot.gold });
       return;
     }
@@ -350,39 +336,15 @@ function exact(ctx: Ctx): Odds {
       const base = addLoot(loot, stageLoot(ctx, plan.kind, outcome));
       const cc = chestChance(ctx, plan.kind, outcome);
       const withChest = cc ? addLoot(base, chestLoot(ctx), cc) : base;
-      const hurt = living(s).map((i) => [i, injuryChance(ctx, s, i, outcome)] as const);
-      const next = (s2: State, pp: number, extraHurt: number | null, died: boolean) => {
-        const nh = [...notHurt];
-        for (const [i, c] of hurt) nh[i] *= 1 - c;
-        if (extraHurt !== null) nh[extraHurt] = 0;
-        afterStage(ctx, s2, plan.kind, outcome);
-        walk(k + 1, s2, pp, nh, withChest, [...outcomes, outcome], deaths + (died ? 1 : 0));
-      };
-      if (outcome !== 'fail') { next(copy(s), p * po, null, false); return; }
-      const sts = strikes(ctx, s);
-      let calm = 1;
-      // Saves by healer or charter change nothing but the injury; fold them into the injury chances.
-      const savedHurt = new Map<number, number>();
-      for (const st of sts) {
-        calm -= st.die + st.byLuck + st.byWard + st.byHealer + st.byCharter;
-        savedHurt.set(st.i, st.byHealer + st.byCharter);
-        if (st.die > 0) { const s2 = copy(s); s2.alive[st.i] = false; next(s2, p * po * st.die, null, true); }
-        if (st.byWard > 0) { const s2 = copy(s); s2.ward[st.i] = false; next(s2, p * po * st.byWard, st.i, false); }
-        if (st.byLuck > 0) { const s2 = copy(s); s2.luck[st.i] = false; next(s2, p * po * st.byLuck, st.i, false); }
-      }
-      const pCalm = calm + [...savedHurt.values()].reduce((a, b) => a + b, 0);
-      if (pCalm > 0) {
-        const s2 = copy(s);
-        const nh = [...notHurt];
-        for (const [i, c] of hurt) nh[i] *= 1 - c;
-        for (const [i, c] of savedHurt) nh[i] *= 1 - c / pCalm;
-        afterStage(ctx, s2, plan.kind, outcome);
-        walk(k + 1, s2, p * po * pCalm, nh, withChest, [...outcomes, outcome], deaths);
-      }
+      const nh = [...notHurt], nm = [...notMajor];
+      for (const i of everyone(s)) { const d = wounds(ctx, s, i, outcome, plan.kind); nh[i] *= d.none; nm[i] *= 1 - d.major; }
+      const s2 = copy(s);
+      afterStage(ctx, s2, plan.kind, outcome);
+      walk(k + 1, s2, p * po, nh, nm, withChest, [...outcomes, outcome]);
     });
   };
 
-  walk(0, start(ctx), 1, ctx.members.map(() => 1), emptyLoot(), [], 0);
+  walk(0, start(ctx), 1, ctx.members.map(() => 1), ctx.members.map(() => 1), emptyLoot(), []);
   leaves.sort((a, b) => a.gold - b.gold);
   const pct = (q: number) => { let acc = 0; for (const l of leaves) { acc += l.p; if (acc >= q) return l.gold; } return leaves.length ? leaves[leaves.length - 1].gold : 0; };
   out.goldLow = Math.round(pct(0.1));

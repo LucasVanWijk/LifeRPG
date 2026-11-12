@@ -39,9 +39,9 @@ export interface Race {
 }
 export const RACES: Record<RaceId, Race> = {
   human: { id: 'human', name: 'Human', plural: 'Humans', age: [16, 40], comesOfAge: 16, mods: {}, trait: 'Driven', traitText: '+15% XP from all sources', xpMult: 1.15, injuryMult: 1, lifespan: [10, 20] },
-  dwarf: { id: 'dwarf', name: 'Dwarf', plural: 'Dwarves', age: [30, 70], comesOfAge: 30, mods: { might: 1, spirit: 1, finesse: -1 }, trait: 'Stoneborn', traitText: '−25% chance of injury; counters Cold', xpMult: 1, injuryMult: 0.75, lifespan: [20, 40] },
+  dwarf: { id: 'dwarf', name: 'Dwarf', plural: 'Dwarves', age: [30, 70], comesOfAge: 30, mods: { might: 1, spirit: 1, finesse: -1 }, trait: 'Stoneborn', traitText: '−25% chance of wounds; counters Cold', xpMult: 1, injuryMult: 0.75, lifespan: [20, 40] },
   elf: { id: 'elf', name: 'Elf', plural: 'Elves', age: [60, 200], comesOfAge: 60, mods: { finesse: 1, wits: 1, might: -1 }, trait: 'Keen-eyed', traitText: '+1 to scouting checks; counters Darkness', xpMult: 1, injuryMult: 1, lifespan: [40, 80] },
-  halfling: { id: 'halfling', name: 'Halfling', plural: 'Halflings', age: [20, 45], comesOfAge: 20, mods: { finesse: 1, spirit: 1, might: -1 }, trait: 'Lucky', traitText: 'Once per career, a death becomes an injury', xpMult: 1, injuryMult: 1, lifespan: [15, 25] },
+  halfling: { id: 'halfling', name: 'Halfling', plural: 'Halflings', age: [20, 45], comesOfAge: 20, mods: { finesse: 1, spirit: 1, might: -1 }, trait: 'Lucky', traitText: 'Major wounds are four times rarer', xpMult: 1, injuryMult: 1, lifespan: [15, 25] },
 };
 export const RACE_IDS = Object.keys(RACES) as RaceId[];
 
@@ -55,7 +55,7 @@ export type ClassId = 'guardian' | 'cleric' | 'ranger' | 'arcanist' | 'blademast
 export interface Cls { id: ClassId; name: string; role: Role; /** Two-role classes fill a second role at a small cost to rating. */ second?: Role; main: Attr; weights: Record<Attr, number>; icon: IconName; blurb: string }
 export const CLASSES: Record<ClassId, Cls> = {
   guardian: { id: 'guardian', name: 'Guardian', role: 'tank', main: 'might', weights: { might: 0.45, finesse: 0.1, wits: 0.1, spirit: 0.35 }, icon: 'shield', blurb: 'Holds the line, so the others are hurt less.' },
-  cleric: { id: 'cleric', name: 'Cleric', role: 'healer', main: 'spirit', weights: { might: 0.1, finesse: 0.1, wits: 0.3, spirit: 0.5 }, icon: 'heart', blurb: 'Turns deaths into injuries and injuries into bruises.' },
+  cleric: { id: 'cleric', name: 'Cleric', role: 'healer', main: 'spirit', weights: { might: 0.1, finesse: 0.1, wits: 0.3, spirit: 0.5 }, icon: 'heart', blurb: 'Turns wounds into lesser wounds, and heals the rest faster.' },
   ranger: { id: 'ranger', name: 'Ranger', role: 'dps', main: 'finesse', weights: { might: 0.15, finesse: 0.5, wits: 0.25, spirit: 0.1 }, icon: 'feather', blurb: 'Bow and blade, best in the open.' },
   arcanist: { id: 'arcanist', name: 'Arcanist', role: 'dps', main: 'wits', weights: { might: 0.1, finesse: 0.1, wits: 0.55, spirit: 0.25 }, icon: 'sparkles', blurb: 'Spells that burn what steel cannot.' },
   blademaster: { id: 'blademaster', name: 'Blademaster', role: 'dps', main: 'might', weights: { might: 0.4, finesse: 0.4, wits: 0.1, spirit: 0.1 }, icon: 'sword', blurb: 'Two blades and no patience.' },
@@ -85,7 +85,7 @@ export type CharterId = 'mercantile' | 'martial' | 'hospitaller' | 'builders';
 export const CHARTERS: { id: CharterId; name: string; text: string; icon: IconName }[] = [
   { id: 'mercantile', name: 'Mercantile', text: '+15% gold from expeditions, and a larger weekly sell limit once there is a market.', icon: 'coins' },
   { id: 'martial', name: 'Martial', text: '+15% XP from expeditions and odd jobs.', icon: 'sword' },
-  { id: 'hospitaller', name: 'Hospitaller', text: '−20% chance of death; the difference becomes injuries.', icon: 'heart' },
+  { id: 'hospitaller', name: 'Hospitaller', text: '−20% chance of wounds, and a healer’s touch comes a little easier.', icon: 'heart' },
   { id: 'builders', name: 'Builders', text: '−15% construction cost and time, once the town is built.', icon: 'hammer' },
 ];
 
@@ -100,12 +100,11 @@ export const START_STOCK = { wood: 50, stone: 30, iron: 0, herbs: 0 };
 
 // ── Life at home ─────────────────────────────────────────────
 
-export const HEALTH_REGEN = 5;
-export const FATIGUE_REGEN = 6;
 export const REST_MULT = 1.5;
 /** XP per phase on the Train duty: half of this without a Training Field, up to ×2 with a level 5 one. */
 export const TRAIN_XP = 4;
-export const AUTO_REST = { health: 60, fatigue: 40 };
+/** Rest when stamina is below this, or when fatigue is this far above what the years have taken. */
+export const AUTO_REST = { stamina: 60, fatigue: 25 };
 
 // ── Going out ────────────────────────────────────────────────
 
@@ -121,10 +120,10 @@ export const tierLevels = (tier: number): [number, number] => [4 * tier - 3, 4 *
 export const tierPhases = (tier: number): [number, number] => [[2, 4], [4, 8], [6, 12], [9, 18], [12, 24]][tier - 1] as [number, number];
 
 export type Stance = 'cautious' | 'steady' | 'bold';
-export const STANCES: Record<Stance, { name: string; duration: number; fatigue: number; loot: number; death: number; injury: number; turnBackAt: number; text: string }> = {
-  cautious: { name: 'Cautious', duration: 0.7, fatigue: 0.5, loot: 0.7, death: 0.4, injury: 0.8, turnBackAt: 1, text: 'Back sooner, half the fatigue, less loot. Turns back at the first failure.' },
-  steady: { name: 'Steady', duration: 1, fatigue: 1, loot: 1, death: 1, injury: 1, turnBackAt: 2, text: 'Turns back at the second failure.' },
-  bold: { name: 'Bold', duration: 1, fatigue: 1.2, loot: 1.4, death: 2.2, injury: 1.25, turnBackAt: 99, text: '+40% loot and a better shot at the boss chest. Never turns back.' },
+export const STANCES: Record<Stance, { name: string; duration: number; fatigue: number; loot: number; injury: number; turnBackAt: number; text: string }> = {
+  cautious: { name: 'Cautious', duration: 0.7, fatigue: 0.5, loot: 0.7, injury: 0.7, turnBackAt: 1, text: 'Back sooner, half the strain, fewer wounds, less loot. Turns back at the first failure.' },
+  steady: { name: 'Steady', duration: 1, fatigue: 1, loot: 1, injury: 1, turnBackAt: 2, text: 'Turns back at the second failure.' },
+  bold: { name: 'Bold', duration: 1, fatigue: 1.2, loot: 1.4, injury: 1.5, turnBackAt: 99, text: '+40% loot and a better shot at the boss chest, but more and worse wounds. Never turns back.' },
 };
 
 /** A stage check is d20 + party score − difficulty: Clear at 10 or more, Strain at 5–9, Fail below. */
@@ -141,17 +140,7 @@ export const ROLE_WEIGHT: Record<Exclude<StageKind, 'rest'>, Record<Role, number
   trap: { tank: 0.4, dps: 0.4, healer: 0.4, scout: 2 },
   endurance: { tank: 1, dps: 1, healer: 1, scout: 1 },
 };
-export const HEALTH_LOSS = { strain: 8, fail: 20 };
-export const FATIGUE_GAIN = { clear: 5, strain: 10, fail: 15 };
-export const INJURY_CHANCE = { strain: 0.04, fail: 0.15 };
-/** Chance per failed stage that the most exposed member is struck down, before stance, health and healer. */
-export const DEATH_BASE = 0.06;
-/** How much more often each role is the one struck. */
-export const EXPOSURE: Record<Role, number> = { tank: 2.5, dps: 1, healer: 0.8, scout: 1 };
-export const HEALER_SAVE = { base: 0.45, perRating: 0.01, max: 0.7 };
-export const INJURY_HEALER_MULT = 0.6;
-export const SCAR_CHANCE = 0.1;
-export const INJURY_DAYS: [number, number] = [2, 12];
+/** Stamina drain, fatigue gain and the wound rules are in wounds.ts. */
 
 export type LootKind = 'gold' | 'materials' | 'alchemy' | 'items';
 export const OFFER_KIND: Record<LootKind, { name: string; icon: IconName }> = {
@@ -220,7 +209,6 @@ export const ODD_JOBS = [
 ];
 export const TUTORIAL_JOB = 'Rats in the guild’s own cellar';
 
-export const INJURIES = ['a broken arm', 'cracked ribs', 'a twisted ankle', 'a deep cut', 'a concussion', 'burns', 'a dislocated shoulder', 'a fever'];
 export const SCARS: { text: string; attr: Attr }[] = [
   { text: 'Lost an eye', attr: 'finesse' }, { text: 'A limp', attr: 'finesse' }, { text: 'Burned hands', attr: 'might' },
   { text: 'A crooked arm', attr: 'might' }, { text: 'A ringing in one ear', attr: 'wits' }, { text: 'Nightmares', attr: 'spirit' },
@@ -303,9 +291,9 @@ export const SPOIL_PHASES = 192;
 
 export type PotionKind = 'heal' | 'cure' | 'ward';
 export const POTIONS: Record<PotionKind, { name: string; herbs: number; price: number; level: number; text: string }> = {
-  heal: { name: 'Healing draught', herbs: 3, price: 10, level: 1, text: 'Drunk before leaving: +40 health.' },
-  cure: { name: 'Cure-all', herbs: 5, price: 15, level: 2, text: 'Halves the time spent injured.' },
-  ward: { name: 'Ward against death', herbs: 10, price: 30, level: 3, text: 'Turns one fatal blow into an injury.' },
+  heal: { name: 'Healing draught', herbs: 3, price: 10, level: 1, text: 'Drunk before leaving: +40 stamina.' },
+  cure: { name: 'Cure-all', herbs: 5, price: 15, level: 2, text: 'Halves the healing time of wounds taken on the outing.' },
+  ward: { name: 'Ward against wounds', herbs: 10, price: 30, level: 3, text: 'Makes major wounds on the outing four times rarer.' },
 };
 export const POTION_KINDS = Object.keys(POTIONS) as PotionKind[];
 export const MARKET_SIZE = 6;
@@ -354,8 +342,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   market: B({ id: 'market', name: 'Merchant House', icon: 'store', blurb: 'Buy gear, and sell what the warehouse can’t hold, up to a weekly limit.', base: { gold: 200, wood: 60, stone: 40, phases: 12 }, hall: 2, workers: 1, values: [100, 200, 350, 550, 800], unit: 'gold of sales a week', staffable: true }),
   smithy: B({ id: 'smithy', name: 'Blacksmith', icon: 'hammer', blurb: 'Forges, reforges and salvages gear.', base: { gold: 250, wood: 60, stone: 80, iron: 10, phases: 15 }, hall: 3, workers: 2, values: [1, 2, 3, 4, 5], unit: 'best grade it can forge', staffClass: ['blademaster', 'guardian'], staffable: true }),
   stillroom: B({ id: 'stillroom', name: 'Stillroom', icon: 'sparkles', blurb: 'Brews potions from herbs.', base: { gold: 200, wood: 50, stone: 40, phases: 12 }, hall: 3, workers: 1, values: [1, 2, 3, 4, 5], unit: 'potion level', staffClass: ['cleric', 'arcanist'], staffable: true }),
-  infirmary: B({ id: 'infirmary', name: 'Infirmary', icon: 'heart', blurb: 'The wounded mend faster.', base: { gold: 250, wood: 80, stone: 80, iron: 10, phases: 18 }, hall: 2, workers: 1, values: [30, 60, 90, 120, 150], unit: '% faster recovery', staffClass: ['cleric'], staffable: true }),
-  chapel: B({ id: 'chapel', name: 'Chapel', icon: 'star', blurb: 'A blessing for those who go out, and some peace for those who stay.', base: { gold: 250, wood: 80, stone: 80, iron: 10, phases: 18 }, hall: 2, workers: 1, values: [10, 15, 20, 25, 30], unit: '% less chance of death', happy: [2, 3, 4, 5, 6], staffClass: ['cleric'], staffable: true }),
+  infirmary: B({ id: 'infirmary', name: 'Infirmary', icon: 'heart', blurb: 'Physical wounds and disease mend faster, and major ones can be treated.', base: { gold: 250, wood: 80, stone: 80, iron: 10, phases: 18 }, hall: 2, workers: 1, values: [30, 60, 90, 120, 150], unit: '% faster recovery', staffClass: ['cleric'], staffable: true }),
+  chapel: B({ id: 'chapel', name: 'Temple', icon: 'star', blurb: 'A temple of healing: magical wounds mend faster and major ones can be treated.', base: { gold: 250, wood: 80, stone: 80, iron: 10, phases: 18 }, hall: 2, workers: 1, values: [10, 15, 20, 25, 30], unit: '% faster healing of magical wounds', happy: [2, 3, 4, 5, 6], staffClass: ['cleric'], staffable: true }),
   field: B({ id: 'field', name: 'Training Field', icon: 'dumbbell', blurb: 'Adventurers at home train twice as well.', base: { gold: 250, wood: 80, stone: 80, iron: 10, phases: 18 }, hall: 2, workers: 1, values: [2, 3, 4, 5, 6], unit: 'training benches', staffClass: ['guardian', 'blademaster'], staffable: true }),
   library: B({ id: 'library', name: 'Library', icon: 'book-open', blurb: 'Lessons from past expeditions, and a look at what lies ahead.', base: { gold: 300, wood: 80, stone: 80, iron: 10, phases: 18 }, hall: 3, workers: 1, values: [5, 10, 15, 20, 25], unit: '% more XP from outings', staffClass: ['arcanist'], staffable: true }),
   cartographer: B({ id: 'cartographer', name: 'Cartographer', icon: 'map', blurb: 'Opens new regions, each with its own dangers.', base: { gold: 300, wood: 60, stone: 60, phases: 18 }, hall: 3, workers: 1, values: [1, 2, 3, 4, 5], unit: 'regions beyond the Hearthlands', staffClass: ['rogue', 'ranger'], staffable: true }),
@@ -430,7 +418,7 @@ export const STREAK_MILESTONES = { daily: [7, 30, 100], weekly: [4, 12, 40] };
 export const LAST_JOB_PENALTY = 2;
 /** What each class's legends add to the guild, per legend. */
 export const LEGEND_STAT: Record<ClassId, { name: string; text: string }> = {
-  paladin: { name: 'valor', text: 'fewer deaths' },
+  paladin: { name: 'valor', text: 'fewer wounds' },
   druid: { name: 'growth', text: 'faster recovery' },
   bard: { name: 'renown', text: 'more gold from outings' },
   guardian: { name: 'safety', text: 'fewer injuries' },

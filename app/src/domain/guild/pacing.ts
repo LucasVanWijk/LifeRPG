@@ -2,7 +2,7 @@
 import type { BuildingId, Role } from './content';
 import { HALL_STEPS, PHASE_MS, PHASES_PER_DAY, tierLevels } from './content';
 import { advance, build, found, hire, payReal, send, setChampion, upgrade, expeditionsOut } from './engine';
-import { canGoOut, phaseAt, rating, role } from './adventurer';
+import { canGoOut, rating, role } from './adventurer';
 import { bld, buildProblem, hallLevel, outLimit, rosterLimit, tierLimit } from './town';
 import type { Guild, Offer } from './types';
 
@@ -22,8 +22,7 @@ const AVG_HABIT = { xp: 10, gold: 3 };
 const ECONOMY: BuildingId[] = ['forestry', 'quarry', 'warehouse', 'mine', 'lodge', 'tavern'];
 
 function pickParty(g: Guild, offer: Offer): string[] | null {
-  const p = phaseAt(g.t);
-  const ready = g.adventurers.filter((a) => canGoOut(a, p) && a.state === 'active' && a.health >= 55 && a.fatigue <= 60).sort((a, b) => rating(b) - rating(a));
+  const ready = g.adventurers.filter((a) => canGoOut(a) && a.state === 'active' && a.wounds.every((w) => w.severity !== 'major') && a.stamina >= 40).sort((a, b) => rating(b) - rating(a));
   const need = (r: Role) => ready.find((a) => role(a) === r);
   const party: typeof ready = [];
   for (const r of offer.needs) { const a = need(r); if (!a) return null; party.push(a); }

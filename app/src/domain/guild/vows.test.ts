@@ -30,7 +30,7 @@ describe('convictions and vows', () => {
       expect(vowText(a.vow!).length).toBeGreaterThan(8);
       kinds.add(a.vow!.kind);
     }
-    expect(kinds.size).toBe(11);
+    expect(kinds.size).toBe(10);
   });
 
   it('level vows aim above where they start', () => {

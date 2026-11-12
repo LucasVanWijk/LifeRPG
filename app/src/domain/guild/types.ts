@@ -57,9 +57,14 @@ export interface Adventurer {
   attrs: Record<Attr, number>;
   /** Real-life XP towards the next point in each attribute. */
   practice: Record<Attr, number>;
-  health: number;
+  /** Energy right now (0–100): outings drain it, rest restores it. It sets how well they perform, and wounds lower the most it can reach. */
+  stamina: number;
+  /** Weariness of the work, 0–100: it builds with outings and age, mends slowly, and never drops below what the years have taken. */
   fatigue: number;
-  injury: { text: string; until: number } | null;
+  /** What is hurting them. */
+  wounds: Wound[];
+  /** Only on saves from before wounds: becomes a minor wound when the guild loads. */
+  injury?: { text: string; until: number } | null;
   scars: string[];
   purse: number;
   duty: Duty;
@@ -133,19 +138,28 @@ export interface Offer {
   recover?: string;
 }
 
+export type WoundSource = 'physical' | 'disease' | 'magical';
+export type Severity = 'trivial' | 'minor' | 'major';
+/** A wound heals by `left` phases of rest at the normal pace; recovery bonuses and rest make it go faster. */
+export interface Wound { id: string; source: WoundSource; severity: Severity; text: string; left: number; total: number; treated?: boolean }
+/** A wound as it is handed out at the end of an outing. */
+export interface NewWound { source: WoundSource; severity: Severity; text: string; phases: number }
+
 export type Outcome = 'clear' | 'strain' | 'fail';
 export type Loot = { gold: number; items?: ItemDraft[] } & Partial<Record<StockKey, number>>;
 
 export interface StageResult {
   outcome: Outcome;
   died?: string;
-  /** Struck down but saved. */
+  /** Struck down but saved (outings before wounds only). */
   saved?: { id: string; by: 'healer' | 'luck' | 'charter' | 'ward' };
   injured: string[];
+  /** Who was wounded at this stage, how badly and by what. */
+  hurt?: { id: string; severity: Severity; source: WoundSource }[];
   loot: Loot;
 }
 
-export interface MemberResult { health: number; fatigue: number; injury?: { text: string; days: number }; scar?: string; died: boolean; xp: number }
+export interface MemberResult { stamina: number; fatigue: number; wounds?: NewWound[]; /** Outings before wounds. */ health?: number; injury?: { text: string; days: number }; scar?: string; died: boolean; xp: number }
 
 export interface OutingResult {
   stages: StageResult[];
@@ -250,6 +264,9 @@ export interface Guild {
   streaks: Record<string, number[]>;
   /** Most gold brought home by one outing, for the records. */
   bestHaul: { gold: number; name: string };
+  /** The last day's visitors, and what they have paid in all. */
+  visitors?: import('./visitors').VisitDay;
+  visitorTotals?: { people: number; gold: number };
   /** Which town layout the save is on (3: one of every building, Housing and Farms included). */
   layout?: number;
 }

@@ -47,8 +47,8 @@ export const VOW_REWARD: Record<VowKind, Fx> = {
   level: { x: 0.1 }, rescue: { i: -0.1, d: -0.05 }, odyssey: { r: 0.8 }, free: { d: -0.1, r: 0.4 }, love: { rec: 0.2, team: 0.3 },
 };
 export const VOW_REWARD_TEXT: Record<VowKind, string> = {
-  clears: '+0.5 rating', high: '+0.6 in fights and against bosses', bosses: '+1 against bosses', home: '8% less likely to die', region: '+0.6 on hazards and endurance',
-  gold: '6% more gold', level: '10% more XP', rescue: '10% less likely to be hurt, 5% less to die', odyssey: '+0.8 rating', free: '10% less likely to die, +0.4 rating', love: 'recovers 20% faster, helps the party',
+  clears: '+0.5 rating', high: '+0.6 in fights and against bosses', bosses: '+1 against bosses', home: '8% less likely to be wounded', region: '+0.6 on hazards and endurance',
+  gold: '6% more gold', level: '10% more XP', rescue: '10% less likely to be hurt, 5% less to be wounded', odyssey: '+0.8 rating', free: '10% less likely to be wounded, +0.4 rating', love: 'recovers 20% faster, helps the party',
 };
 
 export function vowText(v: Pick<Vow, 'kind' | 'target' | 'region'>): string {
@@ -57,7 +57,7 @@ export function vowText(v: Pick<Vow, 'kind' | 'target' | 'region'>): string {
     case 'clears': return 'Fully clear ' + n + ' expeditions';
     case 'high': return 'Fully clear ' + n + ' expeditions of tier 3 or higher';
     case 'bosses': return 'Defeat ' + n + ' bosses';
-    case 'home': return 'Bring the whole party home from ' + n + ' expeditions of tier 2 or higher';
+    case 'home': return 'Bring the whole party home without a major wound from ' + n + ' expeditions of tier 2 or higher';
     case 'region': return 'Go on ' + n + ' expeditions in ' + REGIONS[v.region ?? 'hearth'].name;
     case 'gold': return 'Bring home ' + n + ' gold';
     case 'level': return 'Reach level ' + n;
@@ -68,7 +68,7 @@ export function vowText(v: Pick<Vow, 'kind' | 'target' | 'region'>): string {
   }
 }
 
-const WEIGHT: Record<VowKind, number> = { clears: 20, high: 10, bosses: 14, home: 14, region: 14, gold: 12, level: 16, rescue: 4, odyssey: 6, free: 3, love: 5 };
+const WEIGHT: Record<VowKind, number> = { clears: 20, high: 10, bosses: 14, home: 14, region: 14, gold: 12, level: 16, rescue: 0, odyssey: 6, free: 3, love: 5 };
 
 export function makeVow(r: Rng, level: number): Vow {
   const kind = r.weighted(Object.keys(WEIGHT) as VowKind[], (k) => WEIGHT[k]);

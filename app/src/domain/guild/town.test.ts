@@ -337,7 +337,7 @@ describe('odysseys and regions', () => {
     expect(one).toEqual(two);
     expect(one.full).toBeGreaterThanOrEqual(0);
     expect(one.full).toBeLessThanOrEqual(1);
-    expect(Object.keys(one.death)).toHaveLength(3);
+    expect(Object.keys(one.injury)).toHaveLength(3);
   });
 
   it('opens regions with the Cartographer and offers lairs from Guild Hall 3', () => {
@@ -360,9 +360,11 @@ describe('falling', () => {
       const lead = g0.adventurers.find((a) => a.cls === 'guardian')!;
       const sent = send(g0, offer.id, [lead.id], 'bold');
       if (!sent.ok) continue;
-      const k = sent.guild.outings[0].result.stages.findIndex((s) => s.died === lead.id);
-      if (k < 0) continue;
-      const after = advance(sent.guild, NOW + sent.guild.outings[0].stageAt[k] - sent.guild.founded + sent.guild.founded + 1).guild;
+      // Deaths no longer happen on their own; a death recorded before wounds existed still plays out.
+      const guild = structuredClone(sent.guild);
+      const k = 0;
+      guild.outings[0].result.stages[k].died = lead.id;
+      const after = advance(guild, NOW + guild.outings[0].stageAt[k] - guild.founded + guild.founded + 1).guild;
       const rec = after.board.find((o) => o.recover === lead.id);
       expect(rec).toBeDefined();
       expect(rec!.region).toBe(offer.region);

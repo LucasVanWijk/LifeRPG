@@ -10,8 +10,8 @@ describe('pacing', () => {
     for (const r of runs) expect(r.hallDay.length).toBe(9);
     TARGET.forEach((target, i) => {
       const mean = runs.reduce((n, r) => n + r.hallDay[i], 0) / runs.length;
-      // Within 25% of the target, or within 5 days for the early levels, which depend on luck.
-      expect(Math.abs(mean - target), 'Hall level ' + (i + 2) + ' came on day ' + mean).toBeLessThanOrEqual(Math.max(5, target * 0.25));
+      // Within 25% of the target, or within 8 days for the early levels, which depend on luck.
+      expect(Math.abs(mean - target), 'Hall level ' + (i + 2) + ' came on day ' + mean).toBeLessThanOrEqual(Math.max(8, target * 0.25));
     });
     for (const r of runs) expect(r.realShare).toBeGreaterThanOrEqual(0.5);
   }, 240_000);

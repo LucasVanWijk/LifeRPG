@@ -32,7 +32,7 @@ export function entryText(g: Guild, e: Entry): EntryView {
     case 'leave': return { text: who + ' left the guild.', icon: 'users', tone: 'plain' };
     case 'back': return { text: (o ? partyNames(g, o) + ' came back from ' + o.offer.name : 'A party came back') + (e.v ? ' with ' + e.v + ' gold' : '') + '.', icon: 'compass', tone: 'plain' };
     case 'fell': return { text: who + ' fell' + (o ? ' at ' + o.offer.name : '') + (e.v ? '. The guild was paid ' + e.v + 'g insurance' : '') + '.', icon: 'skull', tone: 'bad' };
-    case 'hurt': return { text: who + ' came back with ' + e.t + ' (' + e.v + (e.v === 1 ? ' day' : ' days') + ').', icon: 'heart', tone: 'bad' };
+    case 'hurt': return { text: who + ' came back with ' + e.t + (e.b ? ', a ' + e.b + ' wound' : '') + ' (about ' + e.v + (e.v === 1 ? ' day' : ' days') + ' to heal).', icon: 'heart', tone: e.b === 'trivial' ? 'plain' : 'bad' };
     case 'scar': return { text: who + ' will carry it for good: ' + (e.t ?? '').toLowerCase() + '.', icon: 'alert', tone: 'bad' };
     case 'retire': {
       const a = byId(g, e.a);
@@ -120,7 +120,7 @@ export function stageLines(g: Guild, o: Outing, i: number): string[] {
     lines.push(st.saved.by === 'healer' ? firstOf(g, healer) + ' kept ' + x + ' alive.' : st.saved.by === 'luck' ? x + ' should have died there, and somehow didn’t.' : st.saved.by === 'ward' ? x + '’s ward flared and took the blow.' : x + ' was struck down, but pulled through.');
   }
   if (st.died) lines.push(firstOf(g, st.died) + ' fell here.');
-  const hurt = st.injured.filter((id) => id !== st.saved?.id);
-  if (hurt.length) lines.push(names(hurt.map((id) => firstOf(g, id))) + (hurt.length === 1 ? ' was hurt.' : ' were hurt.'));
+  for (const h of st.hurt ?? []) lines.push(firstOf(g, h.id) + (h.severity === 'major' ? ' was badly hurt.' : h.severity === 'minor' ? ' took a wound.' : ' picked up a few bruises.'));
+  if (!st.hurt) { const hurt = st.injured.filter((id) => id !== st.saved?.id); if (hurt.length) lines.push(names(hurt.map((id) => firstOf(g, id))) + (hurt.length === 1 ? ' was hurt.' : ' were hurt.')); }
   return lines.filter(Boolean);
 }

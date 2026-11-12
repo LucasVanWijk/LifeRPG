@@ -2,13 +2,13 @@
 // and `advance` plays out everything that happened since the last time it ran.
 import type { Attr, BuildingId, CharterId, ClassId, ConditionId, PotionKind, Slot, Stance } from './content';
 import {
-  ATTR_MAX, AUTO_REST, BUILDINGS, CLASSES, DAYS_PER_SEASON, DAYS_PER_YEAR, ERA_YEARS, FATIGUE_REGEN, FORGE_IRON, GRADE_VALUE, HEALTH_REGEN,
+  ATTR_MAX, AUTO_REST, BUILDINGS, CLASSES, DAYS_PER_SEASON, DAYS_PER_YEAR, ERA_YEARS, FORGE_IRON, GRADE_VALUE,
   hireFee, insurance, LAST_JOB_PENALTY, LIBERATED, MARKET_SIZE, MONUMENT, NOTICE_FEE, ODD_JOBS_ON_BOARD, ODYSSEY, PATROL_YIELD, PHASE_EFFECT, PHASE_MS, PHASES_PER_DAY,
   PHASES_PER_YEAR, POTIONS, POTIONS_PER_ADVENTURER, PRACTICE_PER_POINT, PURSE_SHARE, RACES, RECRUIT_STAY_DAYS, REGION_ORDER, REGIONS, REST_MULT, SCARS,
   SELL_PRICE, SLOTS, SPOIL_PHASES, START_GOLD, START_STOCK, STANCES, STARTING_BUILDINGS, STOCK_KEYS, STREAK_MILESTONES, TAVERN_REFRESH_DAYS, TRAIN_XP, WEEK_DAYS,
   WORK_CREW_BONUS, WORK_CREW_MAX, realGoldMult, STONE_LEVEL, GRADE_DURABILITY,
 } from './content';
-import { addXp, canGoOut, dayOfPhase, hasRole, injured, isActive, makeAdventurer, phaseAt } from './adventurer';
+import { addXp, canGoOut, dayOfPhase, hasRole, isActive, makeAdventurer, phaseAt } from './adventurer';
 import { backstory, pickTraits } from './traits';
 import type { VowKind } from './vows';
 import { fxFor, makeVow, pickConviction } from './vows';
@@ -23,6 +23,9 @@ import {
   seasonIndex, staffMult, staffOf, staffSlots, stoneCut, storageCap, tavernSize, tierLimit, value, dayOf,
 } from './town';
 import { active, byId, champion, log, nextId } from './util';
+import { AWAY_HEAL, FATIGUE_REGEN, fatigueFloor, SCAR_CHANCE, SCAR_CHANCE_TREATED, STAMINA_REGEN, staminaCap } from './wounds';
+import type { Wound, WoundSource } from './types';
+import { servedCount, visitDay } from './visitors';
 import type { Adventurer, Duty, Entry, GameMs, Guild, Item, ItemDraft, LedgerEntry, Offer, Outing, Potion } from './types';
 
 export { active, byId, champion };
@@ -65,6 +68,17 @@ export function found(f: Founding, now: number): Guild {
   return g;
 }
 
+/** Saves from before wounds: health becomes stamina, and an injury becomes a minor wound of the same length. */
+function upgradeWounds(a: Adventurer & { health?: number }) {
+  if (a.stamina === undefined) a.stamina = a.health ?? 100;
+  delete a.health;
+  a.wounds ??= [];
+  if (a.injury) {
+    a.wounds.push({ id: 'w' + a.id + 'legacy', source: 'physical', severity: 'minor', text: a.injury.text, left: 9, total: 9 });
+  }
+  delete a.injury;
+}
+
 /** Brings a guild saved before the town, gear and legacy existed up to the current shape. */
 export function upgradeGuild(raw: Guild): Guild {
   const g = structuredClone(raw) as Guild;
@@ -93,6 +107,7 @@ export function upgradeGuild(raw: Guild): Guild {
   g.regions = { ...emptyRegions(), ...(g.regions ?? {}) };
   g.monuments ??= []; g.eras ??= []; g.streaks ??= {};
   g.bestHaul ??= { gold: 0, name: '' };
+  for (const a of [...g.adventurers, ...g.recruits.map((r) => r.adv)]) upgradeWounds(a);
   for (const a of g.adventurers) {
     a.gear ??= {}; a.autoBuy ??= true; a.staffAt ??= null; a.shared ??= {}; a.clears5 ??= 0; a.liberated ??= 0;
     if (!a.traitIds?.length) { const r = rngFor(g.seed, 'traits', a.id); a.traitIds = pickTraits(r); a.backstory = backstory(r, a.race, a.traitIds); }
@@ -141,13 +156,34 @@ export function advance(g0: Guild, now: number): Advanced {
 }
 
 export function effectiveDuty(a: Adventurer, p: number): Exclude<Duty, 'auto'> {
-  if (injured(a, p)) return 'rest';
+  if (a.wounds.some((w) => w.severity !== 'trivial')) return 'rest';
   if (a.duty !== 'auto') return a.duty;
-  return a.health < AUTO_REST.health || a.fatigue > AUTO_REST.fatigue ? 'rest' : 'train';
+  return a.stamina < AUTO_REST.stamina || a.fatigue - fatigueFloor(a, p) > AUTO_REST.fatigue ? 'rest' : 'train';
 }
 
 /** How much faster the wounded mend, as a multiplier: the Infirmary, its staff and Cleric legends. */
-export const recoveryMult = (g: Guild) => 1 + (value(g, 'infirmary') / 100) * staffMult(g, 'infirmary') + legendBonus(g, 'cleric');
+export const recoveryMult = (g: Guild, source: WoundSource = 'physical') => {
+  const care = source === 'magical' ? (value(g, 'chapel') / 50) * staffMult(g, 'chapel') : (value(g, 'infirmary') / 100) * staffMult(g, 'infirmary');
+  // Good housing and somewhere to unwind (the tavern) help everyone recover.
+  const comfort = value(g, 'home') / 400 + levelOf(g, 'tavern') * 0.04;
+  return 1 + care + comfort + legendBonus(g, 'cleric');
+};
+
+/** Heals each wound by `pace` phases of rest (times what the town adds for its kind); healed major wounds may leave a scar. */
+function healWounds(g: Guild, a: Adventurer, pace: number) {
+  const keep = [];
+  for (const w of a.wounds) {
+    w.left -= pace * recoveryMult(g, w.source);
+    if (w.left > 0) { keep.push(w); continue; }
+    if (w.severity === 'major' && rngFor(g.seed, 'scar', w.id).chance(w.treated ? SCAR_CHANCE_TREATED : SCAR_CHANCE)) {
+      const scar = rngFor(g.seed, 'scar-which', w.id).pick(SCARS);
+      a.scars.push(scar.text);
+      a.attrs[scar.attr] = Math.max(1, a.attrs[scar.attr] - 1);
+      log(g, { k: 'scar', a: a.id, t: scar.text });
+    }
+  }
+  a.wounds = keep;
+}
 
 function phaseTick(g: Guild, p: number) {
   const day = dayOfPhase(p);
@@ -156,6 +192,7 @@ function phaseTick(g: Guild, p: number) {
   const labourers = [...duties.values()].filter((d) => d === 'labour').length;
   const patrolling = [...duties.values()].filter((d) => d === 'patrol').length;
   const infirm = recoveryMult(g);
+  const healersHome = g.adventurers.filter((x) => x.state === 'active' && !x.awayOn && hasRole(x, 'healer')).length;
   const fieldLevel = levelOf(g, 'field');
   let benches = value(g, 'field');
   const fieldXp = TRAIN_XP * (1 + 0.25 * (fieldLevel - 1)) * staffMult(g, 'field');
@@ -163,13 +200,16 @@ function phaseTick(g: Guild, p: number) {
   for (const a of [...g.adventurers]) {
     if (a.state === 'child') { if (a.adultPhase !== undefined && p >= a.adultPhase) comeOfAge(g, a, p); continue; }
     if (a.state === 'retired') { if (a.passPhase !== undefined && p >= a.passPhase) pass(g, a, p); continue; }
-    if (a.state !== 'active' || a.awayOn) continue;
-    if (a.injury && a.injury.until <= p) a.injury = null;
+    if (a.state !== 'active') continue;
+    // Away, wounds heal slowly and stamina doesn't come back.
+    if (a.awayOn) { healWounds(g, a, AWAY_HEAL); continue; }
     const duty = duties.get(a.id) ?? 'rest';
     const k = duty === 'rest' ? REST_MULT : 1;
     const tf = fxFor(a);
-    a.health = Math.min(100, a.health + HEALTH_REGEN * k * infirm * Math.max(0.2, 1 + tf.rec));
-    a.fatigue = Math.max(0, a.fatigue - FATIGUE_REGEN * k * (1 + (infirm - 1) / 3));
+    healWounds(g, a, k * Math.max(0.2, 1 + tf.rec) * (1 + Math.min(0.3, 0.05 * healersHome)));
+    a.stamina = Math.min(staminaCap(a.wounds), a.stamina + STAMINA_REGEN * k * infirm * Math.max(0.2, 1 + tf.rec));
+    const floor = fatigueFloor(a, p);
+    a.fatigue = Math.max(floor, a.fatigue - FATIGUE_REGEN * k * (1 + (infirm - 1) / 3));
     if (duty === 'train') {
       const onBench = fieldLevel > 0 && benches > 0;
       if (onBench) benches--;
@@ -218,6 +258,11 @@ function phaseTick(g: Guild, p: number) {
     }
   }
   g.recruits = g.recruits.filter((r) => r.leaves > p);
+  // Strangers come to town and pay a little for what it offers.
+  const visit = visitDay(g, day, rngFor(g.seed, 'visitors', day));
+  g.visitors = visit;
+  g.visitorTotals = { people: (g.visitorTotals?.people ?? 0) + servedCount(visit), gold: (g.visitorTotals?.gold ?? 0) + visit.gold };
+  g.gold += visit.gold;
   if (day >= g.nextTavernDay) refreshTavern(g, p, day);
   if (value(g, 'market') && g.market.season !== seasonCount(g.t)) refreshMarket(g);
 
@@ -442,21 +487,18 @@ function returnHome(g: Guild, o: Outing) {
     const m = o.result.members[a.id];
     a.awayOn = null;
     a.outings++;
-    a.health = m.health;
-    a.fatigue = m.fatigue;
+    a.stamina = Math.min(staminaCap(a.wounds), m.stamina);
+    a.fatigue = Math.max(m.fatigue, fatigueFloor(a, p));
     if (a.lastJob) { a.lastJob = false; a.recalled = true; }
-    if (m.injury) {
-      const cured = o.potions[a.id]?.includes('cure');
-      const days = Math.max(1, Math.round((cured ? m.injury.days / 2 : m.injury.days) / recoveryMult(g)));
-      a.injury = { text: m.injury.text, until: p + days * PHASES_PER_DAY };
-      log(g, { k: 'hurt', a: a.id, o: o.id, t: m.injury.text, v: days });
-      if (m.scar) {
-        const scar = SCARS.find((s) => s.text === m.scar)!;
-        a.scars.push(scar.text);
-        a.attrs[scar.attr] = Math.max(1, a.attrs[scar.attr] - 1);
-        log(g, { k: 'scar', a: a.id, t: scar.text });
-      }
+    const cured = !!o.potions[a.id]?.includes('cure');
+    for (const nw of m.wounds ?? []) {
+      const phases = cured ? nw.phases / 2 : nw.phases;
+      a.wounds.push({ id: 'w' + o.id + a.id + a.wounds.length + nw.text.length, source: nw.source, severity: nw.severity, text: nw.text, left: phases, total: phases });
+      log(g, { k: 'hurt', a: a.id, o: o.id, t: nw.text, b: nw.severity, v: Math.max(1, Math.round(phases / recoveryMult(g, nw.source) / PHASES_PER_DAY)) });
     }
+    // However many a person carries home, only the worst few stay.
+    if (a.wounds.length > 4) a.wounds = a.wounds.sort((x, y) => (y.severity === 'major' ? 2 : y.severity === 'minor' ? 1 : 0) - (x.severity === 'major' ? 2 : x.severity === 'minor' ? 1 : 0)).slice(0, 4);
+    a.stamina = Math.min(a.stamina, staminaCap(a.wounds));
     if (a.state === 'active') gainXp(g, a, m.xp);
     // Gear wears out; heirlooms never do.
     if (real) for (const slot of SLOTS) {
@@ -502,7 +544,7 @@ function returnHome(g: Guild, o: Outing) {
   }
   // Vows.
   const bossDown = o.result.stages.some((st, i) => o.offer.stages[i].kind === 'boss' && st.outcome !== 'fail');
-  const noDeaths = o.party.every((id) => !o.result.members[id]?.died);
+  const noDeaths = o.party.every((id) => !o.result.members[id]?.wounds?.some((w) => w.severity === 'major'));
   const freed = o.offer.scale === 'odyssey' && g.regions[o.offer.region].liberated && survivors.some((a) => a.liberated > 0);
   if (real) for (const a of survivors) {
     if (a.state !== 'active') continue;
@@ -558,6 +600,49 @@ export function release(g0: Guild, id: string): Result {
   a.purse = 0;
   if (g.championId === id) g.championId = null;
   log(g, { k: 'leave', a: id });
+  return { ok: true, guild: g };
+}
+
+/** Retires someone now, rather than when their years run out: they join the retirees, with a One Last Job still ahead of them. */
+export function retireNow(g0: Guild, id: string): Result {
+  const a0 = byId(g0, id);
+  if (!a0 || !isActive(a0) || a0.awayOn) return fail('Only adventurers at home can retire');
+  const g = draft(g0);
+  retire(g, byId(g, id)!, phaseNow(g));
+  return { ok: true, guild: g };
+}
+
+// ── Treating wounds ──────────────────────────────────────────
+
+const treatBuilding = (w: Pick<Wound, 'source'>): BuildingId => (w.source === 'magical' ? 'chapel' : 'infirmary');
+export const TREAT_COST = 60;
+/** What treating a major wound costs: more at a bigger Infirmary or Temple, which also does more for it. */
+export const treatCost = (g: Guild, w: Pick<Wound, 'source'>) => Math.round(TREAT_COST * (1 + 0.25 * Math.max(0, levelOf(g, treatBuilding(w)) - 1)));
+/** The share of the remaining healing time that is left after treatment. */
+export const treatLeft = (g: Guild, w: Pick<Wound, 'source'>) => Math.max(0.3, 0.5 - 0.05 * Math.max(0, levelOf(g, treatBuilding(w)) - 1));
+
+export function treatProblem(g: Guild, a: Adventurer, w: Wound): string | null {
+  if (w.severity !== 'major') return 'Only major wounds need treatment';
+  if (w.treated) return 'Already treated';
+  if (a.awayOn) return 'They are away';
+  if (levelOf(g, treatBuilding(w)) < 1) return 'Needs ' + (w.source === 'magical' ? 'a Temple' : 'an Infirmary');
+  if (g.gold < treatCost(g, w)) return 'Not enough gold';
+  return null;
+}
+
+/** Treats a major wound at the Infirmary (physical and disease) or the Temple (magical): faster healing, and a smaller chance of a scar. */
+export function treat(g0: Guild, advId: string, woundId: string): Result {
+  const a0 = byId(g0, advId);
+  const w0 = a0?.wounds.find((w) => w.id === woundId);
+  if (!a0 || !w0) return fail('No such wound');
+  const problem = treatProblem(g0, a0, w0);
+  if (problem) return fail(problem);
+  const g = draft(g0);
+  const a = byId(g, advId)!;
+  const w = a.wounds.find((x) => x.id === woundId)!;
+  g.gold -= treatCost(g, w);
+  w.left *= treatLeft(g, w);
+  w.treated = true;
   return { ok: true, guild: g };
 }
 
@@ -622,7 +707,7 @@ export function sendProblem(g: Guild, offer: Offer, party: string[]): string | n
   if (party.length < offer.minParty) return 'Needs at least ' + offer.minParty + (offer.minParty === 1 ? ' adventurer' : ' adventurers');
   if (party.length > offer.maxParty) return 'At most ' + offer.maxParty;
   const members = party.map((id) => byId(g, id));
-  if (members.some((a) => !a || !canGoOut(a, p))) return 'Everyone must be at home and unhurt';
+  if (members.some((a) => !a || !canGoOut(a, p))) return 'Everyone must be at home';
   if (offer.scale === 'odd' && members.some((a) => a && a.state === 'retired')) return 'Retirees only take expeditions and odysseys';
   if (offer.scale !== 'odd' && expeditionsOut(g) >= outLimit(g)) return 'Already ' + outLimit(g) + (outLimit(g) === 1 ? ' expedition' : ' expeditions') + ' out';
   for (const need of offer.needs) if (!members.some((a) => a && hasRole(a, need))) return 'Needs a ' + (need === 'tank' ? 'Tank' : 'Healer');
@@ -664,8 +749,7 @@ function buildCtx(g: Guild, offer: Offer, party: string[], stance: Stance, plan:
     phase: departure(g, offer).phase,
     matMult: 1 + legendBonus(g, 'ranger'),
     xpMult: (g.charter === 'martial' ? 1.15 : 1) * library * (1 + legendBonus(g, 'arcanist')),
-    deathMult: Math.max(0.1, 1 - (real ? (value(g, 'chapel') / 100) * staffMult(g, 'chapel') : 0)) * (1 - stoneCut(g, offer.region)),
-    injuryMult: 1 - legendBonus(g, 'guardian'),
+    injuryMult: (1 - legendBonus(g, 'guardian')) * (1 - stoneCut(g, offer.region)),
   };
   return { ctx, hidden: forOdds ? view.filter((c) => c.hidden).length : 0 };
 }

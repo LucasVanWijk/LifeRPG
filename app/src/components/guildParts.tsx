@@ -1,7 +1,8 @@
+import { worst } from '../domain/guild/wounds';
 import { useEffect, useState, type ReactNode } from 'react';
 import type { Adventurer, Guild } from '../domain/guild/types';
 import { BUILDINGS, CLASSES, RACES } from '../domain/guild/content';
-import { fullName, injured, ratingShown, realDuration } from '../domain/guild/adventurer';
+import { fullName, ratingShown, realDuration } from '../domain/guild/adventurer';
 import { effectiveDuty } from '../domain/guild/engine';
 import { hash } from '../domain/guild/rng';
 import { Crest } from './Crest';
@@ -51,7 +52,9 @@ export function status(g: Guild, a: Adventurer, phase: number, now: number): { t
     const o = g.outings.find((x) => x.id === a.awayOn);
     return { text: o ? o.offer.name + ' · back in ' + realDuration(o.returnAt - now) : 'Away', tone: 'away' };
   }
-  if (injured(a, phase)) return { text: 'Injured · ' + Math.ceil((a.injury!.until - phase) / 3) + ' days', tone: 'bad' };
+  const w = worst(a.wounds);
+  if (w === 'major') return { text: 'Badly wounded', tone: 'bad' };
+  if (w === 'minor') return { text: 'Wounded', tone: 'bad' };
   const duty = effectiveDuty(a, phase);
   return duty === 'rest' ? { text: 'Resting', tone: 'rest' } : { text: { train: 'Training', labour: 'Labouring', patrol: 'On patrol' }[duty], tone: 'go' };
 }
@@ -75,7 +78,7 @@ export function AdvRow({ g, a, phase, now, onClick, right }: { g: Guild; a: Adve
         </span>
         {a.state === 'active' && (
           <span style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, maxWidth: 260 }}>
-            <Bar value={a.health} color="var(--q-moss)" label="Health" height={5} />
+            <Bar value={a.stamina} color="var(--q-moss)" label="Stamina" height={5} />
             <Bar value={a.fatigue} color="var(--color-accent-500)" label="Fatigue" height={5} />
           </span>
         )}

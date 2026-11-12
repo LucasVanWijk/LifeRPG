@@ -57,7 +57,7 @@ export function Legacy({ g, now }: { g: GuildT; now: number }) {
             {stones.map((r) => (
               <div key={r} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 14, padding: '4px 0' }}>
                 <span>{REGIONS[r].name}</span>
-                <span className="tnum muted">{g.regions[r].stones} · −{(Math.min(STONE_MAX, STONE_BONUS * g.regions[r].stones) * 100).toFixed(1)}% death</span>
+                <span className="tnum muted">{g.regions[r].stones} · −{(Math.min(STONE_MAX, STONE_BONUS * g.regions[r].stones) * 100).toFixed(1)}% wounds</span>
               </div>
             ))}
           </div>
