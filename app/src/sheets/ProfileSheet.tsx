@@ -82,6 +82,26 @@ function HomeLayoutSection() {
   );
 }
 
+/** Starts the guild over: quests, habits and the Glossary stay. */
+function NewGuildSection() {
+  const { actions } = useStore();
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h3 style={{ fontSize: 22 }}>New guild</h3>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>End this guild and found another. Your quests, habits, calendar and Glossary are kept; the adventurers, town and gold are not.</p>
+      {!open ? <button className="btn btn-secondary" onClick={() => setOpen(true)} style={{ minHeight: 46 }}>Start a new guild…</button> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          <button className="btn btn-primary inked" style={{ minHeight: 46 }} onClick={() => actions.newGuild(true)}>New guild, keep the Hall of Heroes</button>
+          <span className="muted" style={{ fontSize: 12 }}>Keeps the heirlooms, monuments, eras and records. The people themselves move on.</span>
+          <button className="danger-btn" onClick={() => actions.newGuild(false)}>Start completely clean</button>
+          <button className="btn btn-ghost" onClick={() => setOpen(false)}>Cancel</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ThemeSection() {
   const [theme, setTheme] = useState<BoardTheme>(loadBoardTheme);
   const pick = (t: BoardTheme) => { setTheme(t); saveBoardTheme(t); };
@@ -172,6 +192,8 @@ export function ProfileSheet() {
       <CalendarSection />
 
       <InstallSection />
+
+      {g && <NewGuildSection />}
 
       {g && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

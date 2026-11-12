@@ -424,20 +424,13 @@ function NoteDetail({ n }: { n: Note }) {
 function CompanionInfo({ c }: { c: Companion }) {
   const { data, today, setUi, actions } = useStore();
   const age = ageOf(c, today);
-  const person = (id: string) => data.companions.find((x) => x.id === id);
-  const chip = (id: string) => { const p = person(id); return p && <button key={id} className="chip" onClick={() => setUi({ gDetail: 'companion:' + id })} style={{ minHeight: 34, padding: '2px 10px', fontSize: 15 }}><Icon n="users" size={13} />{p.name}</button>; };
   const rows: [string, React.ReactNode][] = [];
   if (c.phone) rows.push(['Phone', <LinkText key="p" text={c.phone} />]);
   if (c.email) rows.push(['Email', <LinkText key="e" text={c.email} />]);
   if (c.address) rows.push(['Address', <a key="a" className="auto-link" href={mapsUrl(c.address)} target="_blank" rel="noreferrer noopener">{c.address}</a>]);
   if (age !== null) rows.push(['Age', age + ' (born ' + c.birthYear + ')']);
-  if (c.partner && person(c.partner)) rows.push(['Partner', chip(c.partner)]);
-  const kids = (c.children ?? []).filter((id) => person(id));
-  if (kids.length) rows.push(['Children', <span key="k" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{kids.map(chip)}</span>]);
-  if (c.met) rows.push(['How we met', <LinkText key="m" text={c.met} />]);
   if (c.likes) rows.push(['Likes', <LinkText key="l" text={c.likes} />]);
   if (c.dislikes) rows.push(['Dislikes', <LinkText key="d" text={c.dislikes} />]);
-  if (c.sizes) rows.push(['Sizes', c.sizes]);
   for (const x of c.extra ?? []) rows.push([x.k, <LinkText key={x.k} text={x.v} />]);
   const gifts = c.gifts ?? [];
   const last = lastContact(data, c, today);
@@ -477,7 +470,7 @@ function CompanionInfo({ c }: { c: Companion }) {
 /** The form for everything about a companion. */
 function CompanionEditor({ c, onDone, onRemove }: { c: Companion; onDone: () => void; onRemove: () => void }) {
   const { data, actions } = useStore();
-  const [d, setD] = useState<Companion>({ ...c, gifts: c.gifts ?? [], extra: c.extra ?? [], children: c.children ?? [], groups: c.groups ?? [] });
+  const [d, setD] = useState<Companion>({ ...c, gifts: c.gifts ?? [], extra: c.extra ?? [], groups: c.groups ?? [] });
   // Birthdays keep only month and day; the date field needs a year, so a leap year stands in.
   const [bday, setBday] = useState(c.bday ? '2000-' + c.bday : '');
   const [year, setYear] = useState(c.birthYear ? String(c.birthYear) : '');
@@ -487,7 +480,6 @@ function CompanionEditor({ c, onDone, onRemove }: { c: Companion; onDone: () => 
   const [xk, setXk] = useState('');
   const [xv, setXv] = useState('');
   const set = (patch: Partial<Companion>) => setD((cur) => ({ ...cur, ...patch }));
-  const others = data.companions.filter((x) => x.id !== c.id);
   const known = allGroups(data.companions);
   const addGroup = (g: string) => { const v = g.trim(); if (v && !d.groups!.some((x) => x.toLowerCase() === v.toLowerCase())) set({ groups: [...d.groups!, v] }); setGroup(''); };
   const save = () => {
@@ -496,14 +488,14 @@ function CompanionEditor({ c, onDone, onRemove }: { c: Companion; onDone: () => 
     actions.update((all) => ({ ...all, companions: all.companions.map((x) => (x.id === c.id ? {
       ...d, birthYear: /^\d{4}$/.test(year) ? Number(year) : undefined, name: n, first: n.split(' ')[0], rel: d.rel.trim(), bday: bday ? bday.slice(5) : '',
       phone: d.phone?.trim() || undefined, email: d.email?.trim() || undefined, address: d.address?.trim() || undefined,
-      met: d.met?.trim() || undefined, likes: d.likes?.trim() || undefined, dislikes: d.dislikes?.trim() || undefined, sizes: d.sizes?.trim() || undefined,
-      partner: d.partner || undefined, children: d.children?.length ? d.children : undefined, groups: d.groups?.length ? d.groups : undefined,
+      likes: d.likes?.trim() || undefined, dislikes: d.dislikes?.trim() || undefined,
+      groups: d.groups?.length ? d.groups : undefined,
       gifts: d.gifts?.length ? d.gifts : undefined, extra: d.extra?.length ? d.extra : undefined,
       rhythm: d.rhythm || undefined, rhythmSince: d.rhythm ? (d.rhythm !== c.rhythm ? actions.today() : d.rhythmSince) : undefined,
     } : x)) }));
     onDone();
   };
-  const text = (id: string, label: string, key: 'phone' | 'email' | 'address' | 'met' | 'likes' | 'dislikes' | 'sizes', type = 'text') => (
+  const text = (id: string, label: string, key: 'phone' | 'email' | 'address' | 'likes' | 'dislikes', type = 'text') => (
     <div className="field"><label htmlFor={id}>{label}</label><input id={id} className="input" type={type} value={d[key] ?? ''} onChange={(e) => set({ [key]: e.target.value })} style={{ minHeight: 44 }} /></div>
   );
   return (
@@ -529,24 +521,8 @@ function CompanionEditor({ c, onDone, onRemove }: { c: Companion; onDone: () => 
           <button className="btn btn-secondary" onClick={() => addGroup(group)} style={{ minHeight: 42 }}>Add</button>
         </div>
       </div>
-      {others.length > 0 && (
-        <>
-          <div className="field"><label htmlFor="ec-partner">Partner</label>
-            <select id="ec-partner" className="input" value={d.partner ?? ''} onChange={(e) => set({ partner: e.target.value || undefined })} style={{ minHeight: 44 }}>
-              <option value="">None</option>{others.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
-            </select>
-          </div>
-          <div className="field"><label>Children</label>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-              {others.map((x) => { const on = d.children!.includes(x.id); return <button key={x.id} className="chip" aria-pressed={on} onClick={() => set({ children: on ? d.children!.filter((y) => y !== x.id) : [...d.children!, x.id] })} style={{ minHeight: 34, padding: '2px 10px' }}>{on && <Icon n="check" size={12} stroke={2.2} />}{x.name}</button>; })}
-            </div>
-          </div>
-        </>
-      )}
-      {text('ec-met', 'How we met', 'met')}
       {text('ec-likes', 'Likes', 'likes')}
       {text('ec-dislikes', 'Dislikes', 'dislikes')}
-      {text('ec-sizes', 'Sizes', 'sizes')}
       <div className="field"><label>Gift ideas</label>
         {d.gifts!.map((g) => (
           <div key={g.id} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>

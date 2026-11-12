@@ -80,9 +80,7 @@ export interface Companion {
   phone?: string; email?: string; address?: string;
   /** Year of birth, to show an age. */
   birthYear?: number;
-  /** Other companions. */
-  partner?: string; children?: string[];
-  met?: string; likes?: string; dislikes?: string; sizes?: string;
+  likes?: string; dislikes?: string;
   gifts?: GiftIdea[];
   /** Any other label and value. */
   extra?: { k: string; v: string }[];

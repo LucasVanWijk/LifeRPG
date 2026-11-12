@@ -8,11 +8,11 @@
   --q-wax-hi: oklch(0.6 0.15 30);
   --q-moss: oklch(0.45 0.08 148);
   --q-tint: color-mix(in srgb, var(--color-accent-300) 35%, transparent);
-  /* Board theme tokens (see theme.ts); walnut is the default. */
-  --board-wood: var(--color-accent-800);
-  --board-edge: var(--color-accent-900);
-  --board-zone: rgba(0,0,0,.16);
-  --note-bg: var(--q-parch);
+  /* Board theme tokens (see theme.ts); oak is the default. */
+  --board-wood: #6b4423;
+  --board-edge: #4a2e16;
+  --board-zone: #553419;
+  --note-bg: #f3dfb8;
   --q-wood: repeating-linear-gradient(0deg, rgba(0,0,0,.14) 0 1px, transparent 1px 64px),
     repeating-linear-gradient(88deg, rgba(0,0,0,.07) 0 2px, transparent 2px 11px),
     linear-gradient(180deg, rgba(255,255,255,.06), rgba(0,0,0,.18));

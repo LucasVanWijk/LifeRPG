@@ -85,7 +85,7 @@ export function App() {
           </nav>
         )}
 
-        {ui.tab === 'calendar' ? (
+        {ui.tab === 'glossary' || ui.tab === 'guild' ? null : ui.tab === 'calendar' ? (
           <button className="fab" onClick={() => actions.openEvent('new')} aria-label="New event">
             <Icon n="plus" size={22} stroke={2} />{isDesk && <span>New Event</span>}
           </button>

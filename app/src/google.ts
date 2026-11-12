@@ -31,12 +31,43 @@ export function loadGis(): Promise<void> {
   return script;
 }
 
-let token: { value: string; exp: number; scope: string } | null = null;
+const TOKEN_KEY = 'questlog:gtoken';
+const RETURN_KEY = 'questlog:gReturn';
+type Token = { value: string; exp: number; scope: string };
+const saved = (): Token | null => { try { const t = JSON.parse(localStorage.getItem(TOKEN_KEY) ?? 'null') as Token | null; return t && t.exp > Date.now() ? t : null; } catch { return null; } };
+const keep = (t: Token | null) => { try { if (t) localStorage.setItem(TOKEN_KEY, JSON.stringify(t)); else localStorage.removeItem(TOKEN_KEY); } catch { /* private mode */ } };
+let token: Token | null = typeof localStorage === 'undefined' ? null : saved();
+
+/** Phones and installed apps can't use Google's popup reliably (it ends on a white page), so they sign in by a full-page redirect and come back. */
+const useRedirect = () => /android|iphone|ipad|ipod/i.test(navigator.userAgent) || window.matchMedia('(display-mode: standalone)').matches;
+const redirectUri = () => window.location.origin + window.location.pathname;
+
+/**
+ * Call once at start-up: picks up the token Google put in the address after a redirect sign-in, tidies the
+ * address, and returns where the person was (a screen name) so the app can put them back there.
+ */
+export function finishRedirect(): { tab?: string } | null {
+  const h = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+  const access = h.get('access_token');
+  if (!access && !h.get('error')) return null;
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+  let back: { tab?: string } = {};
+  try { back = JSON.parse(localStorage.getItem(RETURN_KEY) ?? '{}') ?? {}; localStorage.removeItem(RETURN_KEY); } catch { /* ignore */ }
+  if (access) {
+    token = { value: access, exp: Date.now() + (Number(h.get('expires_in')) || 3600) * 1000, scope: h.get('scope') ?? DRIVE_SCOPE };
+    keep(token);
+    changed();
+  }
+  return back;
+}
 const listeners = new Set<() => void>();
 /** Called when a token is obtained or lost. Returns the unsubscribe function. */
 export function onTokenChange(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; }
 const changed = () => listeners.forEach((f) => f());
 
+let currentTab = () => 'home';
+/** The app tells this module how to read the screen it is on, to restore after a redirect sign-in. */
+export function setTabReader(fn: () => string) { currentTab = fn; }
 const required = new Set<string>();
 /** Scopes this device always asks for (e.g. Calendar once it is switched on), so one sign-in covers everything. */
 export function requireScopes(scope: string, on: boolean) { for (const x of scope.split(' ')) { if (on) required.add(x); else required.delete(x); } }
@@ -49,7 +80,7 @@ export function tokenValid(scope: string = DRIVE_SCOPE): boolean {
 }
 /** The current access token if it is still good; never opens a popup. */
 export function peekToken(scope: string = DRIVE_SCOPE): string | null { return tokenValid(scope) ? token!.value : null; }
-export function forgetToken() { token = null; changed(); }
+export function forgetToken() { token = null; keep(null); changed(); }
 
 let inflight: Promise<string> | null = null;
 /** An access token, asking Google for one (popup, so only from a tap) when there is none or it is about to expire. */
@@ -61,12 +92,21 @@ export async function getToken(scope: string = DRIVE_SCOPE): Promise<string> {
   try { return await inflight; } finally { inflight = null; }
 }
 
+/** Remembers the screen, then leaves for Google's sign-in page; it returns to this address with the token. */
+function redirectSignIn(want: string, tab: string): Promise<string> {
+  try { localStorage.setItem(RETURN_KEY, JSON.stringify({ tab })); } catch { /* ignore */ }
+  const q = new URLSearchParams({ client_id: CLIENT_ID, redirect_uri: redirectUri(), response_type: 'token', scope: want, include_granted_scopes: 'true' });
+  window.location.assign('https://accounts.google.com/o/oauth2/v2/auth?' + q);
+  return new Promise<string>(() => { /* the page is going away */ });
+}
+
 async function signIn(scope: string): Promise<string> {
   await loadGis();
   const g = gis();
   if (!g) throw new Error('Google sign-in did not load.');
   // Ask for everything this device uses at once, so one sign-in covers Drive and Calendar.
   const want = [...new Set([...(token?.scope ?? '').split(' '), ...scope.split(' '), ...DRIVE_SCOPE.split(' '), ...required])].filter(Boolean).join(' ');
+  if (useRedirect()) return redirectSignIn(want, currentTab());
   return new Promise<string>((resolve, reject) => {
     g.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,
@@ -74,6 +114,7 @@ async function signIn(scope: string): Promise<string> {
       callback: (r) => {
         if (!r.access_token) { reject(new Error(r.error_description || r.error || 'Sign-in was cancelled.')); return; }
         token = { value: r.access_token, exp: Date.now() + (r.expires_in ?? 3600) * 1000, scope: want };
+        keep(token);
         changed();
         resolve(token.value);
       },

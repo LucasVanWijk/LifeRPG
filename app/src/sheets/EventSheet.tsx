@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { weekdayDate } from '../domain/dates';
+import { addDays, dayDiff, weekdayDate } from '../domain/dates';
+import { fromMinutes, toMinutes } from '../domain/calendar';
 import { repeatText } from '../domain/calendar';
 import type { CalEvent, Repeat } from '../domain/model';
 import { Icon } from '../components/Icon';
@@ -84,6 +85,14 @@ function EventForm({ existing }: { existing?: CalEvent }) {
   });
   const set = (patch: Partial<Draft>) => setE((cur) => {
     const next = { ...cur, ...patch };
+    // Moving the start time moves the end by the same amount, keeping the length (not the other way round).
+    if (patch.startTime && cur.startTime && !cur.allDay && patch.endTime === undefined && next.startTime && next.endTime) {
+      const shift = toMinutes(next.startTime) - toMinutes(cur.startTime);
+      const end = toMinutes(next.endTime) + shift + dayDiff(next.end, next.start) * 1440;
+      const total = Math.max(0, end);
+      next.end = addDays(next.start, Math.floor(total / 1440));
+      next.endTime = fromMinutes(total % 1440);
+    }
     if (next.end < next.start) next.end = next.start;
     return next;
   });

@@ -10,7 +10,7 @@ import { readLaunch } from '../domain/share';
 import { autoSyncOn, setAutoSyncFlag, syncOnce } from '../sync';
 import type { SyncState } from '../sync';
 import { driveConfigured, lastSync } from '../drive';
-import { getToken, onTokenChange, peekToken, requireScopes, CALENDAR_SCOPE } from '../google';
+import { finishRedirect, getToken, onTokenChange, peekToken, requireScopes, setTabReader, CALENDAR_SCOPE } from '../google';
 import type { EventCache, GCalConfig } from '../gcal';
 import { insertEvent as gInsert, listCalendars, loadCache, loadConfig, patchEvent as gPatch, pullEvents, removeEvent as gRemove, saveCache, saveConfig, timeZone, toGoogle, fromGoogle } from '../gcal';
 import { applyChanges, syncRound } from '../gcalsync';
@@ -20,6 +20,9 @@ import type { BuildingId, ClassId, PotionKind, Slot, Stance } from '../domain/gu
 import { AWAY_SUMMARY_MS } from '../domain/guild/content';
 import * as G from '../domain/guild/engine';
 import type { Duty, Entry, Guild } from '../domain/guild/types';
+
+/** Set when the app was reopened by Google's sign-in page: where to put the person back. */
+const returned = finishRedirect();
 
 // v1 held the design's sample data; v2 starts every log empty. The data inside carries its own version (see migrate.ts).
 const STORAGE_KEY = 'questlog:v2';
@@ -76,6 +79,12 @@ export interface Ui {
   dragOver: string | null;
 }
 
+const CAL_VIEW_KEY = 'questlog:calView';
+/** The calendar opens on the view you last used. */
+function loadCalView(): 'month' | 'week' | 'day' | null {
+  try { const v = localStorage.getItem(CAL_VIEW_KEY); return v === 'month' || v === 'week' || v === 'day' ? v : null; } catch { return null; }
+}
+
 function loadData(): Data {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -104,7 +113,7 @@ function initialUi(today: string): Ui {
   const quest = Number(p.get('quest'));
   const launch = readLaunch(window.location.search);
   return {
-    tab: launch.action === 'checkin' ? 'quests' : pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
+    tab: launch.action === 'checkin' ? 'quests' : returned?.tab && ['home', 'quests', 'calendar', 'glossary', 'guild'].includes(returned.tab) ? (returned.tab as Tab) : pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
     questView: launch.action === 'checkin' ? 'habits' : pick('view', ['board', 'campaign', 'habits', 'someday'] as const, 'board'),
     hiddenCamps: loadHiddenCamps(),
     campaign: p.get('campaign') || '',
@@ -119,7 +128,7 @@ function initialUi(today: string): Ui {
     eventSheet: null,
     eventMode: 'view',
     calDay: today,
-    calView: null,
+    calView: loadCalView(),
     gCat: pick('cat', ['companions', 'tomes', 'notes'] as const, 'companions'),
     gSearch: '',
     gDetail: p.get('detail'),
@@ -210,6 +219,9 @@ function useStoreValue() {
   }, []);
 
   useEffect(() => () => window.clearTimeout(toastTimer.current), []);
+  useEffect(() => {
+    try { if (ui.calView) localStorage.setItem(CAL_VIEW_KEY, ui.calView); } catch { /* private mode */ }
+  }, [ui.calView]);
 
   useEffect(() => {
     try { localStorage.setItem(HIDDEN_CAMPS_KEY, JSON.stringify(ui.hiddenCamps)); } catch { /* private mode */ }
@@ -217,6 +229,29 @@ function useStoreValue() {
   const setUi = useCallback((patch: Partial<Ui> | ((u: Ui) => Partial<Ui>)) =>
     setUiState((u) => ({ ...u, ...(typeof patch === 'function' ? patch(u) : patch) })), []);
 
+  const uiRef = useRef(ui);
+  uiRef.current = ui;
+  useEffect(() => setTabReader(() => uiRef.current.tab), []);
+  // The phone's Back button: every screen and open sheet is a history entry, so Back closes the sheet,
+  // then returns to the screen before, and leaves the app only from where it was opened.
+  const overlay = !!(ui.openId || ui.newOpen || ui.campSheet || ui.profileOpen || ui.chronicleOpen || ui.reviewOpen || ui.eventSheet !== null || ui.advSheet || ui.offerSheet || ui.reportSheet || ui.buildSheet || ui.capture || ui.gDetail || ui.mobileZone);
+  const popping = useRef(false);
+  useEffect(() => {
+    window.history.replaceState({ ql: 1, tab: uiRef.current.tab, ov: false }, '');
+    const onPop = (e: PopStateEvent) => {
+      const s = e.state as { ql?: number; tab?: Tab; ov?: boolean } | null;
+      if (!s?.ql) return;
+      popping.current = true;
+      setUi((u) => ({ tab: s.tab ?? u.tab, ...(s.ov ? {} : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, capture: null, gDetail: null, mobileZone: null }) }));
+    };
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [setUi]);
+  useEffect(() => {
+    const cur = window.history.state as { ql?: number; tab?: Tab; ov?: boolean } | null;
+    if (popping.current) { popping.current = false; return; }
+    if (cur?.tab !== ui.tab || !!cur?.ov !== overlay) window.history.pushState({ ql: 1, tab: ui.tab, ov: overlay }, '');
+  }, [ui.tab, overlay]);
   // Toasts play one after another, so a quest's reward and its campaign's reward are both seen.
   const playNext = useCallback(() => {
     const t = toastQueue.current.shift();
@@ -274,6 +309,7 @@ function useStoreValue() {
     const l = lastSync();
     return { status: driveConfigured && autoSyncOn() ? 'paused' : 'off', at: l?.at, device: l?.device };
   });
+  const carry = useRef<Partial<Guild> | null>(null);
   const syncBusy = useRef(false);
   const dirty = useRef(false);
   const merged = useRef<Data | null>(null);
@@ -609,8 +645,17 @@ function useStoreValue() {
       markReviewed(monday: string) { const cur = d(); commit({ ...cur, profile: { ...cur.profile, reviewedWeek: monday } }); setUi({ reviewOpen: false }); },
 
       // Guild
+      /** Ends the current guild and shows the founding screen again. Quests, habits and the Glossary stay. */
+      newGuild(keepHeroes: boolean) {
+        const old = d().guild;
+        carry.current = keepHeroes && old ? { heirlooms: old.heirlooms, monuments: old.monuments, eras: old.eras, streaks: old.streaks, bestHaul: old.bestHaul } : null;
+        commit({ ...d(), guild: null });
+        setUi({ profileOpen: false, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, away: null, chronicleOpen: false });
+      },
       found(f: G.Founding, championId: string) {
-        const g = G.found(f, Date.now());
+        const fresh = G.found(f, Date.now());
+        const g = carry.current ? { ...fresh, ...carry.current } : fresh;
+        carry.current = null;
         const c = G.setChampion(g, championId);
         commit({ ...dataRef.current, guild: c.ok ? c.guild : g });
         setUi({ tab: 'guild', guildTab: 'board' });
