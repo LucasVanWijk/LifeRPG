@@ -7,7 +7,8 @@ import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } 
 import { dayDiff, todayISO } from '../domain/dates';
 import { migrate } from '../domain/migrate';
 import type { Data } from '../domain/model';
-import { emptyData } from '../domain/model';
+import { emptyData, HOME_SECTIONS, homeLayout } from '../domain/model';
+import type { HomeSection } from '../domain/model';
 import { PHASE_MS } from '../domain/guild/content';
 import { CloseBtn, Sheet } from '../components/common';
 import { useStore } from '../state/store';
@@ -45,6 +46,39 @@ export function useImport() {
   };
   const field = <input ref={input} type="file" accept="application/json,.json" hidden onChange={(e) => onFile(e.target.files?.[0])} />;
   return { open: () => input.current?.click(), field };
+}
+
+function HomeLayoutSection() {
+  const { data, actions } = useStore();
+  const layout = homeLayout(data.profile);
+  const name = (k: HomeSection) => HOME_SECTIONS.find((x) => x.key === k)!.name;
+  const save = (order: HomeSection[], hidden: HomeSection[]) =>
+    actions.update((d) => ({ ...d, profile: { ...d.profile, home: { order, hidden } } }));
+  const move = (i: number, by: number) => {
+    const o = [...layout.order];
+    const j = i + by;
+    if (j < 0 || j >= o.length) return;
+    [o[i], o[j]] = [o[j], o[i]];
+    save(o, layout.hidden);
+  };
+  const toggle = (k: HomeSection) => save(layout.order, layout.hidden.includes(k) ? layout.hidden.filter((x) => x !== k) : [...layout.hidden, k]);
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h3 style={{ fontSize: 22 }}>Home</h3>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>Reorder or hide the sections on Home. This is saved with your log, so it follows you between devices.</p>
+      {layout.order.map((k, i) => {
+        const off = layout.hidden.includes(k);
+        return (
+          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 6, minHeight: 40, opacity: off ? 0.55 : 1 }}>
+            <span className="heading" style={{ flex: 1, fontSize: 17 }}>{name(k)}</span>
+            <button className="btn btn-ghost" onClick={() => move(i, -1)} disabled={i === 0} aria-label={'Move ' + name(k) + ' up'}>↑</button>
+            <button className="btn btn-ghost" onClick={() => move(i, 1)} disabled={i === layout.order.length - 1} aria-label={'Move ' + name(k) + ' down'}>↓</button>
+            <button className="btn btn-secondary" style={{ minHeight: 34, minWidth: 64 }} onClick={() => toggle(k)} aria-pressed={!off}>{off ? 'Show' : 'Hide'}</button>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 function ThemeSection() {
@@ -127,6 +161,8 @@ export function ProfileSheet() {
         </div>
         {restore.field}
       </div>
+
+      <HomeLayoutSection />
 
       <ThemeSection />
 

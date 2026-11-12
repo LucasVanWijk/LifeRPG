@@ -56,6 +56,29 @@ export interface CodexEntry { id: string; name: string; sub: string; icon: IconN
 export interface Profile {
   /** Monday of the last week whose review was finished. */
   reviewedWeek?: string;
+  /** Which sections Home shows and in what order. Stored with the data, so it syncs between devices. */
+  home?: HomeLayout;
+}
+
+export type HomeSection = 'today' | 'habits' | 'next' | 'week' | 'keep' | 'guild';
+export interface HomeLayout { order: HomeSection[]; hidden: HomeSection[] }
+export const HOME_SECTIONS: { key: HomeSection; name: string }[] = [
+  { key: 'today', name: "Today's Quests" },
+  { key: 'habits', name: 'Habits' },
+  { key: 'next', name: 'Up next' },
+  { key: 'week', name: 'The week' },
+  { key: 'keep', name: 'Keep in touch' },
+  { key: 'guild', name: 'Guild strip' },
+];
+export const DEFAULT_HOME_ORDER: HomeSection[] = HOME_SECTIONS.map((s) => s.key);
+
+/** The saved layout made complete: unknown sections dropped, missing ones appended in default order. */
+export function homeLayout(p: Profile): HomeLayout {
+  const known = new Set<HomeSection>(DEFAULT_HOME_ORDER);
+  const order = (p.home?.order ?? []).filter((k, i, a) => known.has(k) && a.indexOf(k) === i);
+  for (const k of DEFAULT_HOME_ORDER) if (!order.includes(k)) order.push(k);
+  const hidden = (p.home?.hidden ?? []).filter((k, i, a) => known.has(k) && a.indexOf(k) === i);
+  return { order, hidden };
 }
 
 export type Repeat = { every: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; until?: string };
