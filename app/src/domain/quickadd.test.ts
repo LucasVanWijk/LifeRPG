@@ -45,7 +45,7 @@ describe('parseQuickAdd', () => {
   it('keeps unknown symbols in the title and warns', () => {
     const r = p('Fix #9 @nowhere !x');
     expect(r.title).toBe('Fix #9 @nowhere !x');
-    expect(r.chips.filter((c) => c.kind === 'warn').map((c) => c.label)).toEqual(['No companion “9”', 'No campaign “nowhere”', 'No zone “x”']);
+    expect(r.chips.filter((c) => c.kind === 'warn').map((c) => c.label)).toEqual(['No companion or group “9”', 'No campaign “nowhere”', 'No zone “x”']);
   });
 
   it('leaves ordinary words alone', () => {

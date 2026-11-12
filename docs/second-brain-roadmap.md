@@ -2,7 +2,15 @@
 
 The guild game is the reward layer. This roadmap is about the other half: making Questlog a place you trust with your life and reach for first. It comes from a critical review of the app as a user (November 2026). Each idea keeps its letter and number from that review so decisions can refer back to it.
 
-Status: **planned**, nothing here is built yet. **High priority:** Home order (K1) and Google Calendar sync (H1).
+Status: **built** (November 2026), sections 1 to 10. The Google parts (Drive auto-sync, Calendar sync) are written against Google's API documentation and covered by unit tests with a faked network; they still need a live check with a real client ID. **High priority was:** Home order (K1) and Google Calendar sync (H1).
+
+Notes on how it was built, where it differs from the plan above:
+
+- **Settings** is the existing Profile sheet (the wrench on Home): Home layout, Drive sync and Calendar sync live there.
+- **Merge** stamps items in one place (`stamp` in `src/domain/merge.ts`, called by the store's `commit`), so no action has to remember to set `updated`. New ids are at least the current time, so two offline devices never hand out the same id.
+- **Google events** are kept in a local cache, not in the log (so they don't end up in the Drive file); only events made in Questlog carry a link to their Google copy. Google's repeating events arrive expanded, one event per occurrence.
+- **Plan your day** counts everything on Today's list (due and picked) towards the "too full" warning of more than 6 points.
+- **Dated lines in notes** end in `@2026-12-01`.
 
 ## Order of work
 

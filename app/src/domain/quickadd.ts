@@ -71,7 +71,15 @@ export function parseQuickAdd(text: string, data: Pick<Data, 'camps' | 'companio
         if (!out.companions.includes(c.id)) { out.companions.push(c.id); out.chips.push({ kind: 'companion', label: c.name }); }
         continue;
       }
-      out.chips.push({ kind: 'warn', label: 'No companion “' + rest + '”' });
+      // #family adds everyone in the group, as #sophie adds one person.
+      const members = data.companions.filter((x) => x.groups?.some((g) => g.toLowerCase().startsWith(rest)));
+      if (members.length) {
+        const group = members[0].groups!.find((g) => g.toLowerCase().startsWith(rest))!;
+        for (const m of members) if (!out.companions.includes(m.id)) out.companions.push(m.id);
+        out.chips.push({ kind: 'companion', label: group + ' (' + members.length + ')' });
+        continue;
+      }
+      out.chips.push({ kind: 'warn', label: 'No companion or group “' + rest + '”' });
     } else if (!out.due) {
       const d = readDate(words, i, today);
       if (d) { out.due = d[0]; out.chips.push({ kind: 'date', label: weekdayDate(d[0]) }); i += d[1] - 1; continue; }

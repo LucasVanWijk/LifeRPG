@@ -3,6 +3,9 @@ import { weekdayDate } from '../domain/dates';
 import { repeatText } from '../domain/calendar';
 import type { CalEvent, Repeat } from '../domain/model';
 import { Icon } from '../components/Icon';
+import { LinkText } from '../components/RichText';
+import { mapsUrl } from '../domain/notes';
+import { linkedQuests } from '../domain/quests';
 import { CloseBtn, Seg, Sheet } from '../components/common';
 import { KindMark } from '../screens/Calendar';
 import { useStore } from '../state/store';
@@ -12,8 +15,10 @@ type RepeatKey = 'none' | Repeat['every'];
 
 /** Shows an event, or the form to create or edit one. Changes to a repeating event apply to every repeat. */
 export function EventSheet({ id }: { id: number | 'new' }) {
-  const { data, ui, setUi, actions } = useStore();
-  const existing = id === 'new' ? undefined : data.events.find((e) => e.id === id);
+  const { data, cal, gcfg, ui, setUi, actions } = useStore();
+  const existing = id === 'new' ? undefined : cal.events.find((e) => e.id === id);
+  const calName = existing?.g ? gcfg.calendars.find((c) => c.id === existing.g!.cal)?.name : undefined;
+  const readOnly = !!existing?.g && gcfg.calendars.find((c) => c.id === existing.g!.cal)?.writable === false;
   const editing = id === 'new' || ui.eventMode === 'edit';
   const close = () => setUi({ eventSheet: null });
   if (id !== 'new' && !existing) return null;
@@ -24,19 +29,35 @@ export function EventSheet({ id }: { id: number | 'new' }) {
     const when = e.allDay
       ? (same ? weekdayDate(e.start) : weekdayDate(e.start) + ' – ' + weekdayDate(e.end)) + ' · all day'
       : weekdayDate(e.start) + ' ' + (e.startTime ?? '') + ' – ' + (same ? '' : weekdayDate(e.end) + ' ') + (e.endTime ?? '');
+    const prep = linkedQuests(data.quests, e.id);
     const people = e.companions.map((cid) => data.companions.find((c) => c.id === cid)).filter((c) => !!c);
     return (
       <Sheet onClose={close} label={e.title}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}>
           <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', gap: 7 }} className="kicker"><KindMark kind="event" />Event</span>
-          <button className="btn btn-secondary" onClick={() => setUi({ eventMode: 'edit' })} style={{ minHeight: 40 }}><Icon n="pencil" size={15} />Edit</button>
+          {!readOnly && <button className="btn btn-secondary" onClick={() => setUi({ eventMode: 'edit' })} style={{ minHeight: 40 }}><Icon n="pencil" size={15} />Edit</button>}
           <CloseBtn onClick={close} />
         </div>
         <h2 style={{ margin: '-4px 0 0', fontSize: 30, lineHeight: 1.12, textWrap: 'pretty' }}>{e.title}</h2>
         <div className="event-facts">
           <div><Icon n="calendar" size={16} /><span className="tnum">{when}</span></div>
-          <div><Icon n="repeat" size={16} /><span>{repeatText(e, weekdayDate)}</span></div>
-          {e.location && <div><Icon n="pin" size={16} /><span>{e.location}</span></div>}
+          <div><Icon n="repeat" size={16} /><span>{e.g?.series ? 'Part of a repeating event in Google Calendar' : repeatText(e, weekdayDate)}</span></div>
+          {e.g && <div><Icon n="calendar" size={16} /><span>Google Calendar{calName ? ' · ' + calName : ''}{e.g.series && e.g.link ? <> · <a href={e.g.link} target="_blank" rel="noreferrer">Change the whole series in Google</a></> : ''}</span></div>}
+          {e.location && <div><Icon n="pin" size={16} /><span><a className="auto-link" href={mapsUrl(e.location)} target="_blank" rel="noreferrer noopener">{e.location}</a></span></div>}
+        </div>
+        <div style={{ display: 'flex', flexDirection: 'column', borderTop: '1px solid var(--q-rule)', paddingTop: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingBottom: 4 }}>
+            <h3 style={{ flex: 1, fontSize: 21 }}>Preparation</h3>
+            <button className="btn btn-secondary" style={{ minHeight: 38 }} onClick={() => actions.addPrepQuest(e.id)}><Icon n="plus" size={14} />Add a quest for this</button>
+          </div>
+          {prep.map((q) => (
+            <button key={q.id} className="row-btn" onClick={() => { close(); actions.openQuest(q.id); }} style={{ gap: 10, minHeight: 44, padding: '6px 0' }}>
+              <span className={'checkbox' + (q.status === 'done' ? ' on' : '')} style={{ width: 18, height: 18, flex: 'none' }}>{q.status === 'done' && <Icon n="check" size={12} stroke={2.4} />}</span>
+              <span className="heading" style={{ flex: 1, minWidth: 0, fontSize: 17, textDecoration: q.status === 'done' ? 'line-through' : 'none' }}>{q.title}</span>
+              {q.due && <span className="muted tnum" style={{ fontSize: 12 }}>{weekdayDate(q.due)}</span>}
+            </button>
+          ))}
+          {!prep.length && <p className="muted" style={{ margin: 0, fontStyle: 'italic', fontSize: 14 }}>No quests yet. One is due the day before by default.</p>}
         </div>
         {people.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
@@ -48,7 +69,7 @@ export function EventSheet({ id }: { id: number | 'new' }) {
             ))}
           </div>
         )}
-        {e.notes && <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 15, borderTop: '1px solid var(--q-rule)', paddingTop: 12 }}>{e.notes}</p>}
+        {e.notes && <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 15, borderTop: '1px solid var(--q-rule)', paddingTop: 12 }}><LinkText text={e.notes} /></p>}
       </Sheet>
     );
   }
@@ -104,11 +125,11 @@ function EventForm({ existing }: { existing?: CalEvent }) {
         {!e.allDay && <div className="field"><label htmlFor="ev-et">at</label><input id="ev-et" className="input" type="time" value={e.endTime ?? ''} onChange={(ev) => set({ endTime: ev.target.value })} style={{ minHeight: 44 }} /></div>}
       </div>
       {!timeOk && <p style={{ margin: '-6px 0 0', fontSize: 12, color: 'var(--q-wax)' }}>The event ends before it starts.</p>}
-      <div className="field"><label>Repeats</label>
+      {!existing?.g?.series && <div className="field"><label>Repeats</label>
         <Seg<RepeatKey> name="ev-repeat" value={repeatKey} onChange={setRepeat} style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', width: '100%' }}
           optStyle={{ justifyContent: 'center', minHeight: 40, padding: '6px 2px', fontSize: 13 }}
           options={[{ key: 'none', label: 'No' }, { key: 'daily', label: 'Daily' }, { key: 'weekly', label: 'Weekly' }, { key: 'monthly', label: 'Monthly' }, { key: 'yearly', label: 'Yearly' }]} />
-      </div>
+      </div>}
       {e.repeat && (
         <div className="two-col">
           <div className="field"><label htmlFor="ev-int">Every</label>
@@ -120,6 +141,7 @@ function EventForm({ existing }: { existing?: CalEvent }) {
         </div>
       )}
       {existing?.repeat && <p className="muted" style={{ margin: '-6px 0 0', fontSize: 12 }}>Changes apply to every repeat.</p>}
+      {existing?.g?.series && <p className="muted" style={{ margin: '-6px 0 0', fontSize: 12 }}>Changes apply to this occurrence only.</p>}
       <div className="field"><label htmlFor="ev-loc">Location</label><input id="ev-loc" className="input" value={e.location} onChange={(ev) => set({ location: ev.target.value })} placeholder="Add a place" style={{ minHeight: 44 }} /></div>
       {data.companions.length > 0 && (
         <div className="field"><label>Companions</label>

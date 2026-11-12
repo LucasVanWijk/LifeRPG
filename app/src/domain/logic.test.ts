@@ -70,7 +70,7 @@ describe('migrate to the guild', () => {
   it('keeps the quest log, drops the old Hero and Expeditions, and founds a new guild', () => {
     const old = { version: 2, hero: { name: 'Old', xp: 10, level: 3, next: 300, gold: 50, points: 4, reviewedWeek: '2026-09-21' }, expedition: { skills: {} }, quests: [quest(1)], habits: [], camps: {}, companions: [], tomes: [], codex: [], events: [] };
     const d = migrate(old, T)!;
-    expect(d.version).toBe(3);
+    expect(d.version).toBe(4);
     expect(d.guild).toBeNull();
     expect(d.profile).toEqual({ reviewedWeek: '2026-09-21' });
     expect(d.quests).toHaveLength(1);
@@ -223,7 +223,7 @@ describe('migrate', () => {
       quests: [quest(1), { ...quest(2, { title: 'Call mom' }), recur: { every: 'weekly', streak: 3 } }],
     };
     const d = migrate(v1, T)!;
-    expect(d.version).toBe(3);
+    expect(d.version).toBe(4);
     expect(d.quests.map((q) => q.id)).toEqual([1]);
     expect(d.habits[0]).toMatchObject({ title: 'Call mom', every: 'weekly' });
     expect(habitStreak(d.habits[0], T)).toBe(3);
@@ -249,7 +249,7 @@ describe('sample data', () => {
   it('puts birthdays and dated notes on the calendar', () => {
     const ev = glossaryEvents(sampleData(T), T);
     expect(ev.some((e) => e.date === '2026-09-27' && e.label === "Mom's birthday")).toBe(true);
-    expect(ev.some((e) => e.date === '2026-09-29' && e.kind === 'Codex')).toBe(true);
+    expect(ev.some((e) => e.date === '2026-09-29' && e.kind === 'Note')).toBe(true);
   });
 });
 

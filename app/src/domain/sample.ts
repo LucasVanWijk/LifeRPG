@@ -1,5 +1,7 @@
 import { addDays, dayDiff, MONL, parseDay, shortDate } from './dates';
 import type { Data, Quest } from './model';
+import type { CodexEntry } from './notes';
+import { codexToNotes } from './notes';
 
 /** The day the sample data was written against; every sample date is shifted so it stays relative to today. */
 const BASE = '2026-09-25';
@@ -20,13 +22,25 @@ export function sampleData(today: string): Data {
   const q = (id: number, title: string, quad: Quest['quad'], due: string | null, size: Quest['size'], campaign: string | null, status: Quest['status'], notes = ''): Quest =>
     ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes), steps: [], companions: [] });
 
+  const codex: CodexEntry[] = [
+      { id: 'dentist', name: 'Dentist', sub: 'Tandartspraktijk Wittevrouwen', icon: 'pin', fields: [
+        { k: 'Address', v: 'Biltstraat 112, 3572 BK Utrecht' }, { k: 'Phone', v: '030 271 44 90' }, { k: 'Hours', v: 'Mon–Fri, 08:00–17:00' }, { k: 'Dentist', v: 'Dr. M. Bakker' }] },
+      { id: 'car', name: 'Car', sub: 'Volkswagen Golf, grey', icon: 'car', fields: [
+        { k: 'License plate', v: 'K-482-RD' }, { k: 'APK date', v: longDay('2026-09-29'), date: d('2026-09-29'), label: 'Car → APK' },
+        { k: 'Insurance', v: 'Policy 88-1204-7' }, { k: 'Tyre pressure', v: '2.3 bar front · 2.1 bar rear' }] },
+      { id: 'resto', name: 'Favorite restaurant in Utrecht', sub: 'De Zilveren Lepel', icon: 'utensils', fields: [
+        { k: 'Address', v: 'Oudegracht 158, Utrecht' }, { k: 'Phone', v: '030 233 10 27' }, { k: 'Always order', v: 'Mushroom risotto, then the pear tart' }, { k: 'Tip', v: 'Ask for a table on the wharf' }] },
+      { id: 'gym', name: 'Gym', sub: 'Sportcentrum Olympos', icon: 'dumbbell', fields: [
+        { k: 'Locker code', v: '4471' }, { k: 'Membership', v: 'Renews ' + longDay('2027-01-01') }] },
+    ]
+
   return {
-    version: 3,
+    version: 4,
     profile: {},
     guild: null,
     quests: [
       q(1, 'Renew passport', 'crisis', '2026-09-25', 'M', 'ireland', 'doing', 'Current one expires in November. Bring two photos and the old passport to the town hall.'),
-      q(2, 'Book dentist appointment', 'errand', '2026-09-23', 'S', null, 'todo', 'Six-month check-up. Number is in the Codex.'),
+      q(2, 'Book dentist appointment', 'errand', '2026-09-23', 'S', null, 'todo', 'Six-month check-up. Number is in the Dentist note.'),
       q(4, 'Plan Ireland itinerary', 'main', '2026-10-02', 'L', 'ireland', 'doing', 'Galway, Connemara, Dingle. Check ferry times to the Aran Islands. Sophie wants to see the Cliffs of Moher.'),
       q(5, 'Clean out garage', 'side', '2026-10-04', 'L', null, 'todo'),
       q(7, 'Book rental car in Shannon', 'crisis', '2026-09-27', 'M', 'ireland', 'todo'),
@@ -71,17 +85,8 @@ export function sampleData(today: string): Data {
       { id: 'gifts', name: 'Gift ideas', items: ['White orchid for Mom', 'F1 Lego set for Sophie', "Board game for Tom's housewarming"] },
       { id: 'books', name: 'Books to read', items: ['Piranesi|1', 'The Name of the Wind', 'Tress of the Emerald Sea', 'A Psalm for the Wild-Built'] },
     ].map((t) => ({ ...t, items: t.items.map((s, i) => ({ id: i + 1, t: s.split('|')[0], done: s.endsWith('|1') })) })),
-    codex: [
-      { id: 'dentist', name: 'Dentist', sub: 'Tandartspraktijk Wittevrouwen', icon: 'pin', fields: [
-        { k: 'Address', v: 'Biltstraat 112, 3572 BK Utrecht' }, { k: 'Phone', v: '030 271 44 90' }, { k: 'Hours', v: 'Mon–Fri, 08:00–17:00' }, { k: 'Dentist', v: 'Dr. M. Bakker' }] },
-      { id: 'car', name: 'Car', sub: 'Volkswagen Golf, grey', icon: 'car', fields: [
-        { k: 'License plate', v: 'K-482-RD' }, { k: 'APK date', v: longDay('2026-09-29'), date: d('2026-09-29'), label: 'Car → APK' },
-        { k: 'Insurance', v: 'Policy 88-1204-7' }, { k: 'Tyre pressure', v: '2.3 bar front · 2.1 bar rear' }] },
-      { id: 'resto', name: 'Favorite restaurant in Utrecht', sub: 'De Zilveren Lepel', icon: 'utensils', fields: [
-        { k: 'Address', v: 'Oudegracht 158, Utrecht' }, { k: 'Phone', v: '030 233 10 27' }, { k: 'Always order', v: 'Mushroom risotto, then the pear tart' }, { k: 'Tip', v: 'Ask for a table on the wharf' }] },
-      { id: 'gym', name: 'Gym', sub: 'Sportcentrum Olympos', icon: 'dumbbell', fields: [
-        { k: 'Locker code', v: '4471' }, { k: 'Membership', v: 'Renews ' + longDay('2027-01-01') }] },
-    ],
+    notes: codexToNotes(codex, 0),
     events: [],
+    tombstones: [],
   };
 }

@@ -2,12 +2,13 @@ import { useState } from 'react';
 import { applyGlossaryAdd, companionWord, matchCompanions, matchTomes, parseGlossaryAdd, REMINDERS, tomeWord } from '../domain/glossaryadd';
 import { useStore } from '../state/store';
 import { Icon } from './Icon';
+import { MicButton } from './Mic';
 
 const HELP = [
   ['@sophie', 'companion: adds a note to their page'],
   ['#books', 'tome: adds an item to the list'],
   ['fri', 'date (companion notes and Reminders): today, tomorrow, mon–sun, 3 oct, +3d, +2w'],
-  ['neither', 'goes to the “' + REMINDERS + '” codex entry, made if it is missing'],
+  ['neither', 'goes to the “' + REMINDERS + '” note, made if it is missing'],
 ];
 
 /** A one-line bar for the Glossary: "Ring about the party @sophie fri", "Dune #books" or "Renew passport 3 oct". */
@@ -43,6 +44,7 @@ export function GlossaryAdd() {
         <input className="quick-input" value={text} onChange={(e) => setText(e.target.value)} aria-label="Quick add to the Glossary" enterKeyHint="done"
           onKeyDown={(e) => { if (e.key === 'Enter') { if (picks.length) pick(picks[0].word); else add(); } }}
           placeholder="Quick add: Ring about the party @sophie fri" />
+        <MicButton label="Speak an entry" onText={(t) => setText((cur) => (cur ? cur + ' ' : '') + t)} />
         <button className="icon-btn" onClick={() => setHelp(!help)} aria-label="Quick add help" aria-expanded={help} style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 16 }}>?</button>
         {text.trim() && <button className="btn btn-primary inked" onClick={add} disabled={!canAdd} style={{ minHeight: 36, marginRight: 4 }}>Add</button>}
       </div>

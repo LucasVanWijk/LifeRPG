@@ -4,6 +4,8 @@ import { campSize, habitReward, reward, streakText } from './model';
 import type { Pay } from './guild/engine';
 import { awardStreak, payReal, refund } from './guild/engine';
 import { ATTR_NAME, QUAD_ATTR } from './guild/content';
+import { datedLines } from './notes';
+import { freshId, spawnNext } from './quests';
 
 /** undo: the toast offers to reverse the action that produced it. */
 export interface Toast { text: string; sub: string; undo?: boolean }
@@ -65,7 +67,10 @@ export function completeQuest(data: Data, id: number, today: string): Outcome | 
   if (!q || q.status === 'done') return null;
   const r = reward(q);
   const camp = q.campaign ? data.camps[q.campaign] : undefined;
-  const paid = pay(patchQuest(data, id, { status: 'done', doneOn: today, prevStatus: q.status }), {
+  // A repeating quest hands over to the next one, with the next due date.
+  const next = q.repeat ? spawnNext(q, today, freshId(data.quests)) : null;
+  const closed = patchQuest(data, id, { status: 'done', doneOn: today, prevStatus: q.status, pick: undefined, ...(next ? { spawned: next.id } : {}) });
+  const paid = pay(next ? { ...closed, quests: [...closed.quests, next] } : closed, {
     key: 'q:' + id, xp: r.xp, gold: r.gold, kind: 'quest', title: q.title, date: today, attr: QUAD_ATTR[q.quad],
     notable: q.quad === 'main' || q.size === 'L', bearerId: camp?.bearerId,
   }, q.title);
@@ -76,7 +81,11 @@ export function completeQuest(data: Data, id: number, today: string): Outcome | 
 export function undoQuest(data: Data, id: number, today: string): Outcome {
   const q = data.quests.find((x) => x.id === id);
   if (!q || q.status !== 'done') return none(data);
-  const reopened = patchQuest(data, id, { status: q.prevStatus && q.prevStatus !== 'done' ? q.prevStatus : 'todo', doneOn: null });
+  // The next round it created goes away again, if nobody has touched it.
+  const nextQ = q.spawned ? data.quests.find((x) => x.id === q.spawned) : undefined;
+  const untouched = !!nextQ && nextQ.status === 'todo' && !nextQ.steps.some((s) => s.done);
+  const back = untouched ? { ...data, quests: data.quests.filter((x) => x.id !== q.spawned) } : data;
+  const reopened = patchQuest(back, id, { status: q.prevStatus && q.prevStatus !== 'done' ? q.prevStatus : 'todo', doneOn: null, spawned: undefined });
   return settleCampaigns(takeBack(reopened, 'q:' + id), today);
 }
 
@@ -160,7 +169,8 @@ export function bestStreak(h: Habit): number {
 export function toggleHabit(data: Data, id: number, today: string): Outcome {
   const h = data.habits.find((x) => x.id === id);
   if (!h) return none(data);
-  const r = habitReward(h);
+  // An amount habit: a tap adds one step; on a finished day it takes the day back.
+  if (hasAmount(h)) return countToday(h, today) >= h.amount! ? adjustAmount(data, id, -countToday(h, today), today) : adjustAmount(data, id, h.step || 1, today);
   const target = habitTarget(h);
   const cur = periodOf(today, h.every);
   const setLog = (log: string[]) => data.habits.map((x) => (x.id === id ? { ...x, log } : x));
@@ -172,16 +182,53 @@ export function toggleHabit(data: Data, id: number, today: string): Outcome {
     return none(d);
   }
   if (habitDone(h, today)) return none(data);
-  const next = { ...h, log: [...h.log, today] };
+  return payCheckIn(data, h, today, {});
+}
+
+/** Records today's check-in (plus any other habit fields) and pays it. */
+function payCheckIn(data: Data, h: Habit, today: string, patch: Partial<Habit>): Outcome {
+  const id = h.id, r = habitReward(h);
+  const next = { ...h, ...patch, log: [...h.log, today] };
+  const setNext = data.habits.map((x) => (x.id === id ? next : x));
   const prog = habitProgress(next, today);
   const sub = prog.count < prog.target ? prog.count + ' of ' + prog.target + ' this week' : streakText(habitStreak(next, today), h.every);
-  const paid = pay({ ...data, habits: setLog(next.log) }, {
+  const paid = pay({ ...data, habits: setNext }, {
     key: 'h:' + id + ':' + today, xp: r.xp, gold: r.gold, kind: 'habit', title: h.title, date: today, attr: 'main', notable: false,
   }, h.title + ' · ' + sub);
   // A streak milestone forges an heirloom, and it stays even if the streak breaks later.
   const forged = paid.data.guild ? awardStreak(paid.data.guild, id, h.title, habitStreak(next, today), h.every) : null;
   if (forged) return { ...paid, data: { ...paid.data, guild: forged }, toasts: [...paid.toasts, { text: 'Heirloom forged', sub: h.title + ' · see the Hall of Heroes' }] };
   return paid;
+}
+
+// ── Habits with amounts ─────────────────────────────────────
+
+export const hasAmount = (h: Habit) => !!h.amount && h.amount > 0;
+/** Today's count for an amount habit. */
+export const countToday = (h: Habit, today: string) => h.counts?.[today] ?? 0;
+const KEEP_COUNT_DAYS = 90;
+
+/**
+ * Adds to (or takes from) today's count of an amount habit. The day is done, and paid once, when the count
+ * reaches the amount; if the count falls back below it, the day and its reward are taken back.
+ */
+export function adjustAmount(data: Data, id: number, delta: number, today: string): Outcome {
+  const h = data.habits.find((x) => x.id === id);
+  if (!h || !hasAmount(h)) return none(data);
+  const before = countToday(h, today), after = Math.max(0, before + delta);
+  if (after === before) return none(data);
+  const counts: Record<string, number> = {};
+  const cutoff = addDays(today, -KEEP_COUNT_DAYS);
+  for (const [d, n] of Object.entries(h.counts ?? {})) if (d >= cutoff && d !== today) counts[d] = n;
+  if (after > 0) counts[today] = after;
+  const wasDone = before >= h.amount!, isDone = after >= h.amount!;
+  // A weekly habit whose week is already done (on other days) counts the amount but pays nothing more.
+  if (!wasDone && isDone && !h.log.includes(today) && !habitDone(h, today)) return payCheckIn(data, h, today, { counts });
+  if (wasDone && !isDone && h.log.includes(today)) {
+    const d = { ...data, habits: data.habits.map((x) => (x.id === id ? { ...x, counts, log: x.log.filter((day) => day !== today) } : x)) };
+    return none(takeBack(d, 'h:' + id + ':' + today));
+  }
+  return none({ ...data, habits: data.habits.map((x) => (x.id === id ? { ...x, counts } : x)) });
 }
 
 // ── Chronicle ───────────────────────────────────────────────
@@ -202,7 +249,7 @@ export function chronicle(data: Data): ChronicleEntry[] {
 
 // ── Calendar ────────────────────────────────────────────────
 
-export interface CalendarEvent { date: string; label: string; kind: 'Companion' | 'Codex'; target: string; who?: string; /** The companion or codex entry a dated note belongs to. */ source?: string }
+export interface CalendarEvent { date: string; label: string; kind: 'Companion' | 'Note'; target: string; who?: string; /** The companion or note a dated line belongs to. */ source?: string }
 
 /** Birthdays and dated Glossary notes that show on the Home week strip. */
 export function glossaryEvents(data: Data, today: string): CalendarEvent[] {
@@ -210,10 +257,10 @@ export function glossaryEvents(data: Data, today: string): CalendarEvent[] {
   const y = Number(today.slice(0, 4));
   for (const c of data.companions) {
     if (c.bday) for (const yr of [y - 1, y, y + 1]) out.push({ date: yr + '-' + c.bday, label: c.first + "'s birthday", kind: 'Companion', target: 'companion:' + c.id, who: c.first });
-    for (const n of c.notes) if (n.date) out.push({ date: n.date, label: n.label || n.t, kind: 'Companion', target: 'companion:' + c.id, who: c.first, source: c.first });
+    for (const n of c.notes) if (n.date && !n.contact) out.push({ date: n.date, label: n.label || n.t, kind: 'Companion', target: 'companion:' + c.id, who: c.first, source: c.first });
   }
-  for (const x of data.codex)
-    for (const f of x.fields) if (f.date) out.push({ date: f.date, label: f.label || f.k, kind: 'Codex', target: 'codex:' + x.id, source: x.name });
+  for (const n of data.notes)
+    for (const l of datedLines(n.body)) out.push({ date: l.date, label: l.label, kind: 'Note', target: 'note:' + n.id, source: n.title });
   return out;
 }
 

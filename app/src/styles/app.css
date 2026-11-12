@@ -150,7 +150,8 @@ button { font: inherit; }
 
 /* Home */
 .home-grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 22px; align-items: start; }
-.desk .home-grid { grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); }
+.desk .home-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.desk .home-strip, .desk .home-keep { grid-column: 1 / -1; }
 .desk .week { grid-column: 1 / -1; }
 .hero-card { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .hero-card .bar { height: 9px; }
@@ -257,11 +258,6 @@ button { font: inherit; }
 /* ── additions: profile, habits, editing ─────────────────── */
 .hero-btn { display: flex; align-items: center; gap: 16px; width: 100%; padding: 0; border: 0; background: transparent; text-align: left; cursor: pointer; color: var(--q-ink); font-family: var(--font-body); border-radius: var(--radius-md); }
 .hero-btn:hover .heading { color: var(--color-accent-800); }
-.desk .hero-card { grid-column: 1; grid-row: 1; }
-.desk .home-today { grid-column: 2; grid-row: 1; }
-.desk .home-habits { grid-column: 1; grid-row: 2; }
-.desk .home-next { grid-column: 2; grid-row: 2; }
-.desk .week { grid-row: 3; }
 .backup-nag { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 12px; padding: 10px 14px; border-color: color-mix(in srgb, var(--color-accent-700) 40%, transparent); }
 .danger-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 44px; padding: 8px 14px; border: 1px solid color-mix(in srgb, var(--q-wax) 45%, transparent); border-radius: var(--radius-md); background: transparent; color: var(--q-wax); cursor: pointer; font-family: var(--font-heading); font-weight: 600; font-size: 15px; }
 .danger-btn:hover { background: color-mix(in srgb, var(--q-wax) 8%, transparent); }
@@ -378,3 +374,38 @@ button { font: inherit; }
 .map-hit:focus-visible { outline: none; }
 .map-hit:focus-visible > rect:last-child { stroke: var(--color-accent-700); stroke-width: 2; stroke-dasharray: 4 3; }
 @media (prefers-reduced-motion: reduce) { .map-smoke circle, .map-work { animation: none; } .map-smoke circle { opacity: .25; } }
+
+/* Home: guild strip and collapsed notices */
+.home-strip { padding: 0; }
+.strip-btn { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 14px; border: 0; background: transparent; cursor: pointer; color: var(--q-ink); font-family: var(--font-body); border-radius: var(--radius-md); min-height: 48px; }
+.strip-btn:hover { background: color-mix(in srgb, var(--color-accent-300) 16%, transparent); }
+.notices { padding: 0; border-color: color-mix(in srgb, var(--color-accent-700) 40%, transparent); }
+.notices-line { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 14px; min-height: 40px; border: 0; background: transparent; cursor: pointer; color: var(--q-ink); font-family: var(--font-body); }
+.notice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px 10px; border-top: 1px solid var(--q-rule); }
+.sync-line { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 14px; min-height: 36px; cursor: pointer; font-size: 13px; color: var(--color-accent-800); font-family: var(--font-body); }
+.sync-line:hover { background: color-mix(in srgb, var(--color-accent-300) 16%, transparent); }
+
+/* Notes and links */
+.auto-link { color: var(--color-accent-800); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+.note-body { display: flex; flex-direction: column; gap: 6px; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
+.note-edit { min-height: 220px; font-size: 15px; line-height: 1.45; font-family: var(--font-body); resize: vertical; }
+
+/* Calendar: day and week views */
+.tg { padding: 0; overflow: hidden; }
+.tg-scroll-x { overflow-x: auto; }
+.tg-head, .tg-allday { display: grid; border-bottom: 1px solid var(--q-rule); }
+.tg-dayhead { display: flex; flex-direction: column; align-items: center; gap: 0; padding: 6px 0; border-left: 1px solid var(--q-rule); }
+.tg-dayhead.today .heading { color: var(--q-wax); }
+.tg-allcell { display: flex; flex-direction: column; gap: 2px; padding: 3px; min-height: 28px; border-left: 1px solid var(--q-rule); min-width: 0; }
+.tg-scroll { max-height: 560px; overflow-y: auto; }
+.tg-body { position: relative; display: grid; }
+.tg-hours { position: relative; }
+.tg-hours span { position: absolute; right: 6px; font-size: 10px; color: var(--color-accent-700); }
+.tg-col { position: relative; border-left: 1px solid var(--q-rule); }
+.tg-col.today { background: color-mix(in srgb, var(--color-accent-300) 12%, transparent); }
+.tg-line { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--q-rule) 70%, transparent); }
+.tg-block { position: absolute; overflow: hidden; padding: 1px 5px; border: 0; border-left: 3px solid; border-radius: 3px; background: color-mix(in srgb, var(--color-accent-100) 90%, white); box-shadow: 0 0 0 1px color-mix(in srgb, var(--q-rule) 80%, transparent); font-family: var(--font-body); font-size: 12px; line-height: 1.25; text-align: left; color: var(--q-ink); cursor: pointer; }
+.tg-block:hover { background: var(--q-tint); }
+.tg-now { position: absolute; left: 0; right: 0; height: 2px; background: var(--q-wax); pointer-events: none; }
+.tg-tray { padding: 10px 14px 12px; border-top: 1px solid var(--q-rule); }
+.cal-views { display: inline-flex; }

@@ -15,13 +15,13 @@ describe('Glossary quick add', () => {
   it('adds a dated note to a companion picked with @', () => {
     const d = run('Call about the party @sophie fri');
     expect(d.companions[0].notes).toEqual([{ t: 'Call about the party', date: '2026-09-25', label: 'Sophie → Call about the party' }]);
-    expect(d.codex).toHaveLength(0);
+    expect(d.notes).toHaveLength(0);
   });
 
   it('adds an item to a tome picked with # and keeps its date words', () => {
     const d = run('Dune fri #books');
     expect(d.tomes[0].items).toEqual([{ id: 99, t: 'Dune fri', done: false }]);
-    expect(d.codex).toHaveLength(0);
+    expect(d.notes).toHaveLength(0);
   });
 
   it('files into every target named', () => {
@@ -30,18 +30,18 @@ describe('Glossary quick add', () => {
     expect(d.tomes[0].items).toHaveLength(1);
   });
 
-  it('creates the Reminders codex entry when neither is named, then reuses it', () => {
+  it('creates the Reminders note when neither is named, then reuses it', () => {
     let d = run('Renew passport 3 oct');
-    expect(d.codex).toHaveLength(1);
-    expect(d.codex[0]).toMatchObject({ name: 'Reminders', fields: [{ k: 'Renew passport', date: '2026-10-03' }] });
+    expect(d.notes).toHaveLength(1);
+    expect(d.notes[0]).toMatchObject({ title: 'Reminders', body: 'Renew passport @2026-10-03' });
     d = run('Buy stamps', d);
-    expect(d.codex).toHaveLength(1);
-    expect(d.codex[0].fields.map((f) => f.k)).toEqual(['Renew passport', 'Buy stamps']);
+    expect(d.notes).toHaveLength(1);
+    expect(d.notes[0].body).toBe('Renew passport @2026-10-03\nBuy stamps');
   });
 
   it('warns about unknown names and falls back to Reminders', () => {
     const r = parseGlossaryAdd('Hello @nobody', base(), T);
-    expect(r.chips.map((c) => c.kind)).toEqual(['warn', 'codex']);
+    expect(r.chips.map((c) => c.kind)).toEqual(['warn', 'note']);
     expect(r.title).toBe('Hello @nobody');
   });
 });

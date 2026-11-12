@@ -1,7 +1,7 @@
 # Questlog
 
 A parchment quest log for everyday life, built from the Claude Design handoff `Questlog.dc.html` (Questlog Mobile App Design).
-React + Vite + TypeScript, installable as a PWA that works offline. Data lives in the browser (`localStorage`, key `questlog:v2`); there is no backend. A new log starts empty at level 1 and asks for your name.
+React + Vite + TypeScript, installable as a PWA that works offline. Data lives in the browser (`localStorage`, key `questlog:v2`), optionally synced through your own Google Drive; there is no backend of ours. A new log starts empty at level 1 and asks for your name.
 
 **Back up your log.** Everything is stored in one browser. Use Profile → Export backup now and then, and Restore backup on a new device.
 
@@ -12,15 +12,25 @@ npm test           # domain logic (rewards, calendar, .ics import, the guild); r
 npm run build      # typecheck + production build into dist/
 ```
 
-## Google Drive sync (optional)
+## Google Drive and Calendar sync (optional)
 
-Profile → Google Drive saves the whole log to `questlog-backup.json` in your own Drive and loads it back, only when you press a button. The browser talks to Google directly with the `drive.file` scope (the app sees only files it created); there is no server. Set it up once:
+**Drive.** Settings → Google Drive → *Turn on automatic sync* keeps the whole log in `questlog-backup.json` in your own Drive. The app loads and merges the Drive copy when it opens (and every few minutes while open) and saves a few seconds after each edit. Merging is per item (see `src/domain/merge.ts`): every item has an `updated` time, quests merge field by field, habit check-ins are unioned, deletions leave a 60-day tombstone, and the guild merges as a whole (newest simulation wins; payments for real-life work are kept by key, so XP is never paid twice). Google's browser sign-in lasts an hour and can only be renewed after a tap, so when it expires Home shows *Sync paused · tap to resume*; edits made meanwhile are kept and sent on the next sync. *Manual save and load* remain under the sync buttons. The browser talks to Google directly with the `drive.file` scope (the app sees only files it created); there is no server.
 
-1. In Google Cloud Console create a project, enable the **Google Drive API**, configure the OAuth consent screen (External, add yourself as a test user, scope `.../auth/drive.file`).
+**Calendar.** Settings → Google Calendar → *Connect Google Calendar* shows the events of the calendars you pick (30 days back to a year ahead), keeps them up to date incrementally, and mirrors events created in Questlog into the calendar you choose. Edits and deletions go both ways; the most recently changed version wins. Repeating Google events arrive as one event per occurrence, so a single occurrence can be edited; a whole series is changed in Google Calendar itself. Imported `.ics` events, quest deadlines and birthdays are not sent to Google.
+
+Set up once:
+
+1. In Google Cloud Console create a project, enable the **Google Drive API** and the **Google Calendar API**, and configure the OAuth consent screen (External, add yourself as a test user, scopes `.../auth/drive.file`, `.../auth/calendar.events` and `.../auth/calendar.readonly`). Calendar scopes are sensitive: for personal use leave the project in *Testing* with you as a test user; a public release would need Google's verification.
 2. Create an **OAuth client ID** of type *Web application* with the authorised JavaScript origins `https://lucasvanwijk.github.io` and `http://localhost:5173`.
 3. Locally put `VITE_GOOGLE_CLIENT_ID=<client id>` in `app/.env.local` (git-ignored). For the live site add a repository secret named `GOOGLE_CLIENT_ID` (Settings → Secrets and variables → Actions); the deploy workflow passes it to the build.
 
-Without a client ID the Drive section is hidden. The ID is public by nature (it ships in the built JavaScript); the secret only keeps it out of the source.
+Without a client ID the Drive and Calendar sections are hidden. The ID is public by nature (it ships in the built JavaScript); the secret only keeps it out of the source.
+
+## Capture from anywhere
+
+- **Share to Questlog.** The installed app is a share target (Android, and Chrome or Edge on desktop): text and links shared from another app open the *Save to Glossary* sheet, which saves a new note, a tome item or a note on a companion. iPhone Safari has no share targets; the workaround is an iOS Shortcut that opens `https://lucasvanwijk.github.io/LifeRPG/?title=<title>&text=<text>&url=<url>` (the three parameters are all optional). Shared images and files are not kept.
+- **Home-screen shortcuts.** Long-press the app icon (Android, desktop Chrome or Edge): *New quest*, *Check in a habit* and *New note* open the app on `?action=new-quest`, `?action=checkin` and `?action=new-note`.
+- **Voice.** A microphone button on both quick-add bars fills the box with what you say (browsers with speech recognition only). Chrome sends the audio to Google to transcribe; the app says so the first time.
 
 ## Layout
 
@@ -31,7 +41,10 @@ The app switches between the mobile layout (bottom tab bar, bottom sheets) and t
 | `src/domain/` | Types, quadrants and sizes, the reward formulas (Main Quests ×1.5), quest/habit/campaign payout logic, streaks, date helpers, the design's sample data (used by tests only) |
 | `src/domain/migrate.ts` | Upgrades saved data and imported backups to the current format |
 | `src/domain/quickadd.ts` | The quick-add shorthand parser |
-| `src/domain/calendar.ts`, `src/domain/ics.ts` | Calendar items (repeats, deadlines, Glossary dates) and the .ics importer |
+| `src/domain/calendar.ts`, `src/domain/ics.ts` | Calendar items (repeats, deadlines, Glossary dates), the day/week layout and the .ics importer |
+| `src/domain/merge.ts` | Update stamps, tombstones and the per-item merge of two copies of the log |
+| `src/domain/quests.ts`, `people.ts`, `notes.ts`, `tomes.ts`, `share.ts` | Today/someday/stale/repeating quests, keep in touch, notes and links, log tomes, share and shortcut launches |
+| `src/google.ts`, `drive.ts`, `sync.ts`, `gcal.ts`, `gcalsync.ts` | Google sign-in, Drive sync, Calendar sync |
 | `src/domain/guild/` | The guild: content tables, the engine (time, outings, real-life payments), the resolver and exact odds |
 | `src/state/store.tsx` | Persisted data + UI state and all actions, shared through a React context |
 | `src/screens/` | Home, Quests (desktop board, mobile 2×2 grid, opened zone, campaigns), Glossary, Adventure |

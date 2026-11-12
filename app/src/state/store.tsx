@@ -1,9 +1,20 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { todayISO } from '../domain/dates';
+import { addDays, dayDiff, todayISO } from '../domain/dates';
+import { linkedQuests, prepQuest } from '../domain/quests';
 import type { LevelUp, Outcome, Toast } from '../domain/logic';
-import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
+import { adjustAmount, completeQuest, countToday, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
-import type { CalEvent, Campaign, Data, Habit, QuadKey, Quest, Status } from '../domain/model';
+import { mergeData, stamp } from '../domain/merge';
+import type { Shared } from '../domain/share';
+import { readLaunch } from '../domain/share';
+import { autoSyncOn, setAutoSyncFlag, syncOnce } from '../sync';
+import type { SyncState } from '../sync';
+import { driveConfigured, lastSync } from '../drive';
+import { getToken, onTokenChange, peekToken, requireScopes, CALENDAR_SCOPE } from '../google';
+import type { EventCache, GCalConfig } from '../gcal';
+import { insertEvent as gInsert, listCalendars, loadCache, loadConfig, patchEvent as gPatch, pullEvents, removeEvent as gRemove, saveCache, saveConfig, timeZone, toGoogle, fromGoogle } from '../gcal';
+import { applyChanges, syncRound } from '../gcalsync';
+import type { CalEvent, Campaign, Data, Habit, QuadKey, Quest, Status, Tombstone } from '../domain/model';
 import { emptyData, QM } from '../domain/model';
 import type { BuildingId, ClassId, PotionKind, Slot, Stance } from '../domain/guild/content';
 import { AWAY_SUMMARY_MS } from '../domain/guild/content';
@@ -15,8 +26,8 @@ const STORAGE_KEY = 'questlog:v2';
 
 export type Tab = 'home' | 'quests' | 'calendar' | 'glossary' | 'guild';
 export type GuildTab = 'roster' | 'board' | 'town' | 'tavern' | 'legacy';
-export type QuestView = 'board' | 'campaign' | 'habits';
-export type GlossaryCat = 'companions' | 'tomes' | 'codex';
+export type QuestView = 'board' | 'campaign' | 'habits' | 'someday';
+export type GlossaryCat = 'companions' | 'tomes' | 'notes';
 export type { Toast };
 
 /** tone 'go' shows the confirm button as a normal action instead of a destructive one. */
@@ -40,6 +51,8 @@ export interface Ui {
   eventSheet: number | 'new' | null;
   eventMode: 'view' | 'edit';
   calDay: string;
+  /** Month, week or day; null picks the default (day on a phone, month on a computer). */
+  calView: 'month' | 'week' | 'day' | null;
   gCat: GlossaryCat;
   gSearch: string;
   gDetail: string | null;
@@ -57,6 +70,8 @@ export interface Ui {
   /** What happened while the app was closed. */
   away: Entry[] | null;
   confirm: Confirm | null;
+  /** Something shared from another app, or a blank new note (home-screen shortcut): the Save to Glossary sheet. */
+  capture: Shared | null;
   dragId: number | null;
   dragOver: string | null;
 }
@@ -87,15 +102,16 @@ function initialUi(today: string): Ui {
   const p = new URLSearchParams(window.location.search);
   const pick = <T extends string>(k: string, allowed: readonly T[], def: T): T => (allowed.includes(p.get(k) as T) ? (p.get(k) as T) : def);
   const quest = Number(p.get('quest'));
+  const launch = readLaunch(window.location.search);
   return {
-    tab: pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
-    questView: pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
+    tab: launch.action === 'checkin' ? 'quests' : pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
+    questView: launch.action === 'checkin' ? 'habits' : pick('view', ['board', 'campaign', 'habits', 'someday'] as const, 'board'),
     hiddenCamps: loadHiddenCamps(),
     campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
     openId: quest > 0 ? quest : null,
     sheetMode: p.get('mode') === 'edit' ? 'edit' : 'view',
-    newOpen: false,
+    newOpen: launch.action === 'new-quest',
     campSheet: null,
     profileOpen: false,
     chronicleOpen: false,
@@ -103,7 +119,8 @@ function initialUi(today: string): Ui {
     eventSheet: null,
     eventMode: 'view',
     calDay: today,
-    gCat: pick('cat', ['companions', 'tomes', 'codex'] as const, 'companions'),
+    calView: null,
+    gCat: pick('cat', ['companions', 'tomes', 'notes'] as const, 'companions'),
     gSearch: '',
     gDetail: p.get('detail'),
     openTome: null,
@@ -117,6 +134,7 @@ function initialUi(today: string): Ui {
     buildSheet: null,
     away: null,
     confirm: null,
+    capture: launch.action === 'new-note' ? { title: '', text: '', url: '' } : launch.shared,
     dragId: null,
     dragOver: null,
   };
@@ -133,7 +151,8 @@ function useLayout() {
   return forced ? forced === 'desktop' : w >= 900;
 }
 
-const nextId = (xs: { id: number }[]) => Math.max(0, ...xs.map((x) => x.id)) + 1;
+/** A new numeric id. It is also at least the current time, so two devices that were offline never hand out the same one. */
+const nextId = (xs: { id: number }[]) => Math.max(Date.now(), ...xs.map((x) => x.id + 1));
 
 /** Undo is still safe while the quest log and real-life payments are unchanged; the guild's clock ticking alongside doesn't count. */
 const sameLog = (a: Data, b: Data) =>
@@ -151,6 +170,12 @@ function useStoreValue() {
   const undoRef = useRef<{ before: Data; after: Data } | null>(null);
   const isDesk = useLayout();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // A share or shortcut opened the app: take its parameters out of the address so a reload doesn't repeat it.
+  useEffect(() => {
+    const l = readLaunch(window.location.search);
+    if (l.shared || l.action) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }, []);
 
   // Keep "today" right when the app stays open overnight or is resumed from the background.
   useEffect(() => {
@@ -211,12 +236,15 @@ function useStoreValue() {
   // Reads the latest data synchronously so completion side effects (toast, level-up) fire once.
   const dataRef = useRef(data);
   dataRef.current = data;
-  const commit = useCallback((d: Data) => { dataRef.current = d; setData(d); }, []);
+  /** Saves an edit: changed items get their update times, deleted ones a tombstone. */
+  const commit = useCallback((d: Data) => { const n = stamp(dataRef.current, d, Date.now()); dataRef.current = n; setData(n); }, []);
+  /** Puts data in as it is, without stamping (a restore, or a copy merged from another device). */
+  const commitRaw = useCallback((d: Data) => { dataRef.current = d; setData(d); }, []);
   const apply = useCallback((o: Outcome | null) => {
     if (!o) return;
     const before = dataRef.current;
     commit(o.data);
-    if (o.toasts.some((t) => t.undo)) undoRef.current = { before, after: o.data };
+    if (o.toasts.some((t) => t.undo)) undoRef.current = { before, after: dataRef.current };
     showToasts(o.toasts);
     if (o.levelUp) setUi({ levelUp: o.levelUp });
   }, [commit, showToasts, setUi]);
@@ -240,6 +268,123 @@ function useStoreValue() {
     const t = window.setInterval(() => tick(false), 15_000);
     return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); };
   }, [tick]);
+
+  // ── Drive sync ──
+  const [sync, setSync] = useState<SyncState>(() => {
+    const l = lastSync();
+    return { status: driveConfigured && autoSyncOn() ? 'paused' : 'off', at: l?.at, device: l?.device };
+  });
+  const syncBusy = useRef(false);
+  const dirty = useRef(false);
+  const merged = useRef<Data | null>(null);
+  const runSync = useCallback(async (interactive: boolean) => {
+    if (!driveConfigured || !autoSyncOn() || syncBusy.current) return;
+    syncBusy.current = true;
+    const snapshot = dataRef.current;
+    const wasDirty = dirty.current;
+    dirty.current = false;
+    setSync((s) => ({ ...s, status: 'syncing', error: undefined }));
+    try {
+      const r = await syncOnce(snapshot, wasDirty, interactive);
+      if (!r) { dirty.current = dirty.current || wasDirty; setSync((s) => ({ ...s, status: 'paused' })); return; }
+      let next = r.data;
+      // Edits made while the round was running are merged in rather than overwritten, and sent on the next round.
+      if (dataRef.current !== snapshot) { next = mergeData(dataRef.current, next, Date.now()); dirty.current = true; }
+      if (next !== dataRef.current) { merged.current = next; commitRaw(next); }
+      const l = lastSync();
+      setSync({ status: 'idle', at: l?.at ?? new Date().toISOString(), device: r.device ?? l?.device });
+    } catch (e) {
+      dirty.current = true;
+      setSync((s) => ({ ...s, status: 'error', error: e instanceof Error ? e.message : 'Sync failed.' }));
+    } finally { syncBusy.current = false; }
+  }, [commitRaw]);
+  // The parts of the log that sync; the guild's clock ticking alone doesn't count as an edit.
+  const syncKey = [data.quests, data.habits, data.camps, data.companions, data.tomes, data.notes, data.events, data.profile, data.tombstones];
+  useEffect(() => {
+    if (merged.current === dataRef.current) { merged.current = null; return; }
+    if (!driveConfigured || !autoSyncOn()) return;
+    dirty.current = true;
+    const t = window.setTimeout(() => void runSync(false), 4000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, syncKey);
+  useEffect(() => {
+    void runSync(false);
+    const onVis = () => { if (document.visibilityState === 'hidden') { if (dirty.current) void runSync(false); } else void runSync(false); };
+    document.addEventListener('visibilitychange', onVis);
+    const t = window.setInterval(() => void runSync(false), 5 * 60_000);
+    const off = onTokenChange(() => void runSync(false));
+    return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); off(); };
+  }, [runSync]);
+
+  // ── Google Calendar ──
+  const [gcfg, setGcfg] = useState<GCalConfig>(loadConfig);
+  const [gcache, setGcache] = useState<EventCache>(loadCache);
+  const [gstate, setGstate] = useState<{ status: 'off' | 'idle' | 'syncing' | 'paused' | 'error'; error?: string }>(() => ({ status: driveConfigured && loadConfig().on ? 'paused' : 'off' }));
+  const gcfgRef = useRef(gcfg); gcfgRef.current = gcfg;
+  const gcacheRef = useRef(gcache); gcacheRef.current = gcache;
+  const gBusy = useRef(false);
+  const gDirty = useRef(false);
+  requireScopes(CALENDAR_SCOPE, gcfg.on);
+  const setG = useCallback((cfg: GCalConfig, cache?: EventCache) => {
+    gcfgRef.current = cfg; setGcfg(cfg); saveConfig(cfg);
+    if (cache) { gcacheRef.current = cache; setGcache(cache); saveCache(cache); }
+  }, []);
+  const runGcal = useCallback(async (interactive: boolean) => {
+    if (!driveConfigured || !gcfgRef.current.on || gBusy.current) return;
+    gBusy.current = true;
+    setGstate((s) => ({ ...s, status: 'syncing', error: undefined }));
+    try {
+      const tok = interactive ? await getToken(CALENDAR_SCOPE) : peekToken(CALENDAR_SCOPE);
+      if (!tok) { setGstate({ status: 'paused' }); return; }
+      let cfg = gcfgRef.current;
+      if (!cfg.calendars.length) {
+        const calendars = await listCalendars(tok);
+        const primary = calendars.find((c) => c.primary) ?? calendars[0];
+        cfg = { ...cfg, calendars, shown: primary ? [primary.id] : [], target: primary?.writable ? primary.id : (calendars.find((c) => c.writable)?.id ?? '') };
+      }
+      const today = todayISO(), now = Date.now();
+      const snap = dataRef.current;
+      const r = await syncRound({
+        api: { pull: (c, o) => pullEvents(tok, c, o), insert: (c, b) => gInsert(tok, c, b), patch: (c, id, b) => gPatch(tok, c, id, b), remove: (c, id) => gRemove(tok, c, id) },
+        cfg, cache: gcacheRef.current, events: snap.events, tombstones: snap.tombstones, today, tz: timeZone(), now,
+      });
+      setG({ ...r.cfg, at: new Date().toISOString() }, r.cache);
+      if (r.changes.length) {
+        const cur = dataRef.current;
+        const gone = r.changes.filter((c) => c.kind === 'remove').map((c) => c.id);
+        const tombs: Tombstone[] = gone.map((id) => ({ key: 'event:' + id, at: now }));
+        // The events change as they are (no new update times): the sync itself must not look like an edit.
+        commitRaw({ ...cur, events: applyChanges(cur.events, r.changes), tombstones: [...cur.tombstones, ...tombs] });
+      }
+      gDirty.current = false;
+      setGstate({ status: 'idle' });
+    } catch (e) {
+      gDirty.current = true;
+      setGstate({ status: 'error', error: e instanceof Error ? e.message : 'Calendar sync failed.' });
+    } finally { gBusy.current = false; }
+  }, [commitRaw, setG]);
+  useEffect(() => {
+    if (!gcfgRef.current.on) return;
+    gDirty.current = true;
+    const t = window.setTimeout(() => void runGcal(false), 4000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.events, data.tombstones]);
+  useEffect(() => {
+    void runGcal(false);
+    const onVis = () => { if (document.visibilityState === 'visible') void runGcal(false); };
+    document.addEventListener('visibilitychange', onVis);
+    const t = window.setInterval(() => void runGcal(false), 5 * 60_000);
+    const off = onTokenChange(() => void runGcal(false));
+    return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); off(); };
+  }, [runGcal]);
+  /** Your events plus those of the shown Google calendars. */
+  const cal: Data = useMemo(() => {
+    if (!gcfg.on) return data;
+    const extra = gcfg.shown.flatMap((c) => gcache[c] ?? []);
+    return extra.length ? { ...data, events: [...data.events, ...extra] } : data;
+  }, [data, gcfg.on, gcfg.shown, gcache]);
 
   const actions = useMemo(() => {
     // Every action starts from the guild as it is now.
@@ -330,7 +475,11 @@ function useStoreValue() {
 
       // Habits
       toggleHabit(id: number) { apply(toggleHabit(d(), id, today)); },
-      createHabit(h: Pick<Habit, 'title' | 'every' | 'size' | 'target'>) {
+      /** Adds to (or takes from) today's count of an amount habit. */
+      adjustHabit(id: number, delta: number) { apply(adjustAmount(d(), id, delta, today)); },
+      /** Sets today's count to a number typed in. */
+      setHabitCount(id: number, n: number) { const h = d().habits.find((x) => x.id === id); if (h) apply(adjustAmount(d(), id, Math.max(0, Math.round(n)) - countToday(h, today), today)); },
+      createHabit(h: Pick<Habit, 'title' | 'every' | 'size' | 'target' | 'amount' | 'unit' | 'step'>) {
         const cur = d();
         commit({ ...cur, habits: [...cur.habits, { id: nextId(cur.habits), log: [], created: today, ...h }] });
         showToast('Habit started', h.title);
@@ -359,8 +508,71 @@ function useStoreValue() {
         setUi({ eventSheet: null, calDay: e.start });
         showToast('Event added', e.title);
       },
-      updateEvent(id: number, patch: Partial<CalEvent>) { commit({ ...d(), events: d().events.map((e) => (e.id === id ? { ...e, ...patch } : e)) }); },
-      deleteEvent(id: number) { commit({ ...d(), events: d().events.filter((e) => e.id !== id) }); setUi({ eventSheet: null }); },
+      updateEvent(id: number, patch: Partial<CalEvent>) {
+        const old = d().events.find((e) => e.id === id) ?? Object.values(gcacheRef.current).flat().find((e) => e.id === id);
+        if (id < 0) void actions.editGoogleEvent(id, patch);
+        else commit({ ...d(), events: d().events.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+        // Moving the event offers to move the quests prepared for it by the same amount.
+        if (old && patch.start && patch.start !== old.start) {
+          const shift = dayDiff(patch.start, old.start);
+          const linked = linkedQuests(dataRef.current.quests, id).filter((q) => q.status !== 'done' && q.due);
+          if (linked.length) setUi({ confirm: {
+            title: 'Move its quests too?', tone: 'go', cancelLabel: 'Leave them', confirmLabel: 'Move ' + linked.length + (linked.length === 1 ? ' quest' : ' quests'),
+            body: '“' + old.title + '” moved ' + Math.abs(shift) + (Math.abs(shift) === 1 ? ' day ' : ' days ') + (shift > 0 ? 'later' : 'earlier') + '. Move ' + (linked.length === 1 ? 'the quest' : 'the ' + linked.length + ' quests') + ' prepared for it by the same amount?',
+            onConfirm: () => commit({ ...dataRef.current, quests: dataRef.current.quests.map((q) => (linked.some((l) => l.id === q.id) ? { ...q, due: addDays(q.due!, shift) } : q)) }),
+          } });
+        }
+      },
+      /** A preparation quest for an event. */
+      addPrepQuest(eventId: number) {
+        const e = [...d().events, ...Object.values(gcacheRef.current).flat()].find((x) => x.id === eventId);
+        if (!e) return;
+        actions.createQuest(prepQuest(e));
+      },
+      deleteEvent(id: number) {
+        if (id < 0) { void actions.deleteGoogleEvent(id); return; }
+        commit({ ...d(), events: d().events.filter((e) => e.id !== id) });
+        setUi({ eventSheet: null });
+      },
+      /** Edits an event that lives only in Google Calendar: straight to Google, then into the cache. */
+      async editGoogleEvent(id: number, patch: Partial<CalEvent>) {
+        const found = Object.entries(gcacheRef.current).flatMap(([c, l]) => l.map((e) => [c, e] as const)).find(([, e]) => e.id === id);
+        if (!found) return;
+        const [calId, old] = found;
+        try {
+          const tok = await getToken(CALENDAR_SCOPE);
+          const next = { ...old, ...patch, g: old.g };
+          const res = await gPatch(tok, calId, old.g!.id, toGoogle(next, timeZone()));
+          const updated = res ? (fromGoogle(res, calId) ?? next) : next;
+          const cache = { ...gcacheRef.current, [calId]: (gcacheRef.current[calId] ?? []).map((e) => (e.id === id ? { ...updated, companions: next.companions } : e)) };
+          setG(gcfgRef.current, cache);
+          setUi({ eventMode: 'view' });
+        } catch (e) { showToast('Google Calendar', e instanceof Error ? e.message : 'Could not save.'); }
+      },
+      async deleteGoogleEvent(id: number) {
+        const found = Object.entries(gcacheRef.current).flatMap(([c, l]) => l.map((e) => [c, e] as const)).find(([, e]) => e.id === id);
+        if (!found) return;
+        try {
+          const tok = await getToken(CALENDAR_SCOPE);
+          await gRemove(tok, found[0], found[1].g!.id);
+          setG(gcfgRef.current, { ...gcacheRef.current, [found[0]]: gcacheRef.current[found[0]].filter((e) => e.id !== id) });
+          setUi({ eventSheet: null });
+        } catch (e) { showToast('Google Calendar', e instanceof Error ? e.message : 'Could not delete.'); }
+      },
+      /** Switches Google Calendar sync on (a sign-in, so from a tap) or off. */
+      async setCalendarSync(on: boolean) {
+        if (!on) { setG({ ...gcfgRef.current, on: false }); setGstate({ status: 'off' }); return; }
+        setG({ ...gcfgRef.current, on: true });
+        await runGcal(true);
+      },
+      setCalendars(patch: Partial<Pick<GCalConfig, 'shown' | 'target'>>) {
+        const cfg = { ...gcfgRef.current, ...patch };
+        // A calendar that is no longer shown forgets its sync position, so showing it again fetches fresh.
+        for (const c of cfg.calendars) if (!cfg.shown.includes(c.id)) { delete cfg.tokens[c.id]; delete cfg.full[c.id]; }
+        setG(cfg, Object.fromEntries(Object.entries(gcacheRef.current).filter(([c]) => cfg.shown.includes(c))));
+        void runGcal(false);
+      },
+      calendarSyncNow() { return runGcal(true); },
       /** Adds imported events, skipping any whose .ics UID is already in the calendar. Returns how many were added. */
       importEvents(list: Omit<CalEvent, 'id'>[]): number {
         const cur = d(), known = new Set(cur.events.map((e) => e.uid).filter(Boolean));
@@ -369,6 +581,31 @@ function useStoreValue() {
         commit({ ...cur, events: [...cur.events, ...fresh] });
         return fresh.length;
       },
+      /** Ends the "Plan your day" card for today and picks the chosen quests; yesterday's picks that weren't chosen expire. */
+      planDay(ids: number[]) {
+        const cur = d();
+        commit({
+          ...cur,
+          quests: cur.quests.map((q) => (ids.includes(q.id) ? { ...q, pick: today } : q.pick && q.pick < today ? { ...q, pick: undefined } : q)),
+          profile: { ...cur.profile, plannedDay: today },
+        });
+      },
+      today() { return today; },
+      /** Adds a dated note "Talked" to a companion, which counts as the last contact. */
+      talkedToday(id: string) {
+        const cur = d();
+        commit({ ...cur, companions: cur.companions.map((c) => (c.id === id ? { ...c, notes: [...c.notes, { t: 'Talked', date: today, contact: true }], later: undefined } : c)) });
+        showToast('Noted', 'You talked today');
+      },
+      /** A quest to plan something with someone, due in a week. */
+      planWith(id: string) {
+        const c = d().companions.find((x) => x.id === id);
+        if (!c) return;
+        actions.createQuest({ title: 'Plan something with ' + c.first, quad: 'main', due: addDays(today, 7), size: 'S', campaign: null, status: 'todo', notes: [], steps: [], companions: [id] });
+        actions.laterContact(id);
+      },
+      /** Hides someone's Keep in touch reminder for a week. */
+      laterContact(id: string) { const cur = d(); commit({ ...cur, companions: cur.companions.map((c) => (c.id === id ? { ...c, later: addDays(today, 7) } : c)) }); },
       markReviewed(monday: string) { const cur = d(); commit({ ...cur, profile: { ...cur.profile, reviewedWeek: monday } }); setUi({ reviewOpen: false }); },
 
       // Guild
@@ -424,8 +661,19 @@ function useStoreValue() {
         tick(true);
       },
 
+      // Sync
+      /** Turns automatic Drive sync on (with a sign-in, so call it from a tap) or off. */
+      async setAutoSync(on: boolean) {
+        setAutoSyncFlag(on);
+        if (!on) { setSync((s) => ({ ...s, status: 'off' })); return; }
+        setSync((s) => ({ ...s, status: 'paused' }));
+        await runSync(true);
+      },
+      /** Renews the sign-in (a tap) and syncs. */
+      syncNow() { return runSync(true); },
+
       // Backup
-      replaceData(next: Data) { commit(next); setUi({ openId: null, gDetail: null, campaign: '', profileOpen: false }); },
+      replaceData(next: Data) { commitRaw(next); setUi({ openId: null, gDetail: null, campaign: '', profileOpen: false }); },
 
       /** Generic edit for Glossary data that never pays out. */
       update(fn: (d: Data) => Data) { commit(fn(d())); },
@@ -443,10 +691,10 @@ function useStoreValue() {
       openQuest(id: number) { setUi({ openId: id, newOpen: false, campSheet: null, eventSheet: null, sheetMode: 'view' }); },
       openEvent(id: number | 'new') { setUi({ eventSheet: id, eventMode: id === 'new' ? 'edit' : 'view', openId: null, newOpen: false }); },
     };
-  }, [today, commit, apply, showToast, setUi, tick]);
+  }, [today, commit, commitRaw, apply, showToast, setUi, tick, runSync, runGcal, setG]);
 
   const canUndo = !!toast?.undo && !!undoRef.current && sameLog(data, undoRef.current.after);
-  return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions };
+  return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions, sync, cal, gcfg, gstate };
 }
 
 export type Store = ReturnType<typeof useStoreValue>;

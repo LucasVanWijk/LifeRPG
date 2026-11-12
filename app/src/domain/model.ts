@@ -10,12 +10,16 @@ export interface QuestNote { id: number; t: string }
 /** A step on a quest's checklist; steps are not cards of their own and pay nothing. */
 export interface QuestStep { id: number; t: string; done: boolean }
 
+export interface QuestRepeat { unit: 'day' | 'week' | 'month' | 'year'; n: number; from: 'due' | 'done' }
+
 /** A one-off task. Repeating things are Habits. */
 export interface Quest {
   id: number;
   title: string;
   quad: QuadKey;
   due: string | null;
+  /** Optional time of day (HH:MM) on the due date. */
+  dueTime?: string;
   size: SizeKey;
   campaign: string | null;
   status: Status;
@@ -23,16 +27,38 @@ export interface Quest {
   steps: QuestStep[];
   /** Ids of the companions this quest involves. */
   companions: string[];
+  /** The day this quest was picked for (shows on Today's Quests that day without changing its due date). */
+  pick?: string;
+  /** Comes back when finished: every N days, weeks, months or years, counted from the due date or from when it was done. */
+  repeat?: QuestRepeat | null;
+  /** Parked in the Someday list: not on the board, not open, never overdue. */
+  someday?: boolean;
+  /** The calendar event this quest is preparation for. */
+  event?: number;
+  /** The next quest this one created when it was finished (so undo can take it back). */
+  spawned?: number;
   /** Day the quest was completed (for Today's Quests + undo). */
   doneOn?: string | null;
   prevStatus?: Status | null;
+  /** When the quest last changed (epoch ms). Set by the store, used to merge copies from other devices. */
+  updated?: number;
+  /** When each field last changed, so two devices editing different fields keep both edits. */
+  fu?: Record<string, number>;
 }
 
 /**
  * A repeating habit. Daily habits are checked in once a day; weekly ones `target` times a week
  * (on different days). `log` holds the days it was done.
  */
-export interface Habit { id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string }
+export interface Habit {
+  id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string; updated?: number;
+  /** A daily amount (8 glasses, 10,000 steps, 20 pages): the day is done, and paid once, when the count reaches it. */
+  amount?: number; unit?: string;
+  /** How much one tap adds. */
+  step?: number;
+  /** Today's and recent days' counts. */
+  counts?: Record<string, number>;
+}
 
 export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;
@@ -40,22 +66,76 @@ export interface Campaign {
   completedOn?: string | null;
   /** The adventurer who carries this campaign: its quests' rewards go to them instead of the Champion. */
   bearerId?: string | null;
+  updated?: number;
 }
 
-export interface CompanionNote { t: string; date?: string; label?: string }
+export interface CompanionNote { t: string; date?: string; label?: string; /** A "Talked today" mark: counts as contact but doesn't show on the calendar. */ contact?: boolean }
 /** bday is MM-DD, or empty when unknown. */
-export interface Companion { id: string; name: string; first: string; rel: string; bday: string; notes: CompanionNote[] }
+export type Rhythm = 'week' | 'fortnight' | 'month' | 'quarter';
+export const RHYTHM_DAYS: Record<Rhythm, number> = { week: 7, fortnight: 14, month: 30, quarter: 91 };
+export const RHYTHM_NAME: Record<Rhythm, string> = { week: 'Every week', fortnight: 'Every two weeks', month: 'Every month', quarter: 'Every three months' };
+export interface GiftIdea { id: number; t: string; /** A tome this idea links to. */ tome?: string }
+export interface Companion {
+  id: string; name: string; first: string; rel: string; bday: string; notes: CompanionNote[]; updated?: number;
+  phone?: string; email?: string; address?: string;
+  /** Year of birth, to show an age. */
+  birthYear?: number;
+  /** Other companions. */
+  partner?: string; children?: string[];
+  met?: string; likes?: string; dislikes?: string; sizes?: string;
+  gifts?: GiftIdea[];
+  /** Any other label and value. */
+  extra?: { k: string; v: string }[];
+  /** Groups like Family or Colleagues. */
+  groups?: string[];
+  /** How often to keep in touch; `since` is the day the rhythm was set, `later` hides the reminder until that day. */
+  rhythm?: Rhythm | null; rhythmSince?: string; later?: string;
+}
 
-export interface TomeItem { id: number; t: string; done: boolean }
-export interface Tome { id: string; name: string; items: TomeItem[] }
+export interface TomeItem {
+  id: number; t: string; done: boolean;
+  /** In a log tome: stars (1 to 5), the day it was finished, and a line of review. */
+  rating?: number; finished?: string; review?: string;
+}
+export interface Tome {
+  id: string; name: string; items: TomeItem[]; updated?: number;
+  /** A reading or watching log: items can be rated, dated and reviewed. */
+  log?: boolean;
+  /** What the yearly count calls them ("books" gives "14 books in 2026"). */
+  noun?: string;
+}
 
-export interface CodexField { k: string; v: string; date?: string; label?: string }
-export interface CodexEntry { id: string; name: string; sub: string; icon: IconName; fields: CodexField[] }
 
 /** What's left of the old Hero: there is no "you" in the game, only the guild. */
 export interface Profile {
   /** Monday of the last week whose review was finished. */
   reviewedWeek?: string;
+  /** Which sections Home shows and in what order. Stored with the data, so it syncs between devices. */
+  home?: HomeLayout;
+  /** The last day the "Plan your day" card was dealt with. */
+  plannedDay?: string;
+  updated?: number;
+}
+
+export type HomeSection = 'today' | 'habits' | 'next' | 'week' | 'keep' | 'guild';
+export interface HomeLayout { order: HomeSection[]; hidden: HomeSection[] }
+export const HOME_SECTIONS: { key: HomeSection; name: string }[] = [
+  { key: 'today', name: "Today's Quests" },
+  { key: 'habits', name: 'Habits' },
+  { key: 'next', name: 'Up next' },
+  { key: 'week', name: 'The week' },
+  { key: 'keep', name: 'Keep in touch' },
+  { key: 'guild', name: 'Guild strip' },
+];
+export const DEFAULT_HOME_ORDER: HomeSection[] = HOME_SECTIONS.map((s) => s.key);
+
+/** The saved layout made complete: unknown sections dropped, missing ones appended in default order. */
+export function homeLayout(p: Profile): HomeLayout {
+  const known = new Set<HomeSection>(DEFAULT_HOME_ORDER);
+  const order = (p.home?.order ?? []).filter((k, i, a) => known.has(k) && a.indexOf(k) === i);
+  for (const k of DEFAULT_HOME_ORDER) if (!order.includes(k)) order.push(k);
+  const hidden = (p.home?.hidden ?? []).filter((k, i, a) => known.has(k) && a.indexOf(k) === i);
+  return { order, hidden };
 }
 
 export type Repeat = { every: 'daily' | 'weekly' | 'monthly' | 'yearly'; interval: number; until?: string };
@@ -77,10 +157,28 @@ export interface CalEvent {
   location: string;
   notes: string;
   companions: string[];
+  updated?: number;
+  /** Link to the Google Calendar copy of this event. */
+  g?: GoogleLink;
 }
 
+/**
+ * Where an event lives in Google Calendar. `rev` is Google's own change time at the last sync,
+ * `at` this event's `updated` at that moment: if either has moved, that side changed since.
+ * `series` marks one occurrence of a repeating Google event (the whole series is edited in Google).
+ */
+export interface GoogleLink { cal: string; id: string; rev?: string; at?: number; series?: string; link?: string }
+
+/** A free-form note: ideas, meeting notes, recipes. The body is plain text with a little formatting. */
+export interface Note { id: string; title: string; body: string; icon?: IconName; pinned: boolean; created: number; updated?: number }
+
+/** Left behind by a deletion, so the deletion wins over an older copy on another device. */
+export interface Tombstone { key: string; at: number; /** An event deleted here that still exists in Google Calendar. */ g?: { cal: string; id: string } }
+/** Days a tombstone is kept. */
+export const TOMBSTONE_DAYS = 60;
+
 export interface Data {
-  version: 3;
+  version: 4;
   profile: Profile;
   /** Null until the guild is founded. */
   guild: Guild | null;
@@ -89,8 +187,9 @@ export interface Data {
   camps: Record<string, Campaign>;
   companions: Companion[];
   tomes: Tome[];
-  codex: CodexEntry[];
+  notes: Note[];
   events: CalEvent[];
+  tombstones: Tombstone[];
 }
 
 export interface Quad { key: QuadKey; name: string; sub: string; icon: IconName; mult: number; color: string; light: string }
@@ -123,7 +222,7 @@ export const STATUSES: [Status, string][] = [['todo', 'To Do'], ['doing', 'Doing
 export const STATUS_NAME: Record<Status, string> = { todo: 'To Do', doing: 'Doing', done: 'Done' };
 
 export const CAMP_ICONS: IconName[] = ['flag', 'compass', 'home', 'mountain', 'crown', 'star', 'trophy', 'sword', 'shield', 'flame', 'sparkles', 'heart', 'tree', 'plane', 'briefcase', 'graduation-cap', 'wrench', 'palette', 'music', 'gamepad', 'sun', 'moon', 'gift', 'feather'];
-export const CODEX_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map', 'gift', 'briefcase', 'music', 'coffee', 'plane', 'camera', 'gamepad', 'tree', 'graduation-cap', 'cart', 'palette', 'wrench', 'heart', 'star', 'cake', 'beer', 'calendar', 'clock', 'book-open', 'backpack', 'store', 'fish']
+export const NOTE_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map', 'gift', 'briefcase', 'music', 'coffee', 'plane', 'camera', 'gamepad', 'tree', 'graduation-cap', 'cart', 'palette', 'wrench', 'heart', 'star', 'cake', 'beer', 'calendar', 'clock', 'book-open', 'backpack', 'store', 'fish']
 
 
 /** XP scales with size and the quadrant multiplier (Main Quests ×1.5), rounded to 5; gold is a third of XP. */
@@ -148,7 +247,7 @@ export const noteRotation = (id: number, scale = 1, shift = 0) => ROT[(id + shif
 
 /** A fresh log: no guild yet, nothing written down. */
 export const emptyData = (): Data => ({
-  version: 3,
+  version: 4,
   profile: {},
   guild: null,
   quests: [],
@@ -156,6 +255,7 @@ export const emptyData = (): Data => ({
   camps: {},
   companions: [],
   tomes: [],
-  codex: [],
+  notes: [],
   events: [],
+  tombstones: [],
 });

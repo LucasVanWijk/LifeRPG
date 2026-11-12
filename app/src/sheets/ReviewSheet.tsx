@@ -7,6 +7,7 @@ import { Icon } from '../components/Icon';
 import { CloseBtn, Sheet } from '../components/common';
 import { isOverdue, RescheduleButtons } from '../components/Reschedule';
 import { KindMark } from '../screens/Calendar';
+import { somedayQuests, staleQuests } from '../domain/quests';
 import { useStore } from '../state/store';
 
 /** The week to review: this week on Sunday, otherwise the week that just ended. */
@@ -20,15 +21,21 @@ export const reviewDue = (data: Data, today: string) =>
   (data.quests.length + data.habits.length > 0) && data.profile.reviewedWeek !== reviewWeek(today);
 
 export function ReviewSheet() {
-  const { data, today, setUi, actions } = useStore();
+  const { data, cal, today, setUi, actions } = useStore();
   const monday = reviewWeek(today), sunday = addDays(monday, 6);
   const inWeek = (d: string) => d >= monday && d <= sunday;
   const done = chronicle(data).filter((e) => inWeek(e.date));
   const quests = done.filter((e) => e.kind === 'quest');
   const xp = done.reduce((n, e) => n + e.xp, 0);
   const overdue = data.quests.filter((q) => isOverdue(q, today));
-  const coming = calendarItems(data, today, addDays(today, 6));
+  const coming = calendarItems(cal, today, addDays(today, 6));
   const close = () => setUi({ reviewOpen: false });
+  const stale = staleQuests(data.quests, today, Date.now());
+  const someday = somedayQuests(data.quests);
+  const drop = (id: number, title: string) => actions.confirm({
+    title: 'Drop this quest?', body: '“' + title + '” will be deleted. Rewards already earned are kept.', confirmLabel: 'Drop quest',
+    onConfirm: () => actions.deleteQuest(id),
+  });
 
   return (
     <Sheet onClose={close} label="Weekly review">
@@ -83,6 +90,36 @@ export function ReviewSheet() {
         ))}
         {!overdue.length && <p className="muted" style={{ margin: 0, padding: '8px 0', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>Nothing overdue.</p>}
       </div>
+
+      {stale.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ fontSize: 21, paddingBottom: 4 }}>Gathering dust</h3>
+          <p className="muted" style={{ margin: '0 0 4px', fontSize: 13 }}>Untouched for 30 days, with no date ahead. Do it, schedule it, park it or drop it.</p>
+          {stale.map((q) => (
+            <div key={q.id} style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '8px 0', borderTop: '1px solid var(--q-rule)' }}>
+              <span className="heading" style={{ fontSize: 17 }}>{q.title}</span>
+              <span className="reschedule" role="group" aria-label={'What to do with ' + q.title}>
+                <button className="btn btn-secondary" style={{ minHeight: 30, padding: '2px 8px', fontSize: 12 }} onClick={() => actions.updateQuest(q.id, { pick: today })}>Today</button>
+                <button className="btn btn-secondary" style={{ minHeight: 30, padding: '2px 8px', fontSize: 12 }} onClick={() => { actions.openQuest(q.id); setUi({ sheetMode: 'edit', reviewOpen: false }); }}>Schedule</button>
+                <button className="btn btn-secondary" style={{ minHeight: 30, padding: '2px 8px', fontSize: 12 }} onClick={() => actions.updateQuest(q.id, { someday: true, pick: undefined })}>Someday</button>
+                <button className="btn btn-ghost inked" style={{ minHeight: 30, padding: '2px 8px', fontSize: 12 }} onClick={() => drop(q.id, q.title)}>Drop</button>
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {someday.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ fontSize: 21, paddingBottom: 4 }}>Someday <span className="muted tnum" style={{ fontSize: 13 }}>· {someday.length} parked</span></h3>
+          {someday.slice(0, 3).map((q) => (
+            <div key={q.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderTop: '1px solid var(--q-rule)' }}>
+              <span style={{ flex: 1, minWidth: 0 }} className="ellipsis">{q.title}</span>
+              <button className="btn btn-secondary" style={{ minHeight: 30, padding: '2px 8px', fontSize: 12 }} onClick={() => actions.updateQuest(q.id, { someday: false })}>Bring back</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         <h3 style={{ fontSize: 21, paddingBottom: 4 }}>Coming up</h3>

@@ -1,14 +1,14 @@
-import { addDays, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
-import { checkedInToday, habitDone, habitProgress, habitStreak } from '../domain/logic';
+import { addDays, dayDiff, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
+import { checkedInToday, countToday, habitDone, habitProgress, habitStreak, hasAmount } from '../domain/logic';
 import type { CalItem } from '../domain/calendar';
 import { calendarItems, kindText } from '../domain/calendar';
 import { isOverdue, RescheduleButtons } from '../components/Reschedule';
 import { KindMark, Legend } from './Calendar';
 import { reviewDue, reviewWeek } from '../sheets/ReviewSheet';
 import { dismissIosWarning, iosAtRisk } from '../storage';
-import { EVERY_NAME, habitReward, QM, reward, streakText } from '../domain/model';
+import { EVERY_NAME, habitReward, homeLayout, QM, reward, streakText } from '../domain/model';
+import type { HomeSection } from '../domain/model';
 import { champion } from '../domain/guild/engine';
-import { CLASSES, xpToNext } from '../domain/guild/content';
 import { realDuration } from '../domain/guild/adventurer';
 import { AdvCrest } from '../components/guildParts';
 import { Crest } from '../components/Crest';
@@ -16,34 +16,56 @@ import { Icon } from '../components/Icon';
 import { questView, withNames } from '../components/common';
 import { stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
+import { overdueContacts } from '../domain/people';
+import { dayPoints, dayTooFull, FULL_DAY, isOpen, planCandidates, todayQuests } from '../domain/quests';
 import { backupDue, exportBackup, snoozeBackup } from '../backup';
 import { useStore } from '../state/store';
 
 export function Home() {
-  const { data, ui, setUi, today, actions, showToast } = useStore();
+  const { data, ui, setUi, today, actions, showToast, sync, cal, gstate, gcfg } = useStore();
   const [moving, setMoving] = useState<number | null>(null);
   const [iosNag, setIosNag] = useState(iosAtRisk);
   const [backupNag, setBackupNag] = useState(() => backupDue(data, today));
+  const [noticesOpen, setNoticesOpen] = useState(false);
   const g = data.guild;
   const champ = g ? champion(g) : undefined;
   const nextBack = g?.outings.filter((o) => !o.done).sort((a, b) => a.returnAt - b.returnAt)[0];
 
-  const todayList = data.quests
-    .filter((q) => q.status !== 'done' && q.due && q.due <= today)
-    .map((q) => ({ q, checked: false }))
-    .sort((a, b) => (a.q.due || today).localeCompare(b.q.due || today));
+  const layout = homeLayout(data.profile);
+  const notices: { key: string; short: string; long: string; actions: ReactNode }[] = [];
+  if (backupNag) notices.push({
+    key: 'backup', short: 'Backup due',
+    long: (backupNag.days === null ? "You haven't backed up your log yet." : "It's been " + backupNag.days + ' days since your last backup.') + ' Your log only lives in this browser.',
+    actions: <>
+      <button className="btn btn-ghost inked" onClick={() => { snoozeBackup(addDays(today, 3)); setBackupNag(null); }}>Later</button>
+      <button className="btn btn-primary inked" style={{ minHeight: 38 }} onClick={() => { showToast('Backup saved', exportBackup(data, today)); setBackupNag(null); }}>Back up now</button>
+    </>,
+  });
+  if (iosNag) notices.push({
+    key: 'ios', short: 'Safari may delete your log',
+    long: "Safari deletes data from sites you haven't opened in 7 days. Add Questlog to your Home Screen (Share → Add to Home Screen) to keep your log.",
+    actions: <button className="btn btn-ghost inked" onClick={() => { dismissIosWarning(); setIosNag(false); }}>Got it</button>,
+  });
+  if (reviewDue(data, today)) notices.push({
+    key: 'review', short: 'Week in review ready',
+    long: 'Your week in review (' + shortDate(reviewWeek(today)) + ' – ' + shortDate(addDays(reviewWeek(today), 6)) + ") is ready: what you did, and what's next.",
+    actions: <button className="btn btn-primary inked" style={{ minHeight: 38 }} onClick={() => setUi({ reviewOpen: true })}>Open</button>,
+  });
+
+  const keepList = overdueContacts(data, today);
+  const todayList = todayQuests(data.quests, today).map((q) => ({ q, checked: false }));
+  const full = dayTooFull(todayList.map((t) => t.q));
   const doneToday = data.quests.filter((q) => q.doneOn === today).length;
   const habitsDone = data.habits.filter((h) => habitDone(h, today)).length;
-  const seals = Object.entries(data.camps).filter(([, c]) => c.completedOn);
   const todayIds = new Set(todayList.map((t) => t.q.id));
   const upNext = data.quests
-    .filter((q) => q.quad === 'main' && q.status !== 'done' && !todayIds.has(q.id))
+    .filter((q) => q.quad === 'main' && isOpen(q) && !todayIds.has(q.id))
     .sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || a.id - b.id);
 
   const dow = (parseDay(today).getDay() + 6) % 7;
   const mon = addDays(today, -dow + ui.weekOffset * 7), sun = addDays(mon, 6);
-  const weekItems = calendarItems(data, mon, sun);
+  const weekItems = calendarItems(cal, mon, sun);
   const overdueCount = data.quests.filter((q) => isOverdue(q, today)).length;
   const m1 = parseDay(mon), m7 = parseDay(sun);
   const range = m1.getMonth() === m7.getMonth() ? m1.getDate() + ' – ' + m7.getDate() + ' ' + MON[m7.getMonth()] : shortDate(mon) + ' – ' + shortDate(sun);
@@ -57,102 +79,16 @@ export function Home() {
     else actions.goGlossary(it.target);
   };
 
-  return (
-    <div className="screen">
-      <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
-        <div className="screen-head">
-          <span className="kicker">Questlog</span>
-          <h1>{longDate(today)}</h1>
-        </div>
-        <button className="btn btn-icon btn-ghost inked" onClick={() => setUi({ profileOpen: true })} aria-label="Settings and backup" title="Settings and backup" style={{ width: 44, height: 44 }}>
-          <Icon n="wrench" size={19} />
-        </button>
-      </header>
-      {backupNag && (
-        <div className="panel backup-nag" role="status">
-          <span style={{ color: 'var(--color-accent-700)' }}><Icon n="lock" size={18} /></span>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>
-            {backupNag.days === null ? "You haven't backed up your log yet." : "It's been " + backupNag.days + ' days since your last backup.'} Your log only lives in this browser.
-          </span>
-          <span style={{ display: 'flex', gap: 6 }}>
-            <button className="btn btn-ghost inked" onClick={() => { snoozeBackup(addDays(today, 3)); setBackupNag(null); }}>Later</button>
-            <button className="btn btn-primary inked" style={{ minHeight: 38 }} onClick={() => { showToast('Backup saved', exportBackup(data, today)); setBackupNag(null); }}>Back up now</button>
-          </span>
-        </div>
-      )}
-      {iosNag && (
-        <div className="panel backup-nag" role="status">
-          <span style={{ color: 'var(--q-wax)' }}><Icon n="alert" size={18} /></span>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>Safari deletes data from sites you haven't opened in 7 days. Add Questlog to your Home Screen (Share → Add to Home Screen) to keep your log.</span>
-          <button className="btn btn-ghost inked" onClick={() => { dismissIosWarning(); setIosNag(false); }}>Got it</button>
-        </div>
-      )}
-      {reviewDue(data, today) && (
-        <button className="panel review-card" onClick={() => setUi({ reviewOpen: true })}>
-          <span className="seal" style={{ width: 34, height: 34 }}><Icon n="scroll" size={16} /></span>
-          <span style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
-            <span className="heading" style={{ display: 'block', fontSize: 19 }}>Your week in review</span>
-            <span className="muted tnum" style={{ fontSize: 13 }}>{shortDate(reviewWeek(today))} – {shortDate(addDays(reviewWeek(today), 6))} · what you did, and what's next</span>
-          </span>
-          <Icon n="chevron-right" size={17} />
-        </button>
-      )}
-      <QuickAdd />
-      <div className="home-grid">
-        <section className="panel-framed hero-card">
-          <button className="hero-btn" onClick={() => champ ? setUi({ tab: 'guild', advSheet: champ.id }) : actions.goTab('guild')} aria-label={champ ? 'Open ' + champ.first : 'Open the guild'}>
-            {champ ? <AdvCrest a={champ} size={64} /> : g ? <Crest seed={g.crestSeed} size={64} /> : null}
-            <span style={{ minWidth: 0, flex: 1 }}>
-              <span className="kicker">{champ ? 'Champion of ' + g!.name : g ? g.name : 'Your guild'}</span>
-              <span className="heading" style={{ display: 'block', fontSize: 28, lineHeight: 1.05 }}>{champ ? champ.first + ' ' + champ.family : 'No Champion'}</span>
-              <span className="muted" style={{ fontStyle: 'italic', fontSize: 15 }}>{champ ? 'Level ' + champ.level + ' ' + CLASSES[champ.cls].name : 'Real-life XP is banked until you choose one'}</span>
-            </span>
-            <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={18} /></span>
-          </button>
-          {champ && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <div className="muted tnum" style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12 }}>
-                <span style={{ letterSpacing: '.12em', textTransform: 'uppercase', fontSize: 11 }}>Experience</span>
-                <span>{Math.floor(champ.xp)} / {xpToNext(champ.level)} XP</span>
-              </div>
-              <div className="bar" role="progressbar" aria-valuenow={Math.floor(champ.xp)} aria-valuemax={xpToNext(champ.level)} aria-label="Experience">
-                <div style={{ width: Math.round((champ.xp / xpToNext(champ.level)) * 100) + '%' }} />
-              </div>
-              <div style={{ fontSize: 12, color: 'var(--color-accent-700)' }}>{Math.ceil(xpToNext(champ.level) - champ.xp)} XP to level {champ.level + 1}{champ.awayOn ? ' · away on an expedition' : ''}</div>
-            </div>
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--color-accent-700)', minWidth: 0 }}>
-              <Icon n="coins" size={20} />
-              <span className="heading tnum" style={{ fontSize: 24, color: 'var(--q-ink)' }}>{g?.gold ?? 0}</span>
-              <span className="muted ellipsis" style={{ fontSize: 13 }}>{nextBack ? 'next back in ' + realDuration(nextBack.returnAt - (Date.now() - g!.founded)) : 'guild gold'}</span>
-            </span>
-            <span style={{ display: 'flex', gap: 2 }}>
-              <button className="btn btn-ghost" onClick={() => setUi({ chronicleOpen: true })} style={{ color: 'var(--color-accent-700)' }}>History</button>
-              <button className="btn btn-ghost" onClick={() => actions.goTab('guild')} style={{ color: 'var(--color-accent-700)' }}>Guild</button>
-            </span>
-          </div>
-          {seals.length > 0 && (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
-              <span className="label">Seals earned</span>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {seals.map(([k, c]) => (
-                  <button key={k} className="seal" title={c.seal + ' · ' + c.name} aria-label={c.seal + ', ' + c.name}
-                    onClick={() => { actions.goTab('quests'); setUi({ questView: 'campaign', campaign: k }); }}
-                    style={{ width: 34, height: 34, border: 0, cursor: 'pointer' }}><Icon n={c.icon} size={15} /></button>
-                ))}
-              </div>
-            </div>
-          )}
-        </section>
-
-        <section className="panel today home-today">
+  const sections: Record<HomeSection, ReactNode> = {
+    today: (
+        <section className="panel today home-today" key="today">
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
             <h3 style={{ fontSize: 24 }}>Today's Quests</h3>
             <span className="muted tnum" style={{ fontSize: 12 }}>
               {overdueCount > 0 && <span style={{ color: 'var(--q-wax)' }}>{overdueCount} overdue · </span>}{todayList.length} to do · {doneToday} done today
             </span>
           </div>
+          {full && <p role="status" style={{ margin: 0, padding: '6px 0 10px', fontSize: 13, color: 'var(--q-wax)' }}>This looks like a full day ({dayPoints(todayList.map((t) => t.q))} points; around {FULL_DAY} is a lot). Move something if you can.</p>}
           {todayList.map(({ q, checked }) => {
             const v = questView(q, today, data.camps);
             return (
@@ -167,6 +103,7 @@ export function Home() {
                     <span style={{ color: checked ? 'var(--q-moss)' : v.dueColor }}>{checked ? 'Completed today' : v.dueLabel}</span>
                     {v.campaignName && <span style={{ gap: 4, minWidth: 0, maxWidth: 200 }} title={v.campaignName}><Icon n="flag" size={11} /><span className="ellipsis">{v.campaignName}</span></span>}
                     {stepCount(q) && <span className="tnum">{stepCount(q)} steps</span>}
+                    {q.pick === today && <span style={{ gap: 4 }}><Icon n="sun" size={11} />Picked</span>}
                     {withNames(q, data.companions) && <span style={{ gap: 4 }}><Icon n="users" size={11} />{withNames(q, data.companions)}</span>}
                   </div>
                 </div>
@@ -180,7 +117,64 @@ export function Home() {
           {!todayList.length && <p className="muted" style={{ margin: 0, padding: '14px 0', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic' }}>No quests due today.</p>}
         </section>
 
-        <section className="panel today home-next">
+    ),
+    habits: (
+        <section className="panel today home-habits" key="habits">
+          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
+            <h3 style={{ fontSize: 24 }}>Habits</h3>
+            {data.habits.length > 0 && <span className="muted tnum" style={{ fontSize: 12 }}>{habitsDone} of {data.habits.length} done</span>}
+          </div>
+          {data.habits.map((h) => {
+            const done = habitDone(h, today), streak = habitStreak(h, today), prog = habitProgress(h, today);
+            // With a weekly target of several days the box is today's check-in; otherwise it is the whole period.
+            const multi = prog.target > 1, ticked = multi ? checkedInToday(h, today) : done, locked = multi && done && !ticked;
+            if (hasAmount(h)) {
+              const n = countToday(h, today), full = n >= h.amount!;
+              return (
+                <div key={h.id} className="today-row" style={{ flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 160px', minWidth: 0, padding: '9px 0' }}>
+                    <div className="heading" style={{ fontSize: 19, lineHeight: 1.2, color: full ? 'var(--color-accent-700)' : 'var(--q-ink)' }}>{h.title}</div>
+                    <div className="bar" role="progressbar" aria-valuenow={n} aria-valuemax={h.amount} aria-label={h.title + ' progress'} style={{ height: 7, margin: '6px 0 4px' }}><div style={{ width: Math.min(100, Math.round((n / h.amount!) * 100)) + '%', background: full ? 'var(--q-moss)' : undefined }} /></div>
+                    <div className="meta">
+                      <span className="tnum">{n} / {h.amount}{h.unit ? ' ' + h.unit : ''}{full ? ' · done' : ''}</span>
+                      {streak > 0 && <span style={{ gap: 4, color: 'var(--q-wax)' }}><Icon n="repeat" size={12} />{streakText(streak, h.every)}</span>}
+                    </div>
+                  </div>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button className="btn btn-secondary btn-icon" aria-label={'Take ' + (h.step || 1) + ' off ' + h.title} disabled={n === 0} onClick={() => actions.adjustHabit(h.id, -(h.step || 1))} style={{ width: 36, height: 36 }}>−</button>
+                    <input className="input tnum" type="number" min={0} inputMode="numeric" aria-label={h.title + ' count'} value={n} onChange={(e) => actions.setHabitCount(h.id, Number(e.target.value) || 0)} style={{ width: 68, minHeight: 36, textAlign: 'center', padding: '0 4px' }} />
+                    <button className="btn btn-primary btn-icon inked" aria-label={'Add ' + (h.step || 1) + ' to ' + h.title} onClick={() => actions.adjustHabit(h.id, h.step || 1)} style={{ width: 36, height: 36 }}>+{h.step && h.step > 1 ? h.step : ''}</button>
+                  </span>
+                </div>
+              );
+            }
+            return (
+              <div key={h.id} className="today-row">
+                <button className="today-check" onClick={() => actions.toggleHabit(h.id)} disabled={locked} aria-label={(ticked ? 'Undo ' : 'Check in ') + h.title} aria-pressed={ticked}>
+                  <span className={'checkbox' + (ticked || locked ? ' on' : '')} style={{ width: 22, height: 22, borderRadius: '50%', opacity: locked ? 0.5 : 1 }}>{(ticked || locked) && <Icon n="check" size={15} stroke={2.4} />}</span>
+                </button>
+                <div style={{ flex: 1, minWidth: 0, padding: '9px 0' }}>
+                  <div className="heading" style={{ fontSize: 19, lineHeight: 1.2, color: done ? 'var(--color-accent-700)' : 'var(--q-ink)' }}>{h.title}</div>
+                  <div className="meta">
+                    <span className="tnum">{multi ? prog.target + '× a week · ' + prog.count + ' of ' + prog.target + (done ? ' · week done' : '') : EVERY_NAME[h.every] + (h.every === 'weekly' && done ? ' · done this week' : '')}</span>
+                    {streak > 0 && <span style={{ gap: 4, color: 'var(--q-wax)' }}><Icon n="repeat" size={12} />{streakText(streak, h.every)}</span>}
+                  </div>
+                </div>
+                <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{habitReward(h).xp} XP</span>
+              </div>
+            );
+          })}
+          {!data.habits.length && (
+            <p className="muted" style={{ margin: 0, padding: '10px 0 12px', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>
+              No habits yet. <button className="btn btn-ghost" style={{ padding: '0 4px', fontStyle: 'normal', color: 'var(--color-accent-700)' }}
+                onClick={() => { actions.goTab('quests'); setUi({ questView: 'habits' }); }}>Start one</button>
+            </p>
+          )}
+        </section>
+
+    ),
+    next: (
+        <section className="panel today home-next" key="next">
           <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
             <h3 style={{ fontSize: 24 }}>Up next</h3>
             <span className="tnum" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12, color: QM.main.color }}><span className="dot" />Main Quests</span>
@@ -215,40 +209,9 @@ export function Home() {
           )}
         </section>
 
-        <section className="panel today home-habits">
-          <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
-            <h3 style={{ fontSize: 24 }}>Habits</h3>
-            {data.habits.length > 0 && <span className="muted tnum" style={{ fontSize: 12 }}>{habitsDone} of {data.habits.length} done</span>}
-          </div>
-          {data.habits.map((h) => {
-            const done = habitDone(h, today), streak = habitStreak(h, today), prog = habitProgress(h, today);
-            // With a weekly target of several days the box is today's check-in; otherwise it is the whole period.
-            const multi = prog.target > 1, ticked = multi ? checkedInToday(h, today) : done, locked = multi && done && !ticked;
-            return (
-              <div key={h.id} className="today-row">
-                <button className="today-check" onClick={() => actions.toggleHabit(h.id)} disabled={locked} aria-label={(ticked ? 'Undo ' : 'Check in ') + h.title} aria-pressed={ticked}>
-                  <span className={'checkbox' + (ticked || locked ? ' on' : '')} style={{ width: 22, height: 22, borderRadius: '50%', opacity: locked ? 0.5 : 1 }}>{(ticked || locked) && <Icon n="check" size={15} stroke={2.4} />}</span>
-                </button>
-                <div style={{ flex: 1, minWidth: 0, padding: '9px 0' }}>
-                  <div className="heading" style={{ fontSize: 19, lineHeight: 1.2, color: done ? 'var(--color-accent-700)' : 'var(--q-ink)' }}>{h.title}</div>
-                  <div className="meta">
-                    <span className="tnum">{multi ? prog.target + '× a week · ' + prog.count + ' of ' + prog.target + (done ? ' · week done' : '') : EVERY_NAME[h.every] + (h.every === 'weekly' && done ? ' · done this week' : '')}</span>
-                    {streak > 0 && <span style={{ gap: 4, color: 'var(--q-wax)' }}><Icon n="repeat" size={12} />{streakText(streak, h.every)}</span>}
-                  </div>
-                </div>
-                <span className="tnum" style={{ fontSize: 12, color: 'var(--color-accent-700)', whiteSpace: 'nowrap' }}>+{habitReward(h).xp} XP</span>
-              </div>
-            );
-          })}
-          {!data.habits.length && (
-            <p className="muted" style={{ margin: 0, padding: '10px 0 12px', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>
-              No habits yet. <button className="btn btn-ghost" style={{ padding: '0 4px', fontStyle: 'normal', color: 'var(--color-accent-700)' }}
-                onClick={() => { actions.goTab('quests'); setUi({ questView: 'habits' }); }}>Start one</button>
-            </p>
-          )}
-        </section>
-
-        <section className="panel week">
+    ),
+    week: (
+        <section className="panel week" key="week">
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <div><h3 style={{ fontSize: 24 }}>{weekTitle}</h3><div className="muted tnum" style={{ fontSize: 12 }}>{range}</div></div>
             <div style={{ display: 'flex', gap: 2 }}>
@@ -288,8 +251,125 @@ export function Home() {
             )}
           </div>
         </section>
+    ),
+    keep: keepList.length > 0 ? (
+      <section className="panel today home-keep" key="keep">
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
+          <h3 style={{ fontSize: 24 }}>Keep in touch</h3>
+          <span className="muted tnum" style={{ fontSize: 12 }}>{keepList.length} overdue</span>
+        </div>
+        {keepList.slice(0, 5).map(({ c, last, days }) => (
+          <div key={c.id} className="today-row" style={{ flexWrap: 'wrap', rowGap: 4 }}>
+            <button onClick={() => actions.goGlossary('companion:' + c.id)} style={{ flex: '1 1 150px', minWidth: 0, padding: '9px 0', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'var(--q-ink)', fontFamily: 'var(--font-body)' }}>
+              <div className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{c.name}</div>
+              <div className="meta"><span>{last ? 'Last in touch ' + dayDiff(today, last) + ' days ago' : 'No contact yet'}</span>{days > 0 && <span style={{ color: 'var(--q-wax)' }}>{days} days overdue</span>}</div>
+            </button>
+            <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" style={{ minHeight: 32, padding: '2px 10px', fontSize: 13 }} onClick={() => actions.talkedToday(c.id)}>Talked today</button>
+              <button className="btn btn-secondary" style={{ minHeight: 32, padding: '2px 10px', fontSize: 13 }} onClick={() => actions.planWith(c.id)}>Plan something</button>
+              <button className="btn btn-ghost inked" style={{ minHeight: 32, padding: '2px 8px', fontSize: 13 }} onClick={() => actions.laterContact(c.id)}>Later</button>
+            </span>
+          </div>
+        ))}
+        {keepList.length > 5 && <p className="muted" style={{ margin: 0, padding: '6px 0', fontSize: 13 }}>and {keepList.length - 5} more</p>}
+      </section>
+    ) : null,
+    guild: g ? (
+        <section className="panel home-strip" key="guild">
+          <button className="strip-btn" onClick={() => actions.goTab('guild')} aria-label={champ ? 'Open the guild, Champion ' + champ.first : 'Open the guild'}>
+            {champ ? <AdvCrest a={champ} size={34} /> : g ? <Crest seed={g.crestSeed} size={34} /> : null}
+            <span className="ellipsis" style={{ flex: 1, minWidth: 0, textAlign: 'left', fontSize: 15 }}>
+              <span className="heading" style={{ fontSize: 17 }}>{champ ? champ.first + ' ' + champ.family : g ? 'No Champion' : 'The guild'}</span>
+              {champ && <span className="muted"> · Lv {champ.level}</span>}
+            </span>
+            <span className="tnum" style={{ display: 'inline-flex', alignItems: 'center', gap: 5, color: 'var(--color-accent-700)' }}>
+              <Icon n="coins" size={16} /><span className="heading" style={{ fontSize: 17, color: 'var(--q-ink)' }}>{g?.gold ?? 0}</span>
+            </span>
+            {nextBack && <span className="muted ellipsis" style={{ fontSize: 12, maxWidth: 110 }}>back in {realDuration(nextBack.returnAt - (Date.now() - g!.founded))}</span>}
+            <Icon n="chevron-right" size={16} />
+          </button>
+        </section>
+    ) : null,
+  };
+
+  return (
+    <div className="screen">
+      <header style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12 }}>
+        <div className="screen-head">
+          <span className="kicker">Questlog</span>
+          <h1>{longDate(today)}</h1>
+        </div>
+        <button className="btn btn-icon btn-ghost inked" onClick={() => setUi({ profileOpen: true })} aria-label="Settings and backup" title="Settings and backup" style={{ width: 44, height: 44 }}>
+          <Icon n="wrench" size={19} />
+        </button>
+      </header>
+      {notices.length > 0 && (
+        <div className="panel notices" role="status">
+          <button className="notices-line" onClick={() => setNoticesOpen(!noticesOpen)} aria-expanded={noticesOpen}>
+            <span style={{ color: 'var(--q-wax)' }}><Icon n="alert" size={16} /></span>
+            <span style={{ flex: 1, minWidth: 0, fontSize: 14, textAlign: 'left' }} className="ellipsis">
+              {notices.length === 1 ? notices[0].short : notices.length + ' notices: ' + notices.map((n) => n.short).join(' · ')}
+            </span>
+            <Icon n={noticesOpen ? 'chevron-up' : 'chevron-down'} size={16} />
+          </button>
+          {noticesOpen && notices.map((n) => (
+            <div key={n.key} className="notice-row">
+              <span style={{ flex: 1, minWidth: 0, fontSize: 14 }}>{n.long}</span>
+              <span style={{ display: 'flex', gap: 6 }}>{n.actions}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      {(sync.status === 'paused' || sync.status === 'error' || (gcfg.on && (gstate.status === 'paused' || gstate.status === 'error'))) && (
+        <button className="panel sync-line" onClick={() => { void actions.syncNow(); void actions.calendarSyncNow(); }}>
+          <Icon n="repeat" size={15} />
+          <span style={{ flex: 1, textAlign: 'left' }}>{sync.status === 'error' ? (sync.error ?? 'Sync failed') + ' · tap to retry' : gstate.status === 'error' && sync.status !== 'paused' ? (gstate.error ?? 'Calendar sync failed') + ' · tap to retry' : 'Sync paused · tap to resume'}</span>
+        </button>
+      )}
+      <PlanDay />
+      <QuickAdd />
+      <div className="home-grid">
+        {layout.order.filter((k) => !layout.hidden.includes(k)).map((k) => sections[k])}
       </div>
     </div>
+  );
+}
+
+/** The first time the app is opened each day: pick what to do from yesterday's leftovers, Crisis quests and Main Quests. */
+function PlanDay() {
+  const { data, today, actions } = useStore();
+  const { carried, crisis, main } = planCandidates(data.quests, today);
+  const [chosen, setChosen] = useState<Set<number>>(() => new Set(carried.map((q) => q.id)));
+  const offered = [...carried, ...crisis, ...main];
+  if (data.profile.plannedDay === today || !offered.length) return null;
+  const picked = data.quests.filter((q) => chosen.has(q.id));
+  const load = todayQuests(data.quests, today).concat(picked);
+  const toggle = (id: number) => setChosen((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const done = () => actions.planDay([...chosen]);
+  const group = (title: string, list: typeof offered) => list.length > 0 && (
+    <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <span className="label" style={{ padding: '6px 0 2px' }}>{title}</span>
+      {list.map((q) => (
+        <label key={q.id} className="toggle-row" style={{ minHeight: 40 }}>
+          <input type="checkbox" checked={chosen.has(q.id)} onChange={() => toggle(q.id)} />
+          <span style={{ flex: 1, minWidth: 0 }}>{q.title}</span>
+          <span className="tnum muted" style={{ fontSize: 12 }}>{q.size}{q.due ? ' · ' + shortDate(q.due) : ''}</span>
+        </label>
+      ))}
+    </div>
+  );
+  return (
+    <section className="panel" style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 8 }}>
+        <h3 style={{ fontSize: 22 }}>Plan your day</h3>
+        <button className="btn btn-ghost" onClick={() => actions.planDay([])} style={{ minHeight: 32 }}>Skip</button>
+      </div>
+      {group('Picked yesterday, not done', carried)}
+      {group('Crisis', crisis)}
+      {group('Main Quests', main.slice(0, 8))}
+      {dayTooFull(load) && <p role="status" style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--q-wax)' }}>That is a full day ({dayPoints(load)} points). You can still go ahead.</p>}
+      <button className="btn btn-primary inked" onClick={done} style={{ minHeight: 42, marginTop: 6 }}>{chosen.size ? 'Pick ' + chosen.size + ' for today' : 'Nothing extra today'}</button>
+    </section>
   );
 }
 

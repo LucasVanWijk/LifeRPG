@@ -32,7 +32,7 @@ export interface CalItem {
   companions?: string[];
   /** 'event:3', 'quest:12', or a Glossary target like 'companion:sophie'. */
   target: string;
-  /** For Glossary dates: the companion or codex entry they come from. */
+  /** For Glossary dates: the companion or note they come from. */
   source?: string;
   /** For multi-day events: which day of how many. */
   span?: { day: number; of: number };
@@ -84,12 +84,12 @@ export function eventItems(e: CalEvent, from: string, to: string): CalItem[] {
 }
 
 /** Everything between `from` and `to` (inclusive), sorted by day, then all-day first, then time. */
-export function calendarItems(data: Pick<Data, 'events' | 'quests' | 'companions' | 'codex'>, from: string, to: string): CalItem[] {
+export function calendarItems(data: Pick<Data, 'events' | 'quests' | 'companions' | 'notes'>, from: string, to: string): CalItem[] {
   const items: CalItem[] = [];
   for (const e of data.events) items.push(...eventItems(e, from, to));
   for (const q of data.quests) {
-    if (q.status !== 'done' && q.due && q.due >= from && q.due <= to) {
-      items.push({ date: q.due, kind: 'deadline', title: q.title, allDay: true, companions: q.companions, target: 'quest:' + q.id });
+    if (q.status !== 'done' && !q.someday && q.due && q.due >= from && q.due <= to) {
+      items.push({ date: q.due, kind: 'deadline', title: q.title, allDay: !q.dueTime, time: q.dueTime, companions: q.companions, target: 'quest:' + q.id });
     }
   }
   for (const g of glossaryEvents(data as Data, from)) {
@@ -115,4 +115,48 @@ export function repeatText(e: CalEvent, fmt: (d: string) => string): string {
   const d = parseDay(e.start);
   const on = every === 'weekly' ? ' on ' + WEEKDAY[d.getDay()] : every === 'monthly' ? ' on the ' + ORD(d.getDate()) : every === 'yearly' ? ' on ' + fmt(e.start) : '';
   return (interval > 1 ? 'Every ' + interval + ' ' + unit + 's' : 'Every ' + unit) + on + (until ? ', until ' + fmt(until) : '');
+}
+
+// ── Day and week views ──────────────────────────────────────
+
+export const toMinutes = (t: string) => Number(t.slice(0, 2)) * 60 + Number(t.slice(3, 5));
+export const fromMinutes = (m: number) => String(Math.floor(m / 60) % 24).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+/** Length of a block for something that has a start time but no end (a quest at 14:30). */
+export const DEFAULT_BLOCK = 45;
+
+export interface Placed { item: CalItem; start: number; end: number; col: number; cols: number }
+
+/**
+ * Where timed items sit in a day, in minutes from midnight. Items that overlap share the width:
+ * each gets a column, and every item in a cluster of overlaps is as wide as the cluster is deep.
+ */
+export function layoutDay(items: CalItem[]): Placed[] {
+  const timed = items.filter((i) => !i.allDay && i.time).map((item) => {
+    const start = toMinutes(item.time!);
+    const end = Math.min(24 * 60, Math.max(start + 15, item.endTime && toMinutes(item.endTime) > start ? toMinutes(item.endTime) : start + DEFAULT_BLOCK));
+    return { item, start, end, col: 0, cols: 1 };
+  }).sort((a, b) => a.start - b.start || b.end - a.end);
+  let cluster: Placed[] = [], clusterEnd = -1;
+  const close = () => { const cols = Math.max(1, ...cluster.map((p) => p.col + 1)); for (const p of cluster) p.cols = cols; cluster = []; };
+  for (const p of timed) {
+    if (p.start >= clusterEnd) { close(); clusterEnd = -1; }
+    const taken = new Set(cluster.filter((o) => o.end > p.start).map((o) => o.col));
+    while (taken.has(p.col)) p.col++;
+    cluster.push(p);
+    clusterEnd = Math.max(clusterEnd, p.end);
+  }
+  close();
+  return timed;
+}
+
+/** Where an event or quest lands when dropped on a day at a time: its new fields, keeping an event's length. */
+export function moveEventTo(e: CalEvent, day: string, minutes: number | null): Partial<CalEvent> {
+  if (minutes === null || e.allDay) {
+    const span = dayDiff(e.end, e.start);
+    return { start: day, end: addDays(day, span) };
+  }
+  const startMin = toMinutes(e.startTime ?? '00:00');
+  const length = dayDiff(e.end, e.start) * 1440 + toMinutes(e.endTime ?? e.startTime ?? '00:00') - startMin;
+  const endTotal = minutes + Math.max(0, length);
+  return { start: day, startTime: fromMinutes(minutes), end: addDays(day, Math.floor(endTotal / 1440)), endTime: fromMinutes(endTotal % 1440) };
 }

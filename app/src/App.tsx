@@ -9,6 +9,7 @@ import { BuildingSheet, NewBuildingSheet } from './sheets/TownSheets';
 import { Calendar } from './screens/Calendar';
 import { EventSheet } from './sheets/EventSheet';
 import { ReviewSheet } from './sheets/ReviewSheet';
+import { ShareSheet } from './sheets/ShareSheet';
 import { Glossary } from './screens/Glossary';
 import { Home } from './screens/Home';
 import { Quests } from './screens/Quests';
@@ -31,7 +32,7 @@ export function App() {
   useEffect(() => {
     const on = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
-      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: null } : { openId: null, newOpen: false, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, away: null }));
+      setUi((u) => (u.confirm ? { confirm: null } : u.levelUp ? { levelUp: null } : { openId: null, newOpen: false, capture: null, campSheet: null, profileOpen: false, chronicleOpen: false, reviewOpen: false, eventSheet: null, advSheet: null, offerSheet: null, reportSheet: null, buildSheet: null, away: null }));
     };
     window.addEventListener('keydown', on);
     return () => window.removeEventListener('keydown', on);
@@ -110,6 +111,7 @@ export function App() {
       {ui.profileOpen && <ProfileSheet />}
       {ui.chronicleOpen && <ChronicleSheet />}
       {ui.reviewOpen && <ReviewSheet />}
+      {ui.capture && <ShareSheet shared={ui.capture} />}
       {ui.eventSheet !== null && <EventSheet key={String(ui.eventSheet)} id={ui.eventSheet} />}
       {g && ui.advSheet && <AdventurerSheet key={ui.advSheet} id={ui.advSheet} />}
       {g && ui.offerSheet && <SendSheet key={ui.offerSheet} id={ui.offerSheet} />}

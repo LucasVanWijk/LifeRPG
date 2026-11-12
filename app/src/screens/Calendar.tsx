@@ -4,7 +4,8 @@ import type { CalItem, CalKind } from '../domain/calendar';
 import { calendarItems, KINDS, kindText } from '../domain/calendar';
 import { parseIcs } from '../domain/ics';
 import { Icon } from '../components/Icon';
-import { ScreenHead } from '../components/common';
+import { ScreenHead, Seg } from '../components/common';
+import { TimeGrid, weekOf } from './CalendarTime';
 import { useStore } from '../state/store';
 
 /** The shape that goes with each kind's colour, so identity never rests on colour alone. */
@@ -28,7 +29,7 @@ export function Legend() {
 const monthStart = (d: string) => d.slice(0, 8) + '01';
 
 export function Calendar() {
-  const { data, ui, setUi, today, isDesk, actions, showToast } = useStore();
+  const { cal, ui, setUi, today, isDesk, actions, showToast } = useStore();
   const file = useRef<HTMLInputElement>(null);
   const sel = ui.calDay;
   const first = monthStart(sel);
@@ -37,11 +38,17 @@ export function Calendar() {
   // Drop a trailing week that is entirely next month.
   const weeks = days[35].slice(0, 7) !== first.slice(0, 7) ? 5 : 6;
   const shown = days.slice(0, weeks * 7);
-  const items = calendarItems(data, shown[0], shown[shown.length - 1]);
+  const items = calendarItems(cal, shown[0], shown[shown.length - 1]);
   const byDay = new Map<string, CalItem[]>();
   for (const it of items) byDay.set(it.date, [...(byDay.get(it.date) ?? []), it]);
   const month = parseDay(first);
   const go = (months: number) => setUi({ calDay: addMonths(first, months) });
+  const view = ui.calView ?? (isDesk ? 'month' : 'day');
+  const step = (n: number) => setUi({ calDay: addDays(sel, n * (view === 'week' ? 7 : 1)) });
+  const viewDays = view === 'week' ? weekOf(sel) : [sel];
+  const range = view === 'week'
+    ? parseDay(viewDays[0]).getDate() + ' ' + MONL[parseDay(viewDays[0]).getMonth()].slice(0, 3) + ' – ' + parseDay(viewDays[6]).getDate() + ' ' + MONL[parseDay(viewDays[6]).getMonth()].slice(0, 3)
+    : weekdayDate(sel);
 
   const importFile = async (f: File | undefined) => {
     if (!f) return;
@@ -60,14 +67,28 @@ export function Calendar() {
   return (
     <div className="screen" style={{ gap: 14 }}>
       <ScreenHead kicker={items.filter((i) => i.kind === 'event').length + ' events this month'} title="Calendar">
-        <span style={{ display: 'flex', gap: 6 }}>
+        <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <Seg<'month' | 'week' | 'day'> name="cal-view" value={view} onChange={(v) => setUi({ calView: v })} optStyle={{ minHeight: 40, padding: '8px 12px', fontSize: 14 }}
+            options={[{ key: 'month', label: 'Month' }, { key: 'week', label: 'Week' }, { key: 'day', label: 'Day' }]} />
           <button className="btn btn-secondary" onClick={() => file.current?.click()} style={{ minHeight: 40 }} title="Import an .ics file, e.g. exported from Google Calendar">Import</button>
           <button className="btn btn-primary inked" onClick={() => actions.openEvent('new')} style={{ minHeight: 40 }}><Icon n="plus" size={15} />Event</button>
         </span>
         <input ref={file} type="file" accept=".ics,text/calendar" hidden onChange={(e) => importFile(e.target.files?.[0])} />
       </ScreenHead>
 
-      <div className="cal-layout">
+      {view !== 'month' && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 style={{ flex: 1, fontSize: 24 }}>{range}</h2>
+            <button className="btn btn-ghost inked" onClick={() => setUi({ calDay: today })} disabled={viewDays.includes(today)}>Today</button>
+            <button className="btn btn-icon btn-secondary" onClick={() => step(-1)} aria-label={view === 'week' ? 'Previous week' : 'Previous day'} style={{ width: 40, height: 40 }}><Icon n="chevron-left" size={18} /></button>
+            <button className="btn btn-icon btn-secondary" onClick={() => step(1)} aria-label={view === 'week' ? 'Next week' : 'Next day'} style={{ width: 40, height: 40 }}><Icon n="chevron-right" size={18} /></button>
+          </div>
+          <TimeGrid days={viewDays} />
+          <Legend />
+        </>
+      )}
+      {view === 'month' && <div className="cal-layout">
         <section className="panel cal-month">
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '12px 14px 8px' }}>
             <h2 style={{ flex: 1, fontSize: 26 }}>{MONL[month.getMonth()]} <span className="muted tnum" style={{ fontWeight: 400 }}>{month.getFullYear()}</span></h2>
@@ -107,8 +128,8 @@ export function Calendar() {
           <div style={{ padding: '8px 14px 12px' }}><Legend /></div>
         </section>
 
-        <DayAgenda day={sel} items={byDay.get(sel) ?? calendarItems(data, sel, sel)} />
-      </div>
+        <DayAgenda day={sel} items={byDay.get(sel) ?? calendarItems(cal, sel, sel)} />
+      </div>}
       <p className="muted" style={{ margin: 0, fontSize: 12 }}>
         To bring over Google Calendar: on a computer open calendar.google.com → Settings → Import &amp; export → Export, unzip the download and choose the .ics file under Import.
       </p>
