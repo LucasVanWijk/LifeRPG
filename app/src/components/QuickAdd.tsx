@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { parseQuickAdd } from '../domain/quickadd';
 import { useStore } from '../state/store';
 import { Icon } from './Icon';
+import { MicButton } from './Mic';
 
 const HELP = [
   ['!main', 'zone: !crisis !main !errand !side, or !c !m !e !s'],
@@ -31,6 +32,7 @@ export function QuickAdd() {
         <span style={{ color: 'var(--color-accent-700)', paddingLeft: 10 }}><Icon n="plus" size={17} /></span>
         <input className="quick-input" value={text} onChange={(e) => setText(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && pin()}
           placeholder="Quick add: Paint walls !main fri ~L" aria-label="Quick add a quest" enterKeyHint="done" />
+        <MicButton label="Speak a quest" onText={(t) => setText((cur) => (cur ? cur + ' ' : '') + t)} />
         <button className="icon-btn" onClick={() => setHelp(!help)} aria-label="Quick add help" aria-expanded={help} style={{ fontFamily: 'var(--font-heading)', fontWeight: 600, fontSize: 16 }}>?</button>
         {text.trim() && <button className="btn btn-primary inked" onClick={pin} disabled={!parsed.title} style={{ minHeight: 36, marginRight: 4 }}>Pin</button>}
       </div>

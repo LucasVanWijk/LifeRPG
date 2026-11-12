@@ -26,6 +26,12 @@ Set up once:
 
 Without a client ID the Drive and Calendar sections are hidden. The ID is public by nature (it ships in the built JavaScript); the secret only keeps it out of the source.
 
+## Capture from anywhere
+
+- **Share to Questlog.** The installed app is a share target (Android, and Chrome or Edge on desktop): text and links shared from another app open the *Save to Glossary* sheet, which saves a new note, a tome item or a note on a companion. iPhone Safari has no share targets; the workaround is an iOS Shortcut that opens `https://lucasvanwijk.github.io/LifeRPG/?title=<title>&text=<text>&url=<url>` (the three parameters are all optional). Shared images and files are not kept.
+- **Home-screen shortcuts.** Long-press the app icon (Android, desktop Chrome or Edge): *New quest*, *Check in a habit* and *New note* open the app on `?action=new-quest`, `?action=checkin` and `?action=new-note`.
+- **Voice.** A microphone button on both quick-add bars fills the box with what you say (browsers with speech recognition only). Chrome sends the audio to Google to transcribe; the app says so the first time.
+
 ## Layout
 
 The app switches between the mobile layout (bottom tab bar, bottom sheets) and the desktop layout (sidebar, side panel) at 900px width.

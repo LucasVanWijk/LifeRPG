@@ -4,6 +4,8 @@ import type { LevelUp, Outcome, Toast } from '../domain/logic';
 import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
 import { mergeData, stamp } from '../domain/merge';
+import type { Shared } from '../domain/share';
+import { readLaunch } from '../domain/share';
 import { autoSyncOn, setAutoSyncFlag, syncOnce } from '../sync';
 import type { SyncState } from '../sync';
 import { driveConfigured, lastSync } from '../drive';
@@ -65,6 +67,8 @@ export interface Ui {
   /** What happened while the app was closed. */
   away: Entry[] | null;
   confirm: Confirm | null;
+  /** Something shared from another app, or a blank new note (home-screen shortcut): the Save to Glossary sheet. */
+  capture: Shared | null;
   dragId: number | null;
   dragOver: string | null;
 }
@@ -95,15 +99,16 @@ function initialUi(today: string): Ui {
   const p = new URLSearchParams(window.location.search);
   const pick = <T extends string>(k: string, allowed: readonly T[], def: T): T => (allowed.includes(p.get(k) as T) ? (p.get(k) as T) : def);
   const quest = Number(p.get('quest'));
+  const launch = readLaunch(window.location.search);
   return {
-    tab: pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
-    questView: pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
+    tab: launch.action === 'checkin' ? 'quests' : pick('screen', ['home', 'quests', 'calendar', 'glossary', 'guild'] as const, 'home'),
+    questView: launch.action === 'checkin' ? 'habits' : pick('view', ['board', 'campaign', 'habits'] as const, 'board'),
     hiddenCamps: loadHiddenCamps(),
     campaign: p.get('campaign') || '',
     mobileZone: (p.get('zone') as QuadKey) in QM ? (p.get('zone') as QuadKey) : null,
     openId: quest > 0 ? quest : null,
     sheetMode: p.get('mode') === 'edit' ? 'edit' : 'view',
-    newOpen: false,
+    newOpen: launch.action === 'new-quest',
     campSheet: null,
     profileOpen: false,
     chronicleOpen: false,
@@ -125,6 +130,7 @@ function initialUi(today: string): Ui {
     buildSheet: null,
     away: null,
     confirm: null,
+    capture: launch.action === 'new-note' ? { title: '', text: '', url: '' } : launch.shared,
     dragId: null,
     dragOver: null,
   };
@@ -160,6 +166,12 @@ function useStoreValue() {
   const undoRef = useRef<{ before: Data; after: Data } | null>(null);
   const isDesk = useLayout();
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  // A share or shortcut opened the app: take its parameters out of the address so a reload doesn't repeat it.
+  useEffect(() => {
+    const l = readLaunch(window.location.search);
+    if (l.shared || l.action) window.history.replaceState(null, '', window.location.pathname + window.location.hash);
+  }, []);
 
   // Keep "today" right when the app stays open overnight or is resumed from the background.
   useEffect(() => {
