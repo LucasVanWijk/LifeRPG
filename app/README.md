@@ -1,7 +1,7 @@
 # Questlog
 
 A parchment quest log for everyday life, built from the Claude Design handoff `Questlog.dc.html` (Questlog Mobile App Design).
-React + Vite + TypeScript, installable as a PWA that works offline. Data lives in the browser (`localStorage`, key `questlog:v2`); there is no backend. A new log starts empty at level 1 and asks for your name.
+React + Vite + TypeScript, installable as a PWA that works offline. Data lives in the browser (`localStorage`, key `questlog:v2`), optionally synced through your own Google Drive; there is no backend of ours. A new log starts empty at level 1 and asks for your name.
 
 **Back up your log.** Everything is stored in one browser. Use Profile → Export backup now and then, and Restore backup on a new device.
 
@@ -41,7 +41,10 @@ The app switches between the mobile layout (bottom tab bar, bottom sheets) and t
 | `src/domain/` | Types, quadrants and sizes, the reward formulas (Main Quests ×1.5), quest/habit/campaign payout logic, streaks, date helpers, the design's sample data (used by tests only) |
 | `src/domain/migrate.ts` | Upgrades saved data and imported backups to the current format |
 | `src/domain/quickadd.ts` | The quick-add shorthand parser |
-| `src/domain/calendar.ts`, `src/domain/ics.ts` | Calendar items (repeats, deadlines, Glossary dates) and the .ics importer |
+| `src/domain/calendar.ts`, `src/domain/ics.ts` | Calendar items (repeats, deadlines, Glossary dates), the day/week layout and the .ics importer |
+| `src/domain/merge.ts` | Update stamps, tombstones and the per-item merge of two copies of the log |
+| `src/domain/quests.ts`, `people.ts`, `notes.ts`, `tomes.ts`, `share.ts` | Today/someday/stale/repeating quests, keep in touch, notes and links, log tomes, share and shortcut launches |
+| `src/google.ts`, `drive.ts`, `sync.ts`, `gcal.ts`, `gcalsync.ts` | Google sign-in, Drive sync, Calendar sync |
 | `src/domain/guild/` | The guild: content tables, the engine (time, outings, real-life payments), the resolver and exact odds |
 | `src/state/store.tsx` | Persisted data + UI state and all actions, shared through a React context |
 | `src/screens/` | Home, Quests (desktop board, mobile 2×2 grid, opened zone, campaigns), Glossary, Adventure |
