@@ -7,8 +7,11 @@ import { mergeData, stamp } from '../domain/merge';
 import { autoSyncOn, setAutoSyncFlag, syncOnce } from '../sync';
 import type { SyncState } from '../sync';
 import { driveConfigured, lastSync } from '../drive';
-import { onTokenChange } from '../google';
-import type { CalEvent, Campaign, Data, Habit, QuadKey, Quest, Status } from '../domain/model';
+import { getToken, onTokenChange, peekToken, requireScopes, CALENDAR_SCOPE } from '../google';
+import type { EventCache, GCalConfig } from '../gcal';
+import { insertEvent as gInsert, listCalendars, loadCache, loadConfig, patchEvent as gPatch, pullEvents, removeEvent as gRemove, saveCache, saveConfig, timeZone, toGoogle, fromGoogle } from '../gcal';
+import { applyChanges, syncRound } from '../gcalsync';
+import type { CalEvent, Campaign, Data, Habit, QuadKey, Quest, Status, Tombstone } from '../domain/model';
 import { emptyData, QM } from '../domain/model';
 import type { BuildingId, ClassId, PotionKind, Slot, Stance } from '../domain/guild/content';
 import { AWAY_SUMMARY_MS } from '../domain/guild/content';
@@ -298,6 +301,75 @@ function useStoreValue() {
     return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); off(); };
   }, [runSync]);
 
+  // ── Google Calendar ──
+  const [gcfg, setGcfg] = useState<GCalConfig>(loadConfig);
+  const [gcache, setGcache] = useState<EventCache>(loadCache);
+  const [gstate, setGstate] = useState<{ status: 'off' | 'idle' | 'syncing' | 'paused' | 'error'; error?: string }>(() => ({ status: driveConfigured && loadConfig().on ? 'paused' : 'off' }));
+  const gcfgRef = useRef(gcfg); gcfgRef.current = gcfg;
+  const gcacheRef = useRef(gcache); gcacheRef.current = gcache;
+  const gBusy = useRef(false);
+  const gDirty = useRef(false);
+  requireScopes(CALENDAR_SCOPE, gcfg.on);
+  const setG = useCallback((cfg: GCalConfig, cache?: EventCache) => {
+    gcfgRef.current = cfg; setGcfg(cfg); saveConfig(cfg);
+    if (cache) { gcacheRef.current = cache; setGcache(cache); saveCache(cache); }
+  }, []);
+  const runGcal = useCallback(async (interactive: boolean) => {
+    if (!driveConfigured || !gcfgRef.current.on || gBusy.current) return;
+    gBusy.current = true;
+    setGstate((s) => ({ ...s, status: 'syncing', error: undefined }));
+    try {
+      const tok = interactive ? await getToken(CALENDAR_SCOPE) : peekToken(CALENDAR_SCOPE);
+      if (!tok) { setGstate({ status: 'paused' }); return; }
+      let cfg = gcfgRef.current;
+      if (!cfg.calendars.length) {
+        const calendars = await listCalendars(tok);
+        const primary = calendars.find((c) => c.primary) ?? calendars[0];
+        cfg = { ...cfg, calendars, shown: primary ? [primary.id] : [], target: primary?.writable ? primary.id : (calendars.find((c) => c.writable)?.id ?? '') };
+      }
+      const today = todayISO(), now = Date.now();
+      const snap = dataRef.current;
+      const r = await syncRound({
+        api: { pull: (c, o) => pullEvents(tok, c, o), insert: (c, b) => gInsert(tok, c, b), patch: (c, id, b) => gPatch(tok, c, id, b), remove: (c, id) => gRemove(tok, c, id) },
+        cfg, cache: gcacheRef.current, events: snap.events, tombstones: snap.tombstones, today, tz: timeZone(), now,
+      });
+      setG({ ...r.cfg, at: new Date().toISOString() }, r.cache);
+      if (r.changes.length) {
+        const cur = dataRef.current;
+        const gone = r.changes.filter((c) => c.kind === 'remove').map((c) => c.id);
+        const tombs: Tombstone[] = gone.map((id) => ({ key: 'event:' + id, at: now }));
+        // The events change as they are (no new update times): the sync itself must not look like an edit.
+        commitRaw({ ...cur, events: applyChanges(cur.events, r.changes), tombstones: [...cur.tombstones, ...tombs] });
+      }
+      gDirty.current = false;
+      setGstate({ status: 'idle' });
+    } catch (e) {
+      gDirty.current = true;
+      setGstate({ status: 'error', error: e instanceof Error ? e.message : 'Calendar sync failed.' });
+    } finally { gBusy.current = false; }
+  }, [commitRaw, setG]);
+  useEffect(() => {
+    if (!gcfgRef.current.on) return;
+    gDirty.current = true;
+    const t = window.setTimeout(() => void runGcal(false), 4000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data.events, data.tombstones]);
+  useEffect(() => {
+    void runGcal(false);
+    const onVis = () => { if (document.visibilityState === 'visible') void runGcal(false); };
+    document.addEventListener('visibilitychange', onVis);
+    const t = window.setInterval(() => void runGcal(false), 5 * 60_000);
+    const off = onTokenChange(() => void runGcal(false));
+    return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); off(); };
+  }, [runGcal]);
+  /** Your events plus those of the shown Google calendars. */
+  const cal: Data = useMemo(() => {
+    if (!gcfg.on) return data;
+    const extra = gcfg.shown.flatMap((c) => gcache[c] ?? []);
+    return extra.length ? { ...data, events: [...data.events, ...extra] } : data;
+  }, [data, gcfg.on, gcfg.shown, gcache]);
+
   const actions = useMemo(() => {
     // Every action starts from the guild as it is now.
     const d = () => tick();
@@ -416,8 +488,54 @@ function useStoreValue() {
         setUi({ eventSheet: null, calDay: e.start });
         showToast('Event added', e.title);
       },
-      updateEvent(id: number, patch: Partial<CalEvent>) { commit({ ...d(), events: d().events.map((e) => (e.id === id ? { ...e, ...patch } : e)) }); },
-      deleteEvent(id: number) { commit({ ...d(), events: d().events.filter((e) => e.id !== id) }); setUi({ eventSheet: null }); },
+      updateEvent(id: number, patch: Partial<CalEvent>) {
+        if (id < 0) { void actions.editGoogleEvent(id, patch); return; }
+        commit({ ...d(), events: d().events.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
+      },
+      deleteEvent(id: number) {
+        if (id < 0) { void actions.deleteGoogleEvent(id); return; }
+        commit({ ...d(), events: d().events.filter((e) => e.id !== id) });
+        setUi({ eventSheet: null });
+      },
+      /** Edits an event that lives only in Google Calendar: straight to Google, then into the cache. */
+      async editGoogleEvent(id: number, patch: Partial<CalEvent>) {
+        const found = Object.entries(gcacheRef.current).flatMap(([c, l]) => l.map((e) => [c, e] as const)).find(([, e]) => e.id === id);
+        if (!found) return;
+        const [calId, old] = found;
+        try {
+          const tok = await getToken(CALENDAR_SCOPE);
+          const next = { ...old, ...patch, g: old.g };
+          const res = await gPatch(tok, calId, old.g!.id, toGoogle(next, timeZone()));
+          const updated = res ? (fromGoogle(res, calId) ?? next) : next;
+          const cache = { ...gcacheRef.current, [calId]: (gcacheRef.current[calId] ?? []).map((e) => (e.id === id ? { ...updated, companions: next.companions } : e)) };
+          setG(gcfgRef.current, cache);
+          setUi({ eventMode: 'view' });
+        } catch (e) { showToast('Google Calendar', e instanceof Error ? e.message : 'Could not save.'); }
+      },
+      async deleteGoogleEvent(id: number) {
+        const found = Object.entries(gcacheRef.current).flatMap(([c, l]) => l.map((e) => [c, e] as const)).find(([, e]) => e.id === id);
+        if (!found) return;
+        try {
+          const tok = await getToken(CALENDAR_SCOPE);
+          await gRemove(tok, found[0], found[1].g!.id);
+          setG(gcfgRef.current, { ...gcacheRef.current, [found[0]]: gcacheRef.current[found[0]].filter((e) => e.id !== id) });
+          setUi({ eventSheet: null });
+        } catch (e) { showToast('Google Calendar', e instanceof Error ? e.message : 'Could not delete.'); }
+      },
+      /** Switches Google Calendar sync on (a sign-in, so from a tap) or off. */
+      async setCalendarSync(on: boolean) {
+        if (!on) { setG({ ...gcfgRef.current, on: false }); setGstate({ status: 'off' }); return; }
+        setG({ ...gcfgRef.current, on: true });
+        await runGcal(true);
+      },
+      setCalendars(patch: Partial<Pick<GCalConfig, 'shown' | 'target'>>) {
+        const cfg = { ...gcfgRef.current, ...patch };
+        // A calendar that is no longer shown forgets its sync position, so showing it again fetches fresh.
+        for (const c of cfg.calendars) if (!cfg.shown.includes(c.id)) { delete cfg.tokens[c.id]; delete cfg.full[c.id]; }
+        setG(cfg, Object.fromEntries(Object.entries(gcacheRef.current).filter(([c]) => cfg.shown.includes(c))));
+        void runGcal(false);
+      },
+      calendarSyncNow() { return runGcal(true); },
       /** Adds imported events, skipping any whose .ics UID is already in the calendar. Returns how many were added. */
       importEvents(list: Omit<CalEvent, 'id'>[]): number {
         const cur = d(), known = new Set(cur.events.map((e) => e.uid).filter(Boolean));
@@ -511,10 +629,10 @@ function useStoreValue() {
       openQuest(id: number) { setUi({ openId: id, newOpen: false, campSheet: null, eventSheet: null, sheetMode: 'view' }); },
       openEvent(id: number | 'new') { setUi({ eventSheet: id, eventMode: id === 'new' ? 'edit' : 'view', openId: null, newOpen: false }); },
     };
-  }, [today, commit, commitRaw, apply, showToast, setUi, tick, runSync]);
+  }, [today, commit, commitRaw, apply, showToast, setUi, tick, runSync, runGcal, setG]);
 
   const canUndo = !!toast?.undo && !!undoRef.current && sameLog(data, undoRef.current.after);
-  return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions, sync };
+  return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions, sync, cal, gcfg, gstate };
 }
 
 export type Store = ReturnType<typeof useStoreValue>;

@@ -169,6 +169,8 @@ export function ProfileSheet() {
 
       <DriveSection />
 
+      <CalendarSection />
+
       <InstallSection />
 
       {g && (
@@ -269,6 +271,50 @@ function DriveSection() {
           <button className="btn btn-secondary" onClick={load} disabled={busy} style={{ minHeight: 46 }}>Load from Drive</button>
         </div>
       </details>
+    </div>
+  );
+}
+
+function CalendarSection() {
+  const { gcfg, gstate, actions } = useStore();
+  if (!driveConfigured) return null;
+  const toggleShown = (id: string) => actions.setCalendars({ shown: gcfg.shown.includes(id) ? gcfg.shown.filter((x) => x !== id) : [...gcfg.shown, id] });
+  const status = gstate.status === 'syncing' ? 'Syncing…' : gstate.status === 'paused' ? 'Paused: the Google sign-in lasts an hour. Tap Resume to renew it.'
+    : gstate.status === 'error' ? (gstate.error ?? 'Sync failed.') : gstate.status === 'idle' ? 'Up to date.' : 'Off.';
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <h3 style={{ fontSize: 22 }}>Google Calendar</h3>
+      <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+        Show your Google events in Questlog and send events made here to Google. Changes go both ways; the most recently changed version wins. Repeating events show every occurrence; change a whole series in Google Calendar. Imported .ics events, quest deadlines and birthdays stay in Questlog.
+      </p>
+      {gcfg.on && (
+        <>
+          <p className="tnum" style={{ margin: 0, fontSize: 13 }}><strong>Sync:</strong> {status}{gcfg.at ? <span className="muted" style={{ display: 'block' }}>Last synced {new Date(gcfg.at).toLocaleString()}. Shows 30 days back to a year ahead.</span> : null}</p>
+          {gcfg.calendars.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="label">Show these calendars</span>
+              {gcfg.calendars.map((c) => (
+                <label key={c.id} className="toggle-row" style={{ minHeight: 38 }}>
+                  <input type="checkbox" checked={gcfg.shown.includes(c.id)} onChange={() => toggleShown(c.id)} />
+                  <span style={{ width: 10, height: 10, borderRadius: '50%', background: c.color ?? 'var(--color-accent-700)', flex: 'none' }} />
+                  <span>{c.name}{c.writable ? '' : ' (read only)'}</span>
+                </label>
+              ))}
+              <div className="field"><label htmlFor="gcal-target">New Questlog events go to</label>
+                <select id="gcal-target" className="input" value={gcfg.target} onChange={(e) => actions.setCalendars({ target: e.target.value })} style={{ minHeight: 44 }}>
+                  {gcfg.calendars.filter((c) => c.writable).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+      <div className="two-col">
+        {gcfg.on
+          ? <button className="btn btn-primary inked" onClick={() => void actions.calendarSyncNow()} disabled={gstate.status === 'syncing'} style={{ minHeight: 46 }}>{gstate.status === 'paused' ? 'Resume' : 'Sync now'}</button>
+          : <button className="btn btn-primary inked" onClick={() => void actions.setCalendarSync(true)} style={{ minHeight: 46 }}>Connect Google Calendar</button>}
+        {gcfg.on && <button className="btn btn-secondary" onClick={() => void actions.setCalendarSync(false)} style={{ minHeight: 46 }}>Turn off</button>}
+      </div>
     </div>
   );
 }

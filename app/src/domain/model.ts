@@ -107,13 +107,22 @@ export interface CalEvent {
   notes: string;
   companions: string[];
   updated?: number;
+  /** Link to the Google Calendar copy of this event. */
+  g?: GoogleLink;
 }
+
+/**
+ * Where an event lives in Google Calendar. `rev` is Google's own change time at the last sync,
+ * `at` this event's `updated` at that moment: if either has moved, that side changed since.
+ * `series` marks one occurrence of a repeating Google event (the whole series is edited in Google).
+ */
+export interface GoogleLink { cal: string; id: string; rev?: string; at?: number; series?: string; link?: string }
 
 /** A free-form note: ideas, meeting notes, recipes. The body is plain text with a little formatting. */
 export interface Note { id: string; title: string; body: string; icon?: IconName; pinned: boolean; created: number; updated?: number }
 
 /** Left behind by a deletion, so the deletion wins over an older copy on another device. */
-export interface Tombstone { key: string; at: number }
+export interface Tombstone { key: string; at: number; /** An event deleted here that still exists in Google Calendar. */ g?: { cal: string; id: string } }
 /** Days a tombstone is kept. */
 export const TOMBSTONE_DAYS = 60;
 

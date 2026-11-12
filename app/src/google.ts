@@ -37,6 +37,10 @@ const listeners = new Set<() => void>();
 export function onTokenChange(fn: () => void): () => void { listeners.add(fn); return () => { listeners.delete(fn); }; }
 const changed = () => listeners.forEach((f) => f());
 
+const required = new Set<string>();
+/** Scopes this device always asks for (e.g. Calendar once it is switched on), so one sign-in covers everything. */
+export function requireScopes(scope: string, on: boolean) { for (const x of scope.split(' ')) { if (on) required.add(x); else required.delete(x); } }
+
 const has = (granted: string, wanted: string) => wanted.split(' ').every((s) => granted.split(' ').includes(s));
 
 /** Is there a sign-in that is still good for these scopes (no popup needed)? */
@@ -47,14 +51,22 @@ export function tokenValid(scope: string = DRIVE_SCOPE): boolean {
 export function peekToken(scope: string = DRIVE_SCOPE): string | null { return tokenValid(scope) ? token!.value : null; }
 export function forgetToken() { token = null; changed(); }
 
+let inflight: Promise<string> | null = null;
 /** An access token, asking Google for one (popup, so only from a tap) when there is none or it is about to expire. */
 export async function getToken(scope: string = DRIVE_SCOPE): Promise<string> {
   if (tokenValid(scope)) return token!.value;
+  // One popup at a time: Drive and Calendar both asking at once share the same sign-in.
+  if (inflight) { await inflight.catch(() => undefined); if (tokenValid(scope)) return token!.value; }
+  inflight = signIn(scope);
+  try { return await inflight; } finally { inflight = null; }
+}
+
+async function signIn(scope: string): Promise<string> {
   await loadGis();
   const g = gis();
   if (!g) throw new Error('Google sign-in did not load.');
   // Ask for everything this device uses at once, so one sign-in covers Drive and Calendar.
-  const want = [...new Set([...(token?.scope ?? '').split(' '), ...scope.split(' '), ...DRIVE_SCOPE.split(' ')])].filter(Boolean).join(' ');
+  const want = [...new Set([...(token?.scope ?? '').split(' '), ...scope.split(' '), ...DRIVE_SCOPE.split(' '), ...required])].filter(Boolean).join(' ');
   return new Promise<string>((resolve, reject) => {
     g.accounts.oauth2.initTokenClient({
       client_id: CLIENT_ID,

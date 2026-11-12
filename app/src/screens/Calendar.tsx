@@ -28,7 +28,7 @@ export function Legend() {
 const monthStart = (d: string) => d.slice(0, 8) + '01';
 
 export function Calendar() {
-  const { data, ui, setUi, today, isDesk, actions, showToast } = useStore();
+  const { cal, ui, setUi, today, isDesk, actions, showToast } = useStore();
   const file = useRef<HTMLInputElement>(null);
   const sel = ui.calDay;
   const first = monthStart(sel);
@@ -37,7 +37,7 @@ export function Calendar() {
   // Drop a trailing week that is entirely next month.
   const weeks = days[35].slice(0, 7) !== first.slice(0, 7) ? 5 : 6;
   const shown = days.slice(0, weeks * 7);
-  const items = calendarItems(data, shown[0], shown[shown.length - 1]);
+  const items = calendarItems(cal, shown[0], shown[shown.length - 1]);
   const byDay = new Map<string, CalItem[]>();
   for (const it of items) byDay.set(it.date, [...(byDay.get(it.date) ?? []), it]);
   const month = parseDay(first);
@@ -107,7 +107,7 @@ export function Calendar() {
           <div style={{ padding: '8px 14px 12px' }}><Legend /></div>
         </section>
 
-        <DayAgenda day={sel} items={byDay.get(sel) ?? calendarItems(data, sel, sel)} />
+        <DayAgenda day={sel} items={byDay.get(sel) ?? calendarItems(cal, sel, sel)} />
       </div>
       <p className="muted" style={{ margin: 0, fontSize: 12 }}>
         To bring over Google Calendar: on a computer open calendar.google.com → Settings → Import &amp; export → Export, unzip the download and choose the .ics file under Import.

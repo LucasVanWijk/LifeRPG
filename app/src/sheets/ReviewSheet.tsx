@@ -20,14 +20,14 @@ export const reviewDue = (data: Data, today: string) =>
   (data.quests.length + data.habits.length > 0) && data.profile.reviewedWeek !== reviewWeek(today);
 
 export function ReviewSheet() {
-  const { data, today, setUi, actions } = useStore();
+  const { data, cal, today, setUi, actions } = useStore();
   const monday = reviewWeek(today), sunday = addDays(monday, 6);
   const inWeek = (d: string) => d >= monday && d <= sunday;
   const done = chronicle(data).filter((e) => inWeek(e.date));
   const quests = done.filter((e) => e.kind === 'quest');
   const xp = done.reduce((n, e) => n + e.xp, 0);
   const overdue = data.quests.filter((q) => isOverdue(q, today));
-  const coming = calendarItems(data, today, addDays(today, 6));
+  const coming = calendarItems(cal, today, addDays(today, 6));
   const close = () => setUi({ reviewOpen: false });
 
   return (

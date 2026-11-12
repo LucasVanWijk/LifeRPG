@@ -12,8 +12,10 @@ type RepeatKey = 'none' | Repeat['every'];
 
 /** Shows an event, or the form to create or edit one. Changes to a repeating event apply to every repeat. */
 export function EventSheet({ id }: { id: number | 'new' }) {
-  const { data, ui, setUi, actions } = useStore();
-  const existing = id === 'new' ? undefined : data.events.find((e) => e.id === id);
+  const { data, cal, gcfg, ui, setUi, actions } = useStore();
+  const existing = id === 'new' ? undefined : cal.events.find((e) => e.id === id);
+  const calName = existing?.g ? gcfg.calendars.find((c) => c.id === existing.g!.cal)?.name : undefined;
+  const readOnly = !!existing?.g && gcfg.calendars.find((c) => c.id === existing.g!.cal)?.writable === false;
   const editing = id === 'new' || ui.eventMode === 'edit';
   const close = () => setUi({ eventSheet: null });
   if (id !== 'new' && !existing) return null;
@@ -29,13 +31,14 @@ export function EventSheet({ id }: { id: number | 'new' }) {
       <Sheet onClose={close} label={e.title}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, paddingTop: 6 }}>
           <span style={{ flex: 1, display: 'inline-flex', alignItems: 'center', gap: 7 }} className="kicker"><KindMark kind="event" />Event</span>
-          <button className="btn btn-secondary" onClick={() => setUi({ eventMode: 'edit' })} style={{ minHeight: 40 }}><Icon n="pencil" size={15} />Edit</button>
+          {!readOnly && <button className="btn btn-secondary" onClick={() => setUi({ eventMode: 'edit' })} style={{ minHeight: 40 }}><Icon n="pencil" size={15} />Edit</button>}
           <CloseBtn onClick={close} />
         </div>
         <h2 style={{ margin: '-4px 0 0', fontSize: 30, lineHeight: 1.12, textWrap: 'pretty' }}>{e.title}</h2>
         <div className="event-facts">
           <div><Icon n="calendar" size={16} /><span className="tnum">{when}</span></div>
-          <div><Icon n="repeat" size={16} /><span>{repeatText(e, weekdayDate)}</span></div>
+          <div><Icon n="repeat" size={16} /><span>{e.g?.series ? 'Part of a repeating event in Google Calendar' : repeatText(e, weekdayDate)}</span></div>
+          {e.g && <div><Icon n="calendar" size={16} /><span>Google Calendar{calName ? ' · ' + calName : ''}{e.g.series && e.g.link ? <> · <a href={e.g.link} target="_blank" rel="noreferrer">Change the whole series in Google</a></> : ''}</span></div>}
           {e.location && <div><Icon n="pin" size={16} /><span>{e.location}</span></div>}
         </div>
         {people.length > 0 && (
@@ -104,11 +107,11 @@ function EventForm({ existing }: { existing?: CalEvent }) {
         {!e.allDay && <div className="field"><label htmlFor="ev-et">at</label><input id="ev-et" className="input" type="time" value={e.endTime ?? ''} onChange={(ev) => set({ endTime: ev.target.value })} style={{ minHeight: 44 }} /></div>}
       </div>
       {!timeOk && <p style={{ margin: '-6px 0 0', fontSize: 12, color: 'var(--q-wax)' }}>The event ends before it starts.</p>}
-      <div className="field"><label>Repeats</label>
+      {!existing?.g?.series && <div className="field"><label>Repeats</label>
         <Seg<RepeatKey> name="ev-repeat" value={repeatKey} onChange={setRepeat} style={{ display: 'grid', gridTemplateColumns: 'repeat(5,1fr)', width: '100%' }}
           optStyle={{ justifyContent: 'center', minHeight: 40, padding: '6px 2px', fontSize: 13 }}
           options={[{ key: 'none', label: 'No' }, { key: 'daily', label: 'Daily' }, { key: 'weekly', label: 'Weekly' }, { key: 'monthly', label: 'Monthly' }, { key: 'yearly', label: 'Yearly' }]} />
-      </div>
+      </div>}
       {e.repeat && (
         <div className="two-col">
           <div className="field"><label htmlFor="ev-int">Every</label>
@@ -120,6 +123,7 @@ function EventForm({ existing }: { existing?: CalEvent }) {
         </div>
       )}
       {existing?.repeat && <p className="muted" style={{ margin: '-6px 0 0', fontSize: 12 }}>Changes apply to every repeat.</p>}
+      {existing?.g?.series && <p className="muted" style={{ margin: '-6px 0 0', fontSize: 12 }}>Changes apply to this occurrence only.</p>}
       <div className="field"><label htmlFor="ev-loc">Location</label><input id="ev-loc" className="input" value={e.location} onChange={(ev) => set({ location: ev.target.value })} placeholder="Add a place" style={{ minHeight: 44 }} /></div>
       {data.companions.length > 0 && (
         <div className="field"><label>Companions</label>

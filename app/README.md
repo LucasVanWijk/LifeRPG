@@ -12,15 +12,19 @@ npm test           # domain logic (rewards, calendar, .ics import, the guild); r
 npm run build      # typecheck + production build into dist/
 ```
 
-## Google Drive sync (optional)
+## Google Drive and Calendar sync (optional)
 
-Profile → Google Drive saves the whole log to `questlog-backup.json` in your own Drive and loads it back, only when you press a button. The browser talks to Google directly with the `drive.file` scope (the app sees only files it created); there is no server. Set it up once:
+**Drive.** Settings → Google Drive → *Turn on automatic sync* keeps the whole log in `questlog-backup.json` in your own Drive. The app loads and merges the Drive copy when it opens (and every few minutes while open) and saves a few seconds after each edit. Merging is per item (see `src/domain/merge.ts`): every item has an `updated` time, quests merge field by field, habit check-ins are unioned, deletions leave a 60-day tombstone, and the guild merges as a whole (newest simulation wins; payments for real-life work are kept by key, so XP is never paid twice). Google's browser sign-in lasts an hour and can only be renewed after a tap, so when it expires Home shows *Sync paused · tap to resume*; edits made meanwhile are kept and sent on the next sync. *Manual save and load* remain under the sync buttons. The browser talks to Google directly with the `drive.file` scope (the app sees only files it created); there is no server.
 
-1. In Google Cloud Console create a project, enable the **Google Drive API**, configure the OAuth consent screen (External, add yourself as a test user, scope `.../auth/drive.file`).
+**Calendar.** Settings → Google Calendar → *Connect Google Calendar* shows the events of the calendars you pick (30 days back to a year ahead), keeps them up to date incrementally, and mirrors events created in Questlog into the calendar you choose. Edits and deletions go both ways; the most recently changed version wins. Repeating Google events arrive as one event per occurrence, so a single occurrence can be edited; a whole series is changed in Google Calendar itself. Imported `.ics` events, quest deadlines and birthdays are not sent to Google.
+
+Set up once:
+
+1. In Google Cloud Console create a project, enable the **Google Drive API** and the **Google Calendar API**, and configure the OAuth consent screen (External, add yourself as a test user, scopes `.../auth/drive.file`, `.../auth/calendar.events` and `.../auth/calendar.readonly`). Calendar scopes are sensitive: for personal use leave the project in *Testing* with you as a test user; a public release would need Google's verification.
 2. Create an **OAuth client ID** of type *Web application* with the authorised JavaScript origins `https://lucasvanwijk.github.io` and `http://localhost:5173`.
 3. Locally put `VITE_GOOGLE_CLIENT_ID=<client id>` in `app/.env.local` (git-ignored). For the live site add a repository secret named `GOOGLE_CLIENT_ID` (Settings → Secrets and variables → Actions); the deploy workflow passes it to the build.
 
-Without a client ID the Drive section is hidden. The ID is public by nature (it ships in the built JavaScript); the secret only keeps it out of the source.
+Without a client ID the Drive and Calendar sections are hidden. The ID is public by nature (it ships in the built JavaScript); the secret only keeps it out of the source.
 
 ## Layout
 

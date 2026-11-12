@@ -21,7 +21,7 @@ import { backupDue, exportBackup, snoozeBackup } from '../backup';
 import { useStore } from '../state/store';
 
 export function Home() {
-  const { data, ui, setUi, today, actions, showToast, sync } = useStore();
+  const { data, ui, setUi, today, actions, showToast, sync, cal, gstate, gcfg } = useStore();
   const [moving, setMoving] = useState<number | null>(null);
   const [iosNag, setIosNag] = useState(iosAtRisk);
   const [backupNag, setBackupNag] = useState(() => backupDue(data, today));
@@ -64,7 +64,7 @@ export function Home() {
 
   const dow = (parseDay(today).getDay() + 6) % 7;
   const mon = addDays(today, -dow + ui.weekOffset * 7), sun = addDays(mon, 6);
-  const weekItems = calendarItems(data, mon, sun);
+  const weekItems = calendarItems(cal, mon, sun);
   const overdueCount = data.quests.filter((q) => isOverdue(q, today)).length;
   const m1 = parseDay(mon), m7 = parseDay(sun);
   const range = m1.getMonth() === m7.getMonth() ? m1.getDate() + ' – ' + m7.getDate() + ' ' + MON[m7.getMonth()] : shortDate(mon) + ' – ' + shortDate(sun);
@@ -276,10 +276,10 @@ export function Home() {
           ))}
         </div>
       )}
-      {(sync.status === 'paused' || sync.status === 'error') && (
-        <button className="panel sync-line" onClick={() => void actions.syncNow()}>
+      {(sync.status === 'paused' || sync.status === 'error' || (gcfg.on && (gstate.status === 'paused' || gstate.status === 'error'))) && (
+        <button className="panel sync-line" onClick={() => { void actions.syncNow(); void actions.calendarSyncNow(); }}>
           <Icon n="repeat" size={15} />
-          <span style={{ flex: 1, textAlign: 'left' }}>{sync.status === 'paused' ? 'Sync paused · tap to resume' : (sync.error ?? 'Sync failed') + ' · tap to retry'}</span>
+          <span style={{ flex: 1, textAlign: 'left' }}>{sync.status === 'error' ? (sync.error ?? 'Sync failed') + ' · tap to retry' : gstate.status === 'error' && sync.status !== 'paused' ? (gstate.error ?? 'Calendar sync failed') + ' · tap to retry' : 'Sync paused · tap to resume'}</span>
         </button>
       )}
       <QuickAdd />

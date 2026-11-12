@@ -43,7 +43,11 @@ export function stamp(prev: Data, next: Data, now: number): Data {
       if (col === 'quests') return stampQuest(old as Quest | undefined, it as Quest, now);
       return { ...it, updated: now };
     });
-    for (const id of before.keys()) if (!seen.has(id)) tombs.push({ key: kind + ':' + id, at: now });
+    for (const [id, old] of before) {
+      if (seen.has(id)) continue;
+      const g = col === 'events' ? (old as unknown as { g?: { cal: string; id: string } }).g : undefined;
+      tombs.push({ key: kind + ':' + id, at: now, ...(g ? { g: { cal: g.cal, id: g.id } } : {}) });
+    }
     if (changed) set({ [col]: items } as Partial<Data>);
   }
   if (prev.camps !== next.camps) {
@@ -147,6 +151,7 @@ function mergeGuild(local: Guild | null, remote: Guild | null, merged: Data): Gu
 export function mergeData(local: Data, remote: Data, now: number): Data {
   const tombs = new Map<string, number>();
   for (const t of [...local.tombstones, ...remote.tombstones]) tombs.set(t.key, Math.max(t.at, tombs.get(t.key) ?? 0));
+  const tombG = new Map([...local.tombstones, ...remote.tombstones].filter((t) => t.g).map((t) => [t.key, t.g!]));
 
   const camps: Record<string, Campaign> = {};
   for (const k of new Set([...Object.keys(local.camps), ...Object.keys(remote.camps)])) {
@@ -174,7 +179,7 @@ export function mergeData(local: Data, remote: Data, now: number): Data {
     },
     codex: local.codex,
     guild: null,
-    tombstones: pruneTombstones([...tombs].map(([key, at]) => ({ key, at })), now),
+    tombstones: pruneTombstones([...tombs].map(([key, at]) => ({ key, at, ...(tombG.has(key) ? { g: tombG.get(key) } : {}) })), now),
   };
   out.guild = mergeGuild(local.guild, remote.guild, out);
   return out;
