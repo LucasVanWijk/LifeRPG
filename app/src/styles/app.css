@@ -382,3 +382,5 @@ button { font: inherit; }
 .notices { padding: 0; border-color: color-mix(in srgb, var(--color-accent-700) 40%, transparent); }
 .notices-line { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 14px; min-height: 40px; border: 0; background: transparent; cursor: pointer; color: var(--q-ink); font-family: var(--font-body); }
 .notice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px 10px; border-top: 1px solid var(--q-rule); }
+.sync-line { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 14px; min-height: 36px; cursor: pointer; font-size: 13px; color: var(--color-accent-800); font-family: var(--font-body); }
+.sync-line:hover { background: color-mix(in srgb, var(--color-accent-300) 16%, transparent); }

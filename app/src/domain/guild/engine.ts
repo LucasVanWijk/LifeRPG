@@ -972,6 +972,23 @@ export function payReal(g0: Guild, pay: Pay): Paid {
   return { guild: g, entry, to, levels };
 }
 
+/** Brings in a payment that another device recorded and this one has not seen (sync). The entry keeps its own numbers. */
+export function absorbPayment(g0: Guild, e: LedgerEntry): Guild {
+  if (g0.ledger.some((x) => x.key === e.key)) return g0;
+  const g = draft(g0);
+  g.gold += e.guild;
+  g.renown += e.renown;
+  const a = byId(g, e.to);
+  if (a) {
+    a.purse += e.purse;
+    gainXp(g, a, e.xp);
+    a.attrs[e.attr] = Math.min(ATTR_MAX, a.attrs[e.attr] + e.points);
+    a.practice[e.attr] += Math.max(0, e.practice - e.points * PRACTICE_PER_POINT);
+  } else g.bankedXp += e.xp;
+  g.ledger = [...g.ledger, e];
+  return g;
+}
+
 /** Takes a real-life reward back exactly as it was paid. Levels, attribute points and heirlooms are never lost. */
 export function refund(g0: Guild, key: string): Guild {
   let idx = -1;

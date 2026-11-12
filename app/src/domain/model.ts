@@ -26,13 +26,17 @@ export interface Quest {
   /** Day the quest was completed (for Today's Quests + undo). */
   doneOn?: string | null;
   prevStatus?: Status | null;
+  /** When the quest last changed (epoch ms). Set by the store, used to merge copies from other devices. */
+  updated?: number;
+  /** When each field last changed, so two devices editing different fields keep both edits. */
+  fu?: Record<string, number>;
 }
 
 /**
  * A repeating habit. Daily habits are checked in once a day; weekly ones `target` times a week
  * (on different days). `log` holds the days it was done.
  */
-export interface Habit { id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string }
+export interface Habit { id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string; updated?: number }
 
 export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;
@@ -40,14 +44,15 @@ export interface Campaign {
   completedOn?: string | null;
   /** The adventurer who carries this campaign: its quests' rewards go to them instead of the Champion. */
   bearerId?: string | null;
+  updated?: number;
 }
 
 export interface CompanionNote { t: string; date?: string; label?: string }
 /** bday is MM-DD, or empty when unknown. */
-export interface Companion { id: string; name: string; first: string; rel: string; bday: string; notes: CompanionNote[] }
+export interface Companion { id: string; name: string; first: string; rel: string; bday: string; notes: CompanionNote[]; updated?: number }
 
 export interface TomeItem { id: number; t: string; done: boolean }
-export interface Tome { id: string; name: string; items: TomeItem[] }
+export interface Tome { id: string; name: string; items: TomeItem[]; updated?: number }
 
 export interface CodexField { k: string; v: string; date?: string; label?: string }
 export interface CodexEntry { id: string; name: string; sub: string; icon: IconName; fields: CodexField[] }
@@ -58,6 +63,7 @@ export interface Profile {
   reviewedWeek?: string;
   /** Which sections Home shows and in what order. Stored with the data, so it syncs between devices. */
   home?: HomeLayout;
+  updated?: number;
 }
 
 export type HomeSection = 'today' | 'habits' | 'next' | 'week' | 'keep' | 'guild';
@@ -100,10 +106,19 @@ export interface CalEvent {
   location: string;
   notes: string;
   companions: string[];
+  updated?: number;
 }
 
+/** A free-form note: ideas, meeting notes, recipes. The body is plain text with a little formatting. */
+export interface Note { id: string; title: string; body: string; icon?: IconName; pinned: boolean; created: number; updated?: number }
+
+/** Left behind by a deletion, so the deletion wins over an older copy on another device. */
+export interface Tombstone { key: string; at: number }
+/** Days a tombstone is kept. */
+export const TOMBSTONE_DAYS = 60;
+
 export interface Data {
-  version: 3;
+  version: 4;
   profile: Profile;
   /** Null until the guild is founded. */
   guild: Guild | null;
@@ -113,7 +128,9 @@ export interface Data {
   companions: Companion[];
   tomes: Tome[];
   codex: CodexEntry[];
+  notes: Note[];
   events: CalEvent[];
+  tombstones: Tombstone[];
 }
 
 export interface Quad { key: QuadKey; name: string; sub: string; icon: IconName; mult: number; color: string; light: string }
@@ -171,7 +188,7 @@ export const noteRotation = (id: number, scale = 1, shift = 0) => ROT[(id + shif
 
 /** A fresh log: no guild yet, nothing written down. */
 export const emptyData = (): Data => ({
-  version: 3,
+  version: 4,
   profile: {},
   guild: null,
   quests: [],
@@ -180,5 +197,7 @@ export const emptyData = (): Data => ({
   companions: [],
   tomes: [],
   codex: [],
+  notes: [],
   events: [],
+  tombstones: [],
 });

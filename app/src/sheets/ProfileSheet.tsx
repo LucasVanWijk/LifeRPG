@@ -1,6 +1,7 @@
 import { useEffect, useReducer, useRef, useState } from 'react';
 import { exportBackup, lastExport } from '../backup';
 import { download, driveConfigured, driveHasNewer, findFile, getToken, lastSync, loadGis, recordSync, upload } from '../drive';
+import { deviceName, payload } from '../sync';
 import type { StorageState } from '../storage';
 import { storageState } from '../storage';
 import { canPromptInstall, isInstalled, isIos, onInstallChange, promptInstall } from '../pwa';
@@ -200,11 +201,13 @@ export function ProfileSheet() {
 /** Offers "Install app" where the browser supports it, and explains Add to Home Screen on iPhone. */
 /** Manual sync with a file in the user's own Google Drive: nothing happens until a button is pressed. */
 function DriveSection() {
-  const { data, actions, showToast } = useStore();
+  const { data, actions, showToast, sync } = useStore();
   const [busy, setBusy] = useState(false);
-  const [sync, setSync] = useState(lastSync);
+  const [last, setLast] = useState(lastSync);
   useEffect(() => { if (driveConfigured) loadGis().catch(() => undefined); }, []);
+  useEffect(() => setLast(lastSync()), [sync]);
   if (!driveConfigured) return null;
+  const auto = sync.status !== 'off';
 
   const run = async (job: () => Promise<void>) => {
     setBusy(true);
@@ -214,14 +217,14 @@ function DriveSection() {
     const tok = await getToken();
     const remote = await findFile(tok);
     const write = () => run(async () => {
-      const f = await upload(tok, JSON.stringify(data, null, 2), remote?.id);
-      setSync(recordSync(f));
+      const f = await upload(tok, payload(data), remote?.id);
+      setLast(recordSync(f, deviceName()));
       showToast('Saved to Google Drive', summary(data));
     });
     if (remote && driveHasNewer(remote, lastSync())) {
       actions.confirm({
         title: 'Overwrite the Drive save?',
-        body: 'The save in Google Drive was changed since this device last loaded it (saved ' + new Date(remote.modifiedTime).toLocaleString() + '). Saving now replaces it with this device\'s log. Load it first if you want its changes.',
+        body: 'The save in Google Drive was changed since this device last loaded it (saved ' + new Date(remote.modifiedTime).toLocaleString() + '). Saving now replaces it with this device\'s log. Turn on automatic sync to merge instead.',
         confirmLabel: 'Overwrite', onConfirm: write,
       });
     } else await write();
@@ -236,20 +239,36 @@ function DriveSection() {
       title: 'Load the Drive save?',
       body: 'It holds ' + summary(next) + ' (saved ' + new Date(remote.modifiedTime).toLocaleString() + '). It replaces everything in this browser.',
       confirmLabel: 'Load save', tone: 'go',
-      onConfirm: () => { actions.replaceData(next); setSync(recordSync(remote)); showToast('Loaded from Google Drive', summary(next)); },
+      onConfirm: () => { actions.replaceData(next); setLast(recordSync(remote, deviceName())); showToast('Loaded from Google Drive', summary(next)); },
     });
   });
+  const status = sync.status === 'syncing' ? 'Syncing…' : sync.status === 'paused' ? 'Paused: the Google sign-in lasts an hour. Tap Resume to renew it.'
+    : sync.status === 'error' ? (sync.error ?? 'Sync failed.') : sync.status === 'idle' ? 'Up to date.' : 'Off.';
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       <h3 style={{ fontSize: 22 }}>Google Drive</h3>
       <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-        Keep one save in your own Drive and move it between devices. Nothing syncs by itself: press Save to put this log there, Load to bring it here.
-        {sync ? ' Last synced ' + new Date(sync.at).toLocaleString() + '.' : ' Not synced from this browser yet.'}
+        Keep your log in your own Drive. With automatic sync on, changes from every device are merged item by item when the app opens and a few seconds after each edit.
+      </p>
+      <p className="tnum" style={{ margin: 0, fontSize: 13 }}>
+        <strong>Sync:</strong> {status}
+        <span className="muted" style={{ display: 'block' }}>
+          {last ? 'Last synced ' + new Date(last.at).toLocaleString() + (last.device ? ' · ' + last.device : '') : 'Not synced from this browser yet.'}
+        </span>
       </p>
       <div className="two-col">
-        <button className="btn btn-primary inked" onClick={save} disabled={busy} style={{ minHeight: 46 }}>Save to Drive</button>
-        <button className="btn btn-secondary" onClick={load} disabled={busy} style={{ minHeight: 46 }}>Load from Drive</button>
+        {auto
+          ? <button className="btn btn-primary inked" onClick={() => void actions.syncNow()} disabled={busy || sync.status === 'syncing'} style={{ minHeight: 46 }}>{sync.status === 'paused' ? 'Resume' : 'Sync now'}</button>
+          : <button className="btn btn-primary inked" onClick={() => void actions.setAutoSync(true)} disabled={busy} style={{ minHeight: 46 }}>Turn on automatic sync</button>}
+        {auto && <button className="btn btn-secondary" onClick={() => void actions.setAutoSync(false)} style={{ minHeight: 46 }}>Turn off</button>}
       </div>
+      <details>
+        <summary className="muted" style={{ fontSize: 13, cursor: 'pointer' }}>Manual save and load</summary>
+        <div className="two-col" style={{ marginTop: 8 }}>
+          <button className="btn btn-secondary" onClick={save} disabled={busy} style={{ minHeight: 46 }}>Save to Drive</button>
+          <button className="btn btn-secondary" onClick={load} disabled={busy} style={{ minHeight: 46 }}>Load from Drive</button>
+        </div>
+      </details>
     </div>
   );
 }

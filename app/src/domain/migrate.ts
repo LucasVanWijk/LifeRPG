@@ -8,31 +8,33 @@ type LegacyQuest = Quest & { recur?: { every: 'daily' | 'weekly' | 'monthly'; st
 
 /**
  * Brings saved or imported data up to the current shape, or returns null if it isn't a Questlog log.
- * Version 3 replaced the Hero and the idle Expeditions with the guild: older logs keep their quests,
+ * Version 4 added per-item update times, tombstones and notes. Version 3 replaced the Hero and the idle Expeditions with the guild: older logs keep their quests,
  * habits, campaigns, calendar and Glossary, and found a new guild on first open.
  * Version 1 kept repeating quests ("bounties") on the board; they become habits, with their
  * streak rebuilt as check-ins in the preceding periods.
  */
 export function migrate(raw: unknown, today: string): Data | null {
   if (!raw || typeof raw !== 'object') return null;
-  const { rewards, hero, expedition, ...d } = raw as Partial<Data> & { version?: number; quests?: LegacyQuest[]; rewards?: unknown; hero?: { reviewedWeek?: string }; expedition?: unknown };
-  void rewards; void expedition;
+  const { rewards, hero, expedition, sync, ...d } = raw as Partial<Data> & { sync?: unknown; version?: number; quests?: LegacyQuest[]; rewards?: unknown; hero?: { reviewedWeek?: string }; expedition?: unknown };
+  void rewards; void expedition; void sync;
   const version = d.version as number | undefined;
-  if (!Array.isArray(d.quests) || (version !== 1 && version !== 2 && version !== 3)) return null;
-  if (version !== 3 && !hero) return null;
+  if (!Array.isArray(d.quests) || (version !== 1 && version !== 2 && version !== 3 && version !== 4)) return null;
+  if (version! < 3 && !hero) return null;
   const base = emptyData();
   const out: Data = {
     ...base,
     ...d,
-    version: 3,
-    profile: version === 3 ? { ...d.profile } : { reviewedWeek: hero?.reviewedWeek },
-    guild: version === 3 && d.guild ? upgradeGuild(d.guild) : null,
+    version: 4,
+    profile: version! >= 3 ? { ...d.profile } : { reviewedWeek: hero?.reviewedWeek },
+    guild: version! >= 3 && d.guild ? upgradeGuild(d.guild) : null,
     habits: Array.isArray(d.habits) ? d.habits : [],
     camps: d.camps ?? {},
     companions: d.companions ?? [],
     tomes: d.tomes ?? [],
     codex: d.codex ?? [],
     events: Array.isArray(d.events) ? d.events : [],
+    notes: Array.isArray(d.notes) ? d.notes : [],
+    tombstones: Array.isArray(d.tombstones) ? d.tombstones : [],
     quests: [],
   };
   let nextHabitId = Math.max(0, ...out.habits.map((h) => h.id)) + 1;

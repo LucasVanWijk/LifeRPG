@@ -21,7 +21,7 @@ import { backupDue, exportBackup, snoozeBackup } from '../backup';
 import { useStore } from '../state/store';
 
 export function Home() {
-  const { data, ui, setUi, today, actions, showToast } = useStore();
+  const { data, ui, setUi, today, actions, showToast, sync } = useStore();
   const [moving, setMoving] = useState<number | null>(null);
   const [iosNag, setIosNag] = useState(iosAtRisk);
   const [backupNag, setBackupNag] = useState(() => backupDue(data, today));
@@ -275,6 +275,12 @@ export function Home() {
             </div>
           ))}
         </div>
+      )}
+      {(sync.status === 'paused' || sync.status === 'error') && (
+        <button className="panel sync-line" onClick={() => void actions.syncNow()}>
+          <Icon n="repeat" size={15} />
+          <span style={{ flex: 1, textAlign: 'left' }}>{sync.status === 'paused' ? 'Sync paused · tap to resume' : (sync.error ?? 'Sync failed') + ' · tap to retry'}</span>
+        </button>
       )}
       <QuickAdd />
       <div className="home-grid">

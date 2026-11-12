@@ -21,7 +21,7 @@ export function sampleData(today: string): Data {
     ({ id, title, quad, due: due ? d(due) : null, size, campaign, status, notes: splitNotes(notes), steps: [], companions: [] });
 
   return {
-    version: 3,
+    version: 4,
     profile: {},
     guild: null,
     quests: [
@@ -82,6 +82,8 @@ export function sampleData(today: string): Data {
       { id: 'gym', name: 'Gym', sub: 'Sportcentrum Olympos', icon: 'dumbbell', fields: [
         { k: 'Locker code', v: '4471' }, { k: 'Membership', v: 'Renews ' + longDay('2027-01-01') }] },
     ],
+    notes: [],
     events: [],
+    tombstones: [],
   };
 }

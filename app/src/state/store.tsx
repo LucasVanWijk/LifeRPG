@@ -3,6 +3,11 @@ import { todayISO } from '../domain/dates';
 import type { LevelUp, Outcome, Toast } from '../domain/logic';
 import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
+import { mergeData, stamp } from '../domain/merge';
+import { autoSyncOn, setAutoSyncFlag, syncOnce } from '../sync';
+import type { SyncState } from '../sync';
+import { driveConfigured, lastSync } from '../drive';
+import { onTokenChange } from '../google';
 import type { CalEvent, Campaign, Data, Habit, QuadKey, Quest, Status } from '../domain/model';
 import { emptyData, QM } from '../domain/model';
 import type { BuildingId, ClassId, PotionKind, Slot, Stance } from '../domain/guild/content';
@@ -133,7 +138,8 @@ function useLayout() {
   return forced ? forced === 'desktop' : w >= 900;
 }
 
-const nextId = (xs: { id: number }[]) => Math.max(0, ...xs.map((x) => x.id)) + 1;
+/** A new numeric id. It is also at least the current time, so two devices that were offline never hand out the same one. */
+const nextId = (xs: { id: number }[]) => Math.max(Date.now(), ...xs.map((x) => x.id + 1));
 
 /** Undo is still safe while the quest log and real-life payments are unchanged; the guild's clock ticking alongside doesn't count. */
 const sameLog = (a: Data, b: Data) =>
@@ -211,12 +217,15 @@ function useStoreValue() {
   // Reads the latest data synchronously so completion side effects (toast, level-up) fire once.
   const dataRef = useRef(data);
   dataRef.current = data;
-  const commit = useCallback((d: Data) => { dataRef.current = d; setData(d); }, []);
+  /** Saves an edit: changed items get their update times, deleted ones a tombstone. */
+  const commit = useCallback((d: Data) => { const n = stamp(dataRef.current, d, Date.now()); dataRef.current = n; setData(n); }, []);
+  /** Puts data in as it is, without stamping (a restore, or a copy merged from another device). */
+  const commitRaw = useCallback((d: Data) => { dataRef.current = d; setData(d); }, []);
   const apply = useCallback((o: Outcome | null) => {
     if (!o) return;
     const before = dataRef.current;
     commit(o.data);
-    if (o.toasts.some((t) => t.undo)) undoRef.current = { before, after: o.data };
+    if (o.toasts.some((t) => t.undo)) undoRef.current = { before, after: dataRef.current };
     showToasts(o.toasts);
     if (o.levelUp) setUi({ levelUp: o.levelUp });
   }, [commit, showToasts, setUi]);
@@ -240,6 +249,54 @@ function useStoreValue() {
     const t = window.setInterval(() => tick(false), 15_000);
     return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); };
   }, [tick]);
+
+  // ── Drive sync ──
+  const [sync, setSync] = useState<SyncState>(() => {
+    const l = lastSync();
+    return { status: driveConfigured && autoSyncOn() ? 'paused' : 'off', at: l?.at, device: l?.device };
+  });
+  const syncBusy = useRef(false);
+  const dirty = useRef(false);
+  const merged = useRef<Data | null>(null);
+  const runSync = useCallback(async (interactive: boolean) => {
+    if (!driveConfigured || !autoSyncOn() || syncBusy.current) return;
+    syncBusy.current = true;
+    const snapshot = dataRef.current;
+    const wasDirty = dirty.current;
+    dirty.current = false;
+    setSync((s) => ({ ...s, status: 'syncing', error: undefined }));
+    try {
+      const r = await syncOnce(snapshot, wasDirty, interactive);
+      if (!r) { dirty.current = dirty.current || wasDirty; setSync((s) => ({ ...s, status: 'paused' })); return; }
+      let next = r.data;
+      // Edits made while the round was running are merged in rather than overwritten, and sent on the next round.
+      if (dataRef.current !== snapshot) { next = mergeData(dataRef.current, next, Date.now()); dirty.current = true; }
+      if (next !== dataRef.current) { merged.current = next; commitRaw(next); }
+      const l = lastSync();
+      setSync({ status: 'idle', at: l?.at ?? new Date().toISOString(), device: r.device ?? l?.device });
+    } catch (e) {
+      dirty.current = true;
+      setSync((s) => ({ ...s, status: 'error', error: e instanceof Error ? e.message : 'Sync failed.' }));
+    } finally { syncBusy.current = false; }
+  }, [commitRaw]);
+  // The parts of the log that sync; the guild's clock ticking alone doesn't count as an edit.
+  const syncKey = [data.quests, data.habits, data.camps, data.companions, data.tomes, data.notes, data.events, data.profile, data.tombstones];
+  useEffect(() => {
+    if (merged.current === dataRef.current) { merged.current = null; return; }
+    if (!driveConfigured || !autoSyncOn()) return;
+    dirty.current = true;
+    const t = window.setTimeout(() => void runSync(false), 4000);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, syncKey);
+  useEffect(() => {
+    void runSync(false);
+    const onVis = () => { if (document.visibilityState === 'hidden') { if (dirty.current) void runSync(false); } else void runSync(false); };
+    document.addEventListener('visibilitychange', onVis);
+    const t = window.setInterval(() => void runSync(false), 5 * 60_000);
+    const off = onTokenChange(() => void runSync(false));
+    return () => { document.removeEventListener('visibilitychange', onVis); window.clearInterval(t); off(); };
+  }, [runSync]);
 
   const actions = useMemo(() => {
     // Every action starts from the guild as it is now.
@@ -424,8 +481,19 @@ function useStoreValue() {
         tick(true);
       },
 
+      // Sync
+      /** Turns automatic Drive sync on (with a sign-in, so call it from a tap) or off. */
+      async setAutoSync(on: boolean) {
+        setAutoSyncFlag(on);
+        if (!on) { setSync((s) => ({ ...s, status: 'off' })); return; }
+        setSync((s) => ({ ...s, status: 'paused' }));
+        await runSync(true);
+      },
+      /** Renews the sign-in (a tap) and syncs. */
+      syncNow() { return runSync(true); },
+
       // Backup
-      replaceData(next: Data) { commit(next); setUi({ openId: null, gDetail: null, campaign: '', profileOpen: false }); },
+      replaceData(next: Data) { commitRaw(next); setUi({ openId: null, gDetail: null, campaign: '', profileOpen: false }); },
 
       /** Generic edit for Glossary data that never pays out. */
       update(fn: (d: Data) => Data) { commit(fn(d())); },
@@ -443,10 +511,10 @@ function useStoreValue() {
       openQuest(id: number) { setUi({ openId: id, newOpen: false, campSheet: null, eventSheet: null, sheetMode: 'view' }); },
       openEvent(id: number | 'new') { setUi({ eventSheet: id, eventMode: id === 'new' ? 'edit' : 'view', openId: null, newOpen: false }); },
     };
-  }, [today, commit, apply, showToast, setUi, tick]);
+  }, [today, commit, commitRaw, apply, showToast, setUi, tick, runSync]);
 
   const canUndo = !!toast?.undo && !!undoRef.current && sameLog(data, undoRef.current.after);
-  return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions };
+  return { today, data, ui, setUi, toast, lastToast, canUndo, isDesk, scrollRef, showToast, actions, sync };
 }
 
 export type Store = ReturnType<typeof useStoreValue>;
