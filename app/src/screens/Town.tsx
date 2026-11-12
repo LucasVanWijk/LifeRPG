@@ -9,6 +9,7 @@ import { Seg } from '../components/common';
 import { TownMap } from '../components/TownMap';
 import { useStore } from '../state/store';
 import { Section } from './Guild';
+import { capacity as visitCap, DESIRE_INFO, DESIRES, serviceLevel, servedCount, visitorsPerDay, wantedCount } from '../domain/guild/visitors';
 
 const CAP_HINT: Record<string, string> = {
   food: 'Everyone in town eats: workers, retirees, children and adventurers.',
@@ -20,6 +21,36 @@ const CAP_HINT: Record<string, string> = {
 const VIEW_KEY = 'questlog:townview';
 type View = 'map' | 'list';
 const loadView = (): View => { try { return localStorage.getItem(VIEW_KEY) === 'list' ? 'list' : 'map'; } catch { return 'map'; } };
+
+/** Strangers who came to town: how many, what they wanted, and what they paid. */
+function Visitors({ g }: { g: GuildT }) {
+  const v = g.visitors;
+  const perDay = visitorsPerDay(g.renown);
+  return (
+    <Section title="Visitors" sub={perDay + ' a day at ' + g.renown + ' renown'}>
+      <div className="panel" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <p className="muted" style={{ margin: 0, fontSize: 13 }}>
+          Travellers come to town in proportion to the guild's renown (10 a day at 200). Each wants something: a room, entertainment, gear, healing or supplies. They pay a little for what the town can give them, and each building takes only so many a day; bigger ones take more and charge a little more.
+        </p>
+        {v && perDay > 0 ? (
+          <>
+            <div className="tnum" style={{ fontSize: 14 }}>Yesterday: {wantedCount(v)} came, {servedCount(v)} were served, and they paid {v.gold} gold.</div>
+            {DESIRES.map((d) => {
+              const lvl = serviceLevel(g, d);
+              return (
+                <div key={d} className="tnum" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontSize: 13, padding: '3px 0', borderTop: '1px solid var(--q-rule)' }}>
+                  <span>{DESIRE_INFO[d].name}</span>
+                  <span className="muted">{lvl > 0 ? v.served[d] + ' of ' + v.wanted[d] + ' (room for ' + visitCap(lvl) + ')' : v.wanted[d] + ' wanted it · no ' + DESIRE_INFO[d].from.map((b) => BUILDINGS[b].name).join(' or ') + ' yet'}</span>
+                </div>
+              );
+            })}
+          </>
+        ) : <span className="muted" style={{ fontSize: 13, fontStyle: 'italic' }}>{perDay > 0 ? 'No visitors counted yet.' : 'Nobody has heard of the guild yet. Renown comes from finished expeditions and campaigns.'}</span>}
+        {g.visitorTotals && g.visitorTotals.people > 0 && <span className="muted tnum" style={{ fontSize: 12 }}>So far: {g.visitorTotals.people} visitors served, {g.visitorTotals.gold} gold.</span>}
+      </div>
+    </Section>
+  );
+}
 
 export function Town({ g }: { g: GuildT }) {
   const { setUi } = useStore();
@@ -56,6 +87,8 @@ export function Town({ g }: { g: GuildT }) {
         </span>
         <Icon n="chevron-right" size={18} />
       </button>}
+
+      <Visitors g={g} />
 
       <Section title="The town" sub={g.buildings.length - 1 + ' of ' + BUILDING_IDS.length + ' buildings standing'}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', paddingTop: 4 }}>

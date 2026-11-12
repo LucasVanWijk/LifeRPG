@@ -18,10 +18,12 @@ npm run build      # typecheck + production build into dist/
 
 **Calendar.** Settings → Google Calendar → *Connect Google Calendar* shows the events of the calendars you pick (30 days back to a year ahead), keeps them up to date incrementally, and mirrors events created in Questlog into the calendar you choose. Edits and deletions go both ways; the most recently changed version wins. Repeating Google events arrive as one event per occurrence, so a single occurrence can be edited; a whole series is changed in Google Calendar itself. Imported `.ics` events, quest deadlines and birthdays are not sent to Google.
 
+On phones and in the installed app, sign-in is a full-page redirect to Google and back (Google's popup ends on a white page there), and the app returns to the screen you were on. This needs the app's own address as an extra **authorised redirect URI** on the OAuth client (for the live site `https://lucasvanwijk.github.io/LifeRPG/`, locally `http://localhost:5173/`). Desktop browsers keep the popup. The sign-in is remembered on the device for its hour, so a reload doesn't ask again.
+
 Set up once:
 
 1. In Google Cloud Console create a project, enable the **Google Drive API** and the **Google Calendar API**, and configure the OAuth consent screen (External, add yourself as a test user, scopes `.../auth/drive.file`, `.../auth/calendar.events` and `.../auth/calendar.readonly`). Calendar scopes are sensitive: for personal use leave the project in *Testing* with you as a test user; a public release would need Google's verification.
-2. Create an **OAuth client ID** of type *Web application* with the authorised JavaScript origins `https://lucasvanwijk.github.io` and `http://localhost:5173`.
+2. Create an **OAuth client ID** of type *Web application* with the authorised JavaScript origins `https://lucasvanwijk.github.io` and `http://localhost:5173`, and the authorised redirect URIs above.
 3. Locally put `VITE_GOOGLE_CLIENT_ID=<client id>` in `app/.env.local` (git-ignored). For the live site add a repository secret named `GOOGLE_CLIENT_ID` (Settings → Secrets and variables → Actions); the deploy workflow passes it to the build.
 
 Without a client ID the Drive and Calendar sections are hidden. The ID is public by nature (it ships in the built JavaScript); the secret only keeps it out of the source.
