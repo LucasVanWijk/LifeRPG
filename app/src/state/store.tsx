@@ -24,7 +24,7 @@ const STORAGE_KEY = 'questlog:v2';
 export type Tab = 'home' | 'quests' | 'calendar' | 'glossary' | 'guild';
 export type GuildTab = 'roster' | 'board' | 'town' | 'tavern' | 'legacy';
 export type QuestView = 'board' | 'campaign' | 'habits';
-export type GlossaryCat = 'companions' | 'tomes' | 'codex';
+export type GlossaryCat = 'companions' | 'tomes' | 'notes';
 export type { Toast };
 
 /** tone 'go' shows the confirm button as a normal action instead of a destructive one. */
@@ -111,7 +111,7 @@ function initialUi(today: string): Ui {
     eventSheet: null,
     eventMode: 'view',
     calDay: today,
-    gCat: pick('cat', ['companions', 'tomes', 'codex'] as const, 'companions'),
+    gCat: pick('cat', ['companions', 'tomes', 'notes'] as const, 'companions'),
     gSearch: '',
     gDetail: p.get('detail'),
     openTome: null,

@@ -3,6 +3,8 @@ import type { Data, Every, Habit, Quest } from './model';
 import { emptyData } from './model';
 import { periodOf } from './logic';
 import { upgradeGuild } from './guild/engine';
+import type { CodexEntry } from './notes';
+import { codexToNotes } from './notes';
 
 type LegacyQuest = Quest & { recur?: { every: 'daily' | 'weekly' | 'monthly'; streak: number } | null; lastDone?: string | null; prevDue?: string | null };
 
@@ -31,12 +33,18 @@ export function migrate(raw: unknown, today: string): Data | null {
     camps: d.camps ?? {},
     companions: d.companions ?? [],
     tomes: d.tomes ?? [],
-    codex: d.codex ?? [],
     events: Array.isArray(d.events) ? d.events : [],
     notes: Array.isArray(d.notes) ? d.notes : [],
     tombstones: Array.isArray(d.tombstones) ? d.tombstones : [],
     quests: [],
   };
+  // The Codex became notes: each entry is a note, once (a copy from an older device converts the same way).
+  const old = (d as { codex?: CodexEntry[] }).codex;
+  if (Array.isArray(old) && old.length) {
+    const have = new Set(out.notes.map((n) => n.id));
+    out.notes = [...out.notes, ...codexToNotes(old, Date.now()).filter((n) => !have.has(n.id))];
+  }
+  delete (out as { codex?: unknown }).codex;
   let nextHabitId = Math.max(0, ...out.habits.map((h) => h.id)) + 1;
   for (const q of d.quests) {
     const { recur, lastDone, prevDue, ...quest } = q;

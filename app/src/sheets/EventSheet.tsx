@@ -3,6 +3,8 @@ import { weekdayDate } from '../domain/dates';
 import { repeatText } from '../domain/calendar';
 import type { CalEvent, Repeat } from '../domain/model';
 import { Icon } from '../components/Icon';
+import { LinkText } from '../components/RichText';
+import { mapsUrl } from '../domain/notes';
 import { CloseBtn, Seg, Sheet } from '../components/common';
 import { KindMark } from '../screens/Calendar';
 import { useStore } from '../state/store';
@@ -39,7 +41,7 @@ export function EventSheet({ id }: { id: number | 'new' }) {
           <div><Icon n="calendar" size={16} /><span className="tnum">{when}</span></div>
           <div><Icon n="repeat" size={16} /><span>{e.g?.series ? 'Part of a repeating event in Google Calendar' : repeatText(e, weekdayDate)}</span></div>
           {e.g && <div><Icon n="calendar" size={16} /><span>Google Calendar{calName ? ' · ' + calName : ''}{e.g.series && e.g.link ? <> · <a href={e.g.link} target="_blank" rel="noreferrer">Change the whole series in Google</a></> : ''}</span></div>}
-          {e.location && <div><Icon n="pin" size={16} /><span>{e.location}</span></div>}
+          {e.location && <div><Icon n="pin" size={16} /><span><a className="auto-link" href={mapsUrl(e.location)} target="_blank" rel="noreferrer noopener">{e.location}</a></span></div>}
         </div>
         {people.length > 0 && (
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6 }}>
@@ -51,7 +53,7 @@ export function EventSheet({ id }: { id: number | 'new' }) {
             ))}
           </div>
         )}
-        {e.notes && <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 15, borderTop: '1px solid var(--q-rule)', paddingTop: 12 }}>{e.notes}</p>}
+        {e.notes && <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: 15, borderTop: '1px solid var(--q-rule)', paddingTop: 12 }}><LinkText text={e.notes} /></p>}
       </Sheet>
     );
   }

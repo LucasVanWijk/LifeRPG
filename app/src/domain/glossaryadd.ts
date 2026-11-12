@@ -1,9 +1,10 @@
 // One-line Glossary entry: "Ring about the party @sophie fri", "Dune #books" or just "Renew passport 3 oct".
 import { weekdayDate } from './dates';
-import type { CodexEntry, Data } from './model';
+import type { Data, Note } from './model';
+import { findNote } from './notes';
 import { readDate } from './quickadd';
 
-export interface GlossaryChip { kind: 'companion' | 'tome' | 'date' | 'codex' | 'warn'; label: string }
+export interface GlossaryChip { kind: 'companion' | 'tome' | 'date' | 'note' | 'warn'; label: string }
 export interface GlossaryParse {
   /** The text without @, # and date tokens. */
   title: string;
@@ -51,11 +52,11 @@ export function parseGlossaryAdd(text: string, data: Pick<Data, 'companions' | '
   }
   out.title = title.join(' ');
   out.plain = plain.join(' ');
-  if (!out.companions.length && !out.tomes.length) out.chips.push({ kind: 'codex', label: 'Codex · ' + REMINDERS });
+  if (!out.companions.length && !out.tomes.length) out.chips.push({ kind: 'note', label: 'Note · ' + REMINDERS });
   return out;
 }
 
-/** Adds the entry to every companion and tome it names, or to the Reminders codex entry (made if missing). */
+/** Adds the entry to every companion and tome it names, or to the Reminders note (made if missing). */
 export function applyGlossaryAdd(d: Data, p: GlossaryParse, now: number): Data {
   const title = p.title || p.plain;
   if (!title) return d;
@@ -69,12 +70,12 @@ export function applyGlossaryAdd(d: Data, p: GlossaryParse, now: number): Data {
     next = { ...next, tomes: next.tomes.map((t) => (p.tomes.includes(t.id) ? { ...t, items: [...t.items, { id: now, t: p.plain, done: false }] } : t)) };
   }
   if (!p.companions.length && !p.tomes.length) {
-    const field = p.date ? { k: title, v: weekdayDate(p.date), date: p.date, label: REMINDERS + ' → ' + title } : { k: title, v: '' };
-    const has = next.codex.some((x) => x.name.toLowerCase() === REMINDERS.toLowerCase());
-    const codex: CodexEntry[] = has
-      ? next.codex.map((x) => (x.name.toLowerCase() === REMINDERS.toLowerCase() ? { ...x, fields: [...x.fields, field] } : x))
-      : [...next.codex, { id: 'x' + now, name: REMINDERS, sub: 'Quick-added notes', icon: 'calendar', fields: [field] }];
-    next = { ...next, codex };
+    const line = p.date ? title + ' @' + p.date : title;
+    const has = findNote(next.notes, REMINDERS);
+    const notes: Note[] = has
+      ? next.notes.map((n) => (n === has ? { ...n, body: n.body ? n.body + '\n' + line : line } : n))
+      : [...next.notes, { id: 'n' + now, title: REMINDERS, body: line, icon: 'calendar', pinned: false, created: now }];
+    next = { ...next, notes };
   }
   return next;
 }

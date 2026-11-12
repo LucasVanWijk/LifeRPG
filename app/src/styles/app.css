@@ -384,3 +384,8 @@ button { font: inherit; }
 .notice-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 14px 10px; border-top: 1px solid var(--q-rule); }
 .sync-line { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 14px; min-height: 36px; cursor: pointer; font-size: 13px; color: var(--color-accent-800); font-family: var(--font-body); }
 .sync-line:hover { background: color-mix(in srgb, var(--color-accent-300) 16%, transparent); }
+
+/* Notes and links */
+.auto-link { color: var(--color-accent-800); text-decoration: underline; text-underline-offset: 2px; word-break: break-word; }
+.note-body { display: flex; flex-direction: column; gap: 6px; font-size: 16px; line-height: 1.45; overflow-wrap: anywhere; }
+.note-edit { min-height: 220px; font-size: 15px; line-height: 1.45; font-family: var(--font-body); resize: vertical; }

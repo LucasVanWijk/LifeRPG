@@ -22,7 +22,7 @@ function summary(d: Data) {
     d.quests.length + (d.quests.length === 1 ? ' quest' : ' quests'),
     d.habits.length + (d.habits.length === 1 ? ' habit' : ' habits'),
     Object.keys(d.camps).length + (Object.keys(d.camps).length === 1 ? ' campaign' : ' campaigns'),
-    d.companions.length + d.tomes.length + d.codex.length + ' Glossary entries',
+    d.companions.length + d.tomes.length + d.notes.length + ' Glossary entries',
   ];
   return parts.join(', ');
 }

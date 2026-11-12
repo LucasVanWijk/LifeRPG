@@ -1,3 +1,4 @@
+import { LinkText } from '../components/RichText';
 import { useState } from 'react';
 import { weekdayDate } from '../domain/dates';
 import type { QuadKey, Quest, QuestNote, QuestStep } from '../domain/model';
@@ -230,7 +231,7 @@ export function QuestSheet({ quest: q }: { quest: Quest }) {
             </div>
             {q.notes.map((n) => (
               <div key={n.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '10px 0', borderTop: '1px solid var(--q-rule)' }}>
-                <span className="bullet" /><span style={{ flex: 1, fontSize: 15, textWrap: 'pretty' }}>{n.t}</span>
+                <span className="bullet" /><span style={{ flex: 1, fontSize: 15, textWrap: 'pretty' }}><LinkText text={n.t} /></span>
               </div>
             ))}
             {!q.notes.length && <p className="muted" style={{ margin: 0, padding: '10px 0', borderTop: '1px solid var(--q-rule)', fontStyle: 'italic', fontSize: 14 }}>No notes yet.</p>}

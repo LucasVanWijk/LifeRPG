@@ -7,7 +7,7 @@ const HELP = [
   ['@sophie', 'companion: adds a note to their page'],
   ['#books', 'tome: adds an item to the list'],
   ['fri', 'date (companion notes and Reminders): today, tomorrow, mon–sun, 3 oct, +3d, +2w'],
-  ['neither', 'goes to the “' + REMINDERS + '” codex entry, made if it is missing'],
+  ['neither', 'goes to the “' + REMINDERS + '” note, made if it is missing'],
 ];
 
 /** A one-line bar for the Glossary: "Ring about the party @sophie fri", "Dune #books" or "Renew passport 3 oct". */

@@ -32,7 +32,7 @@ export interface CalItem {
   companions?: string[];
   /** 'event:3', 'quest:12', or a Glossary target like 'companion:sophie'. */
   target: string;
-  /** For Glossary dates: the companion or codex entry they come from. */
+  /** For Glossary dates: the companion or note they come from. */
   source?: string;
   /** For multi-day events: which day of how many. */
   span?: { day: number; of: number };
@@ -84,7 +84,7 @@ export function eventItems(e: CalEvent, from: string, to: string): CalItem[] {
 }
 
 /** Everything between `from` and `to` (inclusive), sorted by day, then all-day first, then time. */
-export function calendarItems(data: Pick<Data, 'events' | 'quests' | 'companions' | 'codex'>, from: string, to: string): CalItem[] {
+export function calendarItems(data: Pick<Data, 'events' | 'quests' | 'companions' | 'notes'>, from: string, to: string): CalItem[] {
   const items: CalItem[] = [];
   for (const e of data.events) items.push(...eventItems(e, from, to));
   for (const q of data.quests) {

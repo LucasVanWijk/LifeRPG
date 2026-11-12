@@ -4,6 +4,7 @@ import { campSize, habitReward, reward, streakText } from './model';
 import type { Pay } from './guild/engine';
 import { awardStreak, payReal, refund } from './guild/engine';
 import { ATTR_NAME, QUAD_ATTR } from './guild/content';
+import { datedLines } from './notes';
 
 /** undo: the toast offers to reverse the action that produced it. */
 export interface Toast { text: string; sub: string; undo?: boolean }
@@ -202,7 +203,7 @@ export function chronicle(data: Data): ChronicleEntry[] {
 
 // ── Calendar ────────────────────────────────────────────────
 
-export interface CalendarEvent { date: string; label: string; kind: 'Companion' | 'Codex'; target: string; who?: string; /** The companion or codex entry a dated note belongs to. */ source?: string }
+export interface CalendarEvent { date: string; label: string; kind: 'Companion' | 'Note'; target: string; who?: string; /** The companion or note a dated line belongs to. */ source?: string }
 
 /** Birthdays and dated Glossary notes that show on the Home week strip. */
 export function glossaryEvents(data: Data, today: string): CalendarEvent[] {
@@ -212,8 +213,8 @@ export function glossaryEvents(data: Data, today: string): CalendarEvent[] {
     if (c.bday) for (const yr of [y - 1, y, y + 1]) out.push({ date: yr + '-' + c.bday, label: c.first + "'s birthday", kind: 'Companion', target: 'companion:' + c.id, who: c.first });
     for (const n of c.notes) if (n.date) out.push({ date: n.date, label: n.label || n.t, kind: 'Companion', target: 'companion:' + c.id, who: c.first, source: c.first });
   }
-  for (const x of data.codex)
-    for (const f of x.fields) if (f.date) out.push({ date: f.date, label: f.label || f.k, kind: 'Codex', target: 'codex:' + x.id, source: x.name });
+  for (const n of data.notes)
+    for (const l of datedLines(n.body)) out.push({ date: l.date, label: l.label, kind: 'Note', target: 'note:' + n.id, source: n.title });
   return out;
 }
 

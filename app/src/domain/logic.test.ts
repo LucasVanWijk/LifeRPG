@@ -249,7 +249,7 @@ describe('sample data', () => {
   it('puts birthdays and dated notes on the calendar', () => {
     const ev = glossaryEvents(sampleData(T), T);
     expect(ev.some((e) => e.date === '2026-09-27' && e.label === "Mom's birthday")).toBe(true);
-    expect(ev.some((e) => e.date === '2026-09-29' && e.kind === 'Codex')).toBe(true);
+    expect(ev.some((e) => e.date === '2026-09-29' && e.kind === 'Note')).toBe(true);
   });
 });
 

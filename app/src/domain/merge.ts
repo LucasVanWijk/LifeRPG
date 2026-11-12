@@ -177,7 +177,6 @@ export function mergeData(local: Data, remote: Data, now: number): Data {
       reviewedWeek: [local.profile.reviewedWeek, remote.profile.reviewedWeek].filter(Boolean).sort().at(-1),
       updated: Math.max(stampOf(local.profile), stampOf(remote.profile)) || undefined,
     },
-    codex: local.codex,
     guild: null,
     tombstones: pruneTombstones([...tombs].map(([key, at]) => ({ key, at, ...(tombG.has(key) ? { g: tombG.get(key) } : {}) })), now),
   };

@@ -3,8 +3,10 @@ import { addDays, dayDiff, dueLabel, MONL, nextAnnual, shortDate, weekdayDate } 
 import { calendarItems } from '../domain/calendar';
 import { glossaryEvents } from '../domain/logic';
 import { GlossaryAdd } from '../components/GlossaryAdd';
-import type { Companion, CodexEntry, CodexField, Data } from '../domain/model';
-import { CODEX_ICONS, QM } from '../domain/model';
+import type { Companion, Data, Note } from '../domain/model';
+import { NOTE_ICONS, QM } from '../domain/model';
+import { firstLink, noteMatches, sortNotes } from '../domain/notes';
+import { LinkText, NoteBody } from '../components/RichText';
 import { Icon, type IconName } from '../components/Icon';
 import { AddForm, Empty, onEnter, Seg } from '../components/common';
 import { useStore, type GlossaryCat } from '../state/store';
@@ -14,10 +16,10 @@ export function Glossary() {
   const query = ui.gSearch.trim().toLowerCase();
   const [dType, dId] = (ui.gDetail || '').split(':');
   const companion = dType === 'companion' ? data.companions.find((c) => c.id === dId) : undefined;
-  const codex = dType === 'codex' ? data.codex.find((x) => x.id === dId) : undefined;
+  const note = dType === 'note' ? data.notes.find((x) => x.id === dId) : undefined;
 
   if (companion) return <div className="screen screen-narrow" style={{ gap: 16 }}><CompanionDetail c={companion} /></div>;
-  if (codex) return <div className="screen screen-narrow" style={{ gap: 16 }}><CodexDetail x={codex} /></div>;
+  if (note) return <div className="screen screen-narrow" style={{ gap: 16 }}><NoteDetail n={note} /></div>;
 
   const wideList = !query && ui.gCat === 'companions';
   return (
@@ -29,17 +31,17 @@ export function Glossary() {
         </div>
         <div className="search">
           <span><Icon n="search" size={17} /></span>
-          <input className="input" type="search" placeholder="Search companions, tomes and codex" aria-label="Search the Glossary"
+          <input className="input" type="search" placeholder="Search companions, tomes and notes" aria-label="Search the Glossary"
             value={ui.gSearch} onChange={(e) => setUi({ gSearch: e.target.value, gDetail: null })} />
         </div>
         {!query && (
           <Seg<GlossaryCat> name="glossary-cat" value={ui.gCat} onChange={(v) => setUi({ gCat: v })}
             style={{ display: 'grid', gridTemplateColumns: 'repeat(3,1fr)' }} optStyle={{ justifyContent: 'center', minHeight: 42, fontSize: 14 }}
-            options={([['companions', 'Companions', 'users'], ['tomes', 'Tomes', 'library'], ['codex', 'Codex', 'map']] as const).map(([k, n, ic]) => ({ key: k, label: <><Icon n={ic} size={15} />{n}</> }))} />
+            options={([['companions', 'Companions', 'users'], ['tomes', 'Tomes', 'library'], ['notes', 'Notes', 'map']] as const).map(([k, n, ic]) => ({ key: k, label: <><Icon n={ic} size={15} />{n}</> }))} />
         )}
       </header>
       {!query && <GlossaryAdd />}
-      {query ? <SearchResults query={query} /> : ui.gCat === 'companions' ? <CompanionList /> : ui.gCat === 'tomes' ? <TomeList /> : <CodexList />}
+      {query ? <SearchResults query={query} /> : ui.gCat === 'companions' ? <CompanionList /> : ui.gCat === 'tomes' ? <TomeList /> : <NoteList />}
     </div>
   );
 }
@@ -55,9 +57,10 @@ function search(data: Data, query: string) {
     const hit = t.items.find((i) => has(i.t));
     if (has(t.name) || hit) out.push({ kind: 'Tome', icon: 'library', title: t.name, sub: hit ? hit.t : t.items.length + ' items', open: { gCat: 'tomes', openTome: t.id } });
   }
-  for (const x of data.codex) {
-    const hit = x.fields.find((f) => has(f.v) || has(f.k));
-    if (has(x.name) || has(x.sub) || hit) out.push({ kind: 'Codex', icon: x.icon, title: x.name, sub: hit ? hit.k + ': ' + hit.v : x.sub, open: { gDetail: 'codex:' + x.id } });
+  for (const n of data.notes) {
+    if (!noteMatches(n, query)) continue;
+    const hit = n.body.split('\n').find((l) => has(l));
+    out.push({ kind: 'Note', icon: n.icon ?? 'pin', title: n.title, sub: hit && !has(n.title) ? hit : n.body.split('\n')[0] || 'Empty note', open: { gDetail: 'note:' + n.id } });
   }
   return out;
 }
@@ -174,6 +177,7 @@ function TomeList() {
                       onChange={(e) => { const v = e.target.value; updTome(t.id, (items) => items.map((y) => (y.id === i.id ? { ...y, t: v } : y))); }}
                       onBlur={() => { if (!i.t.trim()) updTome(t.id, (items) => items.filter((y) => y.id !== i.id)); }}
                       style={{ color: i.done ? 'var(--color-accent-700)' : 'var(--q-ink)', textDecoration: i.done ? 'line-through' : 'none' }} />
+                    {firstLink(i.t) && <a className="icon-btn" href={firstLink(i.t)!.href} target="_blank" rel="noreferrer noopener" aria-label={'Open link in ' + i.t} style={{ width: 32, height: 32, display: 'grid', placeItems: 'center' }}><Icon n="chevron-right" size={14} /></a>}
                     <button className="icon-btn" onClick={() => updTome(t.id, (items) => items.filter((y) => y.id !== i.id))} aria-label={'Remove ' + i.t} style={{ width: 32, height: 32 }}><Icon n="x" size={14} /></button>
                   </div>
                 ))}
@@ -203,40 +207,39 @@ function TomeList() {
   );
 }
 
-function CodexList() {
+function NoteList() {
   const { data, setUi, actions } = useStore();
-  const [name, setName] = useState('');
-  const [sub, setSub] = useState('');
+  const [title, setTitle] = useState('');
   const [icon, setIcon] = useState<IconName>('pin');
-  const reset = () => { setName(''); setSub(''); setIcon('pin'); };
+  const reset = () => { setTitle(''); setIcon('pin'); };
   const add = () => {
-    const n = name.trim();
-    if (!n) return false;
-    const id = 'x' + Date.now();
-    actions.update((d) => ({ ...d, codex: [...d.codex, { id, name: n, sub: sub.trim(), icon, fields: [] }] }));
+    const t = title.trim();
+    if (!t) return false;
+    const id = 'n' + Date.now();
+    actions.update((d) => ({ ...d, notes: [...d.notes, { id, title: t, body: '', icon, pinned: false, created: Date.now() }] }));
     reset();
-    setUi({ gDetail: 'codex:' + id });
+    setUi({ gDetail: 'note:' + id });
     return true;
   };
   return (
     <div style={{ display: 'flex', flexDirection: 'column' }}>
-      {!data.codex.length && <Empty>No codex entries yet. Keep the facts you look up often: your car, your dentist, a locker code.</Empty>}
-      {data.codex.map((x) => (
-        <button key={x.id} className="row-btn" onClick={() => setUi({ gDetail: 'codex:' + x.id })} style={{ gap: 14, minHeight: 64, padding: '12px 0' }}>
-          <span className="icon-box" style={{ width: 44, height: 44 }}><Icon n={x.icon} size={19} /></span>
+      {!data.notes.length && <Empty>No notes yet. Keep anything that isn't a task: ideas, meeting notes, recipes, the wifi password.</Empty>}
+      {sortNotes(data.notes).map((n) => (
+        <button key={n.id} className="row-btn" onClick={() => setUi({ gDetail: 'note:' + n.id })} style={{ gap: 14, minHeight: 64, padding: '12px 0' }}>
+          <span className="icon-box" style={{ width: 44, height: 44 }}><Icon n={n.icon ?? 'pin'} size={19} /></span>
           <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-            <span className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{x.name}</span>
-            <span className="muted" style={{ fontSize: 13 }}>{x.sub}</span>
+            <span className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{n.title}</span>
+            <span className="muted ellipsis" style={{ fontSize: 13 }}>{n.body.split('\n').find((l) => l.trim()) ?? 'Empty note'}</span>
           </span>
+          {n.pinned && <span title="Pinned" style={{ color: 'var(--color-accent-700)' }}><Icon n="pin" size={15} /></span>}
           <span style={{ color: 'var(--color-accent-700)' }}><Icon n="chevron-right" size={17} /></span>
         </button>
       ))}
-      <AddForm label="New codex entry" onSave={add} invalid={!name.trim()} onCancel={reset}>
-        <div className="field"><label htmlFor="nx-name">Name</label><input id="nx-name" className="input" placeholder="e.g. Car" value={name} onChange={(e) => setName(e.target.value)} autoFocus style={{ minHeight: 44 }} /></div>
-        <div className="field"><label htmlFor="nx-sub">Subtitle</label><input id="nx-sub" className="input" placeholder="e.g. Volkswagen Golf, grey" value={sub} onChange={(e) => setSub(e.target.value)} style={{ minHeight: 44 }} /></div>
+      <AddForm label="New note" onSave={add} invalid={!title.trim()} onCancel={reset}>
+        <div className="field"><label htmlFor="nn-title">Title</label><input id="nn-title" className="input" placeholder="e.g. Wifi and router" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(add)} autoFocus style={{ minHeight: 44 }} /></div>
         <div className="field"><label>Icon</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {CODEX_ICONS.map((ic) => (
+            {NOTE_ICONS.map((ic) => (
               <button key={ic} className="chip" aria-pressed={icon === ic} aria-label={ic} onClick={() => setIcon(ic)} style={{ width: 44, height: 44, justifyContent: 'center' }}><Icon n={ic} size={19} /></button>
             ))}
           </div>
@@ -330,7 +333,7 @@ function CompanionDetail({ c }: { c: Companion }) {
         {c.notes.map((n, i) => (
           <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 0', borderTop: '1px solid var(--q-rule)' }}>
             <span className="bullet" />
-            <span style={{ flex: 1, fontSize: 15, textWrap: 'pretty' }}>{n.t}</span>
+            <span style={{ flex: 1, fontSize: 15, textWrap: 'pretty' }}><LinkText text={n.t} /></span>
             {n.date && <span className="pill" style={{ flex: 'none' }}><Icon n="calendar" size={12} />{shortDate(n.date)}</span>}
             <button className="icon-btn" onClick={() => updC((x) => ({ ...x, notes: x.notes.filter((_, j) => j !== i) }))} aria-label="Remove note" style={{ width: 30, height: 30, marginTop: -3 }}><Icon n="x" size={14} /></button>
           </div>
@@ -345,69 +348,45 @@ function CompanionDetail({ c }: { c: Companion }) {
   );
 }
 
-function CodexDetail({ x }: { x: CodexEntry }) {
+function NoteDetail({ n }: { n: Note }) {
   const { actions, setUi } = useStore();
-  const [k, setK] = useState('');
-  const [v, setV] = useState('');
-  const [date, setDate] = useState('');
   const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState<CodexEntry>(x);
-  const updX = (fn: (y: CodexEntry) => CodexEntry) => actions.update((d) => ({ ...d, codex: d.codex.map((y) => (y.id === x.id ? fn(y) : y)) }));
-  const add = () => {
-    const key = k.trim(), val = v.trim();
-    if (!key || !(val || date)) return;
-    const f = date ? { k: key, v: val || shortDate(date), date, label: x.name + ' → ' + key } : { k: key, v: val };
-    updX((y) => ({ ...y, fields: [...y.fields, f] }));
-    setK(''); setV(''); setDate('');
-  };
-  const startEdit = () => { setDraft(x); setEditing(true); };
-  const setField = (i: number, patch: Partial<CodexField>) => setDraft((dr) => ({ ...dr, fields: dr.fields.map((f, j) => (j === i ? { ...f, ...patch } : f)) }));
+  const [draft, setDraft] = useState<Note>(n);
+  const upd = (fn: (y: Note) => Note) => actions.update((d) => ({ ...d, notes: d.notes.map((y) => (y.id === n.id ? fn(y) : y)) }));
   const save = () => {
-    if (!draft.name.trim()) return;
-    const name = draft.name.trim();
-    updX(() => ({
-      ...draft, name, sub: draft.sub.trim(),
-      fields: draft.fields.filter((f) => f.k.trim()).map((f) => (f.date ? { ...f, k: f.k.trim(), label: name + ' → ' + f.k.trim() } : { k: f.k.trim(), v: f.v })),
-    }));
+    if (!draft.title.trim()) return;
+    upd(() => ({ ...draft, title: draft.title.trim() }));
     setEditing(false);
   };
   const remove = () => actions.confirm({
-    title: 'Delete “' + x.name + '”?', body: 'The entry and all its details will be gone.', confirmLabel: 'Delete entry',
-    onConfirm: () => { actions.update((d) => ({ ...d, codex: d.codex.filter((y) => y.id !== x.id) })); setUi({ gDetail: null, gCat: 'codex' }); },
+    title: 'Delete “' + n.title + '”?', body: 'The note will be gone.', confirmLabel: 'Delete note',
+    onConfirm: () => { actions.update((d) => ({ ...d, notes: d.notes.filter((y) => y.id !== n.id) })); setUi({ gDetail: null, gCat: 'notes' }); },
   });
 
   if (editing) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <BackButton label="Codex" cat="codex" />
-        <div className="field"><label htmlFor="ex-name">Name</label><input id="ex-name" className="input" value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} style={{ minHeight: 44 }} /></div>
-        <div className="field"><label htmlFor="ex-sub">Subtitle</label><input id="ex-sub" className="input" value={draft.sub} onChange={(e) => setDraft({ ...draft, sub: e.target.value })} style={{ minHeight: 44 }} /></div>
+        <BackButton label="Notes" cat="notes" />
+        <div className="field"><label htmlFor="ne-title">Title</label><input id="ne-title" className="input" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} style={{ minHeight: 44 }} /></div>
         <div className="field"><label>Icon</label>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-            {CODEX_ICONS.map((ic) => (
+            {NOTE_ICONS.map((ic) => (
               <button key={ic} className="chip" aria-pressed={draft.icon === ic} aria-label={ic} onClick={() => setDraft({ ...draft, icon: ic })} style={{ width: 44, height: 44, justifyContent: 'center' }}><Icon n={ic} size={19} /></button>
             ))}
           </div>
         </div>
-        <div className="field"><label>Details</label>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {draft.fields.map((f, i) => (
-              <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap' }}>
-                <input className="input" aria-label="Detail label" value={f.k} onChange={(e) => setField(i, { k: e.target.value })} style={{ flex: '1 1 110px', minHeight: 42, fontSize: 13 }} />
-                {f.date
-                  ? <input className="input" type="date" aria-label="Date" value={f.date} onChange={(e) => e.target.value && setField(i, { date: e.target.value, v: shortDate(e.target.value) })} style={{ flex: '2 1 150px', minHeight: 42 }} />
-                  : <input className="input" aria-label="Detail value" value={f.v} onChange={(e) => setField(i, { v: e.target.value })} style={{ flex: '2 1 150px', minHeight: 42 }} />}
-                <button className="icon-btn" onClick={() => setDraft({ ...draft, fields: draft.fields.filter((_, j) => j !== i) })} aria-label={'Remove ' + f.k}><Icon n="x" size={15} /></button>
-              </div>
-            ))}
-            {!draft.fields.length && <span className="muted" style={{ fontSize: 13, fontStyle: 'italic' }}>No details.</span>}
-          </div>
+        <label className="toggle-row"><input type="checkbox" checked={draft.pinned} onChange={(e) => setDraft({ ...draft, pinned: e.target.checked })} /><span>Pin to the top</span></label>
+        <div className="field"><label htmlFor="ne-body">Note</label>
+          <textarea id="ne-body" className="input note-edit" value={draft.body} onChange={(e) => setDraft({ ...draft, body: e.target.value })} />
+          <span className="muted" style={{ fontSize: 12 }}>
+            # heading · - list · [ ] checkbox · **bold** · end a line with @2026-12-01 to show it on your calendar
+          </span>
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button className="danger-btn" onClick={remove}>Delete entry</button>
+          <button className="danger-btn" onClick={remove}>Delete note</button>
           <span style={{ flex: 1 }} />
           <button className="btn btn-secondary" onClick={() => setEditing(false)} style={{ minHeight: 42 }}>Cancel</button>
-          <button className="btn btn-primary inked" onClick={save} disabled={!draft.name.trim()} style={{ minHeight: 42 }}>Save</button>
+          <button className="btn btn-primary inked" onClick={save} disabled={!draft.title.trim()} style={{ minHeight: 42 }}>Save</button>
         </div>
       </div>
     );
@@ -415,33 +394,15 @@ function CodexDetail({ x }: { x: CodexEntry }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-      <BackButton label="Codex" cat="codex" />
+      <BackButton label="Notes" cat="notes" />
       <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-        <span className="icon-box" style={{ width: 64, height: 64, boxShadow: 'inset 0 0 0 4px var(--q-parch), inset 0 0 0 5px var(--q-rule)' }}><Icon n={x.icon} size={28} /></span>
-        <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ fontSize: 30, textWrap: 'pretty' }}>{x.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{x.sub}</div></div>
-        <button className="btn btn-secondary" onClick={startEdit} style={{ minHeight: 40 }}><Icon n="pencil" size={14} />Edit</button>
+        <span className="icon-box" style={{ width: 64, height: 64, boxShadow: 'inset 0 0 0 4px var(--q-parch), inset 0 0 0 5px var(--q-rule)' }}><Icon n={n.icon ?? 'pin'} size={28} /></span>
+        <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ fontSize: 30, textWrap: 'pretty' }}>{n.title}</h2></div>
+        <button className="icon-btn" onClick={() => upd((y) => ({ ...y, pinned: !y.pinned }))} aria-pressed={n.pinned} aria-label={n.pinned ? 'Unpin' : 'Pin'} style={{ color: n.pinned ? 'var(--color-accent-800)' : undefined }}><Icon n="pin" size={18} /></button>
+        <button className="btn btn-secondary" onClick={() => { setDraft(n); setEditing(true); }} style={{ minHeight: 40 }}><Icon n="pencil" size={14} />Edit</button>
       </div>
-      <dl style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
-        {x.fields.map((f, i) => (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 3, padding: '12px 0', borderTop: '1px solid var(--q-rule)' }}>
-            <dt className="label">{f.k}</dt>
-            <dd className="tnum" style={{ margin: 0, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: 16 }}>
-              {f.v}
-              {f.date && <span className="pill" style={{ fontVariantNumeric: 'normal' }}><Icon n="calendar" size={12} />On your week · {shortDate(f.date)}</span>}
-            </dd>
-          </div>
-        ))}
-      </dl>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, paddingTop: 12, borderTop: '1px solid var(--q-rule)' }}>
-        <span className="muted" style={{ fontSize: 12 }}>Add a detail. Give it a date to show it on your week.</span>
-        <div className="two-col">
-          <input className="input" placeholder="Label, e.g. Phone" aria-label="Detail label" value={k} onChange={(e) => setK(e.target.value)} style={{ minHeight: 44 }} />
-          <input className="input" placeholder="Value" aria-label="Detail value" value={v} onChange={(e) => setV(e.target.value)} onKeyDown={onEnter(add)} style={{ minHeight: 44 }} />
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <input className="input" type="date" aria-label="Optional date" value={date} onChange={(e) => setDate(e.target.value)} style={{ flex: '1 1 auto', minHeight: 44 }} />
-          <button className="btn btn-primary inked" onClick={add} disabled={!k.trim() || !(v.trim() || date)} style={{ minHeight: 44 }}>Add</button>
-        </div>
+      <div style={{ borderTop: '1px solid var(--q-rule)', paddingTop: 14 }}>
+        <NoteBody body={n.body} onChange={(body) => upd((y) => ({ ...y, body }))} />
       </div>
     </div>
   );

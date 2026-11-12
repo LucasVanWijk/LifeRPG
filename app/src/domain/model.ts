@@ -54,8 +54,6 @@ export interface Companion { id: string; name: string; first: string; rel: strin
 export interface TomeItem { id: number; t: string; done: boolean }
 export interface Tome { id: string; name: string; items: TomeItem[]; updated?: number }
 
-export interface CodexField { k: string; v: string; date?: string; label?: string }
-export interface CodexEntry { id: string; name: string; sub: string; icon: IconName; fields: CodexField[] }
 
 /** What's left of the old Hero: there is no "you" in the game, only the guild. */
 export interface Profile {
@@ -136,7 +134,6 @@ export interface Data {
   camps: Record<string, Campaign>;
   companions: Companion[];
   tomes: Tome[];
-  codex: CodexEntry[];
   notes: Note[];
   events: CalEvent[];
   tombstones: Tombstone[];
@@ -172,7 +169,7 @@ export const STATUSES: [Status, string][] = [['todo', 'To Do'], ['doing', 'Doing
 export const STATUS_NAME: Record<Status, string> = { todo: 'To Do', doing: 'Doing', done: 'Done' };
 
 export const CAMP_ICONS: IconName[] = ['flag', 'compass', 'home', 'mountain', 'crown', 'star', 'trophy', 'sword', 'shield', 'flame', 'sparkles', 'heart', 'tree', 'plane', 'briefcase', 'graduation-cap', 'wrench', 'palette', 'music', 'gamepad', 'sun', 'moon', 'gift', 'feather'];
-export const CODEX_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map', 'gift', 'briefcase', 'music', 'coffee', 'plane', 'camera', 'gamepad', 'tree', 'graduation-cap', 'cart', 'palette', 'wrench', 'heart', 'star', 'cake', 'beer', 'calendar', 'clock', 'book-open', 'backpack', 'store', 'fish']
+export const NOTE_ICONS: IconName[] = ['pin', 'car', 'utensils', 'dumbbell', 'home', 'map', 'gift', 'briefcase', 'music', 'coffee', 'plane', 'camera', 'gamepad', 'tree', 'graduation-cap', 'cart', 'palette', 'wrench', 'heart', 'star', 'cake', 'beer', 'calendar', 'clock', 'book-open', 'backpack', 'store', 'fish']
 
 
 /** XP scales with size and the quadrant multiplier (Main Quests ×1.5), rounded to 5; gold is a third of XP. */
@@ -205,7 +202,6 @@ export const emptyData = (): Data => ({
   camps: {},
   companions: [],
   tomes: [],
-  codex: [],
   notes: [],
   events: [],
   tombstones: [],
