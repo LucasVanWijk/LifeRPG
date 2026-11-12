@@ -2,7 +2,7 @@
 // A vow is the one thing they mean to do before they are done: progress is counted as they play,
 // and keeping it earns a lasting reward. Retiring or falling first leaves it unfulfilled.
 import type { RegionId } from './content';
-import { REGIONS } from './content';
+import { MAX_LEVEL, REGIONS } from './content';
 import type { Fx } from './traits';
 import { TRAIT, traitFx } from './traits';
 import type { Rng } from './rng';
@@ -72,7 +72,7 @@ const WEIGHT: Record<VowKind, number> = { clears: 20, high: 10, bosses: 14, home
 
 export function makeVow(r: Rng, level: number): Vow {
   const kind = r.weighted(Object.keys(WEIGHT) as VowKind[], (k) => WEIGHT[k]);
-  const target = { clears: r.int(3, 6), high: r.int(2, 3), bosses: r.int(3, 6), home: r.int(4, 8), region: r.int(3, 5), gold: r.int(3, 8) * 100, level: Math.min(20, level + r.int(4, 7)), rescue: 1, odyssey: 1, free: 1, love: 1 }[kind];
+  const target = { clears: r.int(3, 6), high: r.int(2, 3), bosses: r.int(3, 6), home: r.int(4, 8), region: r.int(3, 5), gold: r.int(3, 8) * 100, level: Math.min(MAX_LEVEL, level + r.int(4, 7)), rescue: 1, odyssey: 1, free: 1, love: 1 }[kind];
   const v: Vow = { kind, target, progress: kind === 'level' ? level : 0 };
   if (kind === 'region') v.region = r.pick(['hearth', 'mire', 'frost'] as RegionId[]);
   return v;

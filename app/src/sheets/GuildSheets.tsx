@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import type { CharterId, Slot, Stance } from '../domain/guild/content';
 import {
   ATTR_NAME, ATTRS, BUILDINGS, CHARTERS, CLASSES, CONDITIONS, DAYS_PER_YEAR, GRADES, GUILD_NAMES, OFFER_KIND, PRACTICE_PER_POINT, RACES, REGIONS, ROLE_NAME, SLOT_NAME, SLOTS, STAGE_ICON,
-  STAGE_NAME, STANCES, STOCK_NAME, TOWN_NAMES, xpToNext,
+  STAGE_NAME, STANCES, STOCK_NAME, TOWN_NAMES, xpToNext, MAX_LEVEL,
 } from '../domain/guild/content';
 import { ageYears, canGoOut, fullName, phaseAt, rating, ratingShown, realDuration, rolesOf, shortClock, yearsLeft } from '../domain/guild/adventurer';
 import { TRAIT } from '../domain/guild/traits';
@@ -158,7 +158,7 @@ export function AdventurerSheet({ id }: { id: string }) {
             ? <div className="panel" style={{ padding: '10px 12px', fontSize: 13 }}>Your real-life XP, practice and a quarter of the gold go to {a.first}.</div>
             : <button className="btn btn-primary inked" onClick={() => actions.setChampion(a.id)} disabled={!!a.awayOn} style={{ minHeight: 44 }}><Icon n="crown" size={15} />Make Champion</button>}
           <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: 4 }}>
-            <span className="label">Level {a.level}{a.level < 20 ? ' · ' + Math.floor(a.xp) + ' / ' + xpToNext(a.level) + ' XP' : ''}</span>
+            <span className="label">Level {a.level}{a.level < MAX_LEVEL ? ' · ' + Math.floor(a.xp) + ' / ' + xpToNext(a.level) + ' XP' : ''}</span>
             <Bar value={a.xp} max={xpToNext(a.level)} color="var(--color-accent-500)" label="Experience" />
           </div>
         </div>
@@ -363,6 +363,7 @@ export function SendSheet({ id }: { id: string }) {
           </div>
           <div className="tnum" style={{ fontSize: 14 }}>
             Loot about {lootText(lo.loot)}{lo.goldHigh > lo.goldLow ? ' (gold ' + lo.goldLow + '–' + lo.goldHigh + ')' : ''} · about {lo.xp} XP each
+            {offer.scale !== 'odd' && <> · about {Math.round(o.renown) === Math.round(lo.renown) ? Math.round(lo.renown) : Math.round(o.renown) + '–' + Math.round(lo.renown)} renown (a clean run earns double)</>}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {party.map((x) => (
@@ -431,7 +432,7 @@ export function ReportSheet({ id }: { id: string }) {
       {o.done && (
         <div className="panel" style={{ padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 4, fontSize: 14 }}>
           <span className="label">Brought home</span>
-          <span>{lootText(o.result.loot)}{o.result.chest ? ' (the chest held ' + lootText(o.result.chest) + ')' : ''}</span>
+          <span>{lootText(o.result.loot)}{o.result.chest ? ' (the chest held ' + lootText(o.result.chest) + ')' : ''}{o.renown ? ', and ' + o.renown + ' renown' : ''}</span>
           <span>{Object.entries(o.result.members).filter(([, m]) => !m.died).map(([k, m]) => byId(g, k)!.first + ' +' + m.xp + ' XP').join(' · ') || 'Nobody came back.'}</span>
           {injuredBack.map(([k, m]) => <span key={k} style={{ color: 'var(--q-wax)' }}>{byId(g, k)!.first}: {m.wounds?.length ? m.wounds.map((w) => w.severity + ' wound, ' + w.text).join('; ') : m.injury ? m.injury.text + ', ' + m.injury.days + ' days' : ''}.</span>)}
           {o.potions && Object.values(o.potions).some((x) => x.length) && <span className="muted">Potions drunk: {Object.entries(o.potions).filter(([, x]) => x.length).map(([k, x]) => byId(g, k)!.first + ' ' + x.join(', ')).join(' · ')}.</span>}

@@ -404,7 +404,7 @@ describe('what lasts', () => {
     const g = fresh();
     const r = payReal(g, pay);
     expect(r.guild.monuments).toHaveLength(1);
-    expect(r.guild.renown).toBe(10);
+    expect(r.guild.renown).toBe(20);
     const back = refund(r.guild, 'c:trip');
     expect(back.monuments).toHaveLength(0);
     expect(back.renown).toBe(0);
@@ -422,7 +422,7 @@ describe('what lasts', () => {
   it('multiplies real-life gold by the Guild Hall level', () => {
     let g = fresh();
     g.buildings = g.buildings.map((b) => (b.type === 'hall' ? { ...b, level: 10 } : b));
-    expect(payReal(g, { ...pay, monument: undefined, gold: 100 }).entry.guild + payReal(g, { ...pay, monument: undefined, gold: 100 }).entry.purse).toBe(190);
+    expect(payReal(g, { ...pay, monument: undefined, gold: 100 }).entry.guild + payReal(g, { ...pay, monument: undefined, gold: 100 }).entry.purse).toBe(235);
   });
 
   it('computes records', () => {

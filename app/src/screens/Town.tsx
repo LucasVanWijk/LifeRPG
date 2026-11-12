@@ -30,7 +30,7 @@ function Visitors({ g }: { g: GuildT }) {
     <Section title="Visitors" sub={perWeek + ' a week at ' + g.renown + ' renown'}>
       <div className="panel" style={{ padding: '10px 14px', display: 'flex', flexDirection: 'column', gap: 6 }}>
         <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-          Travellers come to town once a week (a real day), in proportion to the guild's renown: 10 a week at 200, then more slowly (20 at 800). Each wants something: a room, entertainment, gear, healing or supplies. They pay a little for what the town can give them, and each building takes only so many a week; bigger ones take more and charge a little more. It is a small extra: real life and expeditions pay for the town.
+          Travellers come to town once a week (a real day), in proportion to the guild's renown: 10 a week at 800, then more slowly (20 at 3,200). Each wants something: a room, entertainment, gear, healing or supplies. They pay a little for what the town can give them, and each building takes only so many a week; bigger ones take more and charge a little more. It is a small extra: real life and expeditions pay for the town.
         </p>
         {v && perWeek > 0 ? (
           <>

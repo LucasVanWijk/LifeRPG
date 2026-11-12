@@ -4,7 +4,7 @@ import type { Attr, BuildingId, CharterId, ClassId, ConditionId, PotionKind, Slo
 import {
   ATTR_MAX, AUTO_REST, BUILDINGS, CLASSES, DAYS_PER_SEASON, DAYS_PER_YEAR, ERA_YEARS, FORGE_IRON, GRADE_VALUE,
   hireFee, insurance, LAST_JOB_PENALTY, LIBERATED, MARKET_SIZE, MONUMENT, NOTICE_FEE, ODD_JOBS_ON_BOARD, ODYSSEY, PATROL_YIELD, PHASE_EFFECT, PHASE_MS, PHASES_PER_DAY,
-  PHASES_PER_YEAR, POTIONS, POTIONS_PER_ADVENTURER, PRACTICE_PER_POINT, PURSE_SHARE, RACES, RECRUIT_STAY_DAYS, REGION_ORDER, REGIONS, REST_MULT, SCARS,
+  PHASES_PER_YEAR, POTIONS, POTIONS_PER_ADVENTURER, PRACTICE_PER_POINT, PURSE_SHARE, RACES, RECRUIT_STAY_DAYS, REGION_ORDER, REGIONS, RENOWN_UNIT, REST_MULT, SCARS,
   SELL_PRICE, SLOTS, SPOIL_PHASES, START_GOLD, START_STOCK, STANCES, STARTING_BUILDINGS, STOCK_KEYS, STREAK_MILESTONES, TAVERN_REFRESH_DAYS, TRAIN_XP, WEEK_DAYS,
   WORK_CREW_BONUS, WORK_CREW_MAX, realGoldMult, STONE_LEVEL, GRADE_DURABILITY,
 } from './content';
@@ -16,7 +16,7 @@ import { makeExpedition, makeOddJob, makeOdyssey, makeRecovery, tutorialJob } fr
 import { better, itemIron, itemValue, makeDraft } from './gear';
 import { births, closeEra, comeOfAge, kin, pairUp } from './legacy';
 import type { Ctx } from './resolve';
-import { resolve, snapshot } from './resolve';
+import { outingRenown, resolve, snapshot } from './resolve';
 import { rngFor } from './rng';
 import {
   boardSize, buildProblem, costOf, hallLevel, happyTalent, isLegend, legendBonus, levelOf, outLimit, production, rosterLimit, seasonCount,
@@ -58,6 +58,7 @@ export function found(f: Founding, now: number): Guild {
   };
   for (const type of ['hall', ...STARTING_BUILDINGS] as BuildingId[]) g.buildings.push({ id: nextId(g, 'b'), type, level: 1 });
   g.layout = 3;
+  g.renownUnit = RENOWN_UNIT;
   const dps: ClassId = rngFor(f.seed, 'starter-dps').pick(['ranger', 'arcanist', 'blademaster'] as ClassId[]);
   (['guardian', 'cleric', dps] as ClassId[]).forEach((cls, i) => {
     g.adventurers.push(makeAdventurer(rngFor(f.seed, 'starter', i), nextId(g, 'a'), 0, { cls }));
@@ -116,6 +117,13 @@ export function upgradeGuild(raw: Guild): Guild {
   for (const o of [...g.board, ...g.outings.map((x) => x.offer)]) { o.region ??= 'hearth'; o.conditions ??= []; }
   for (const o of g.outings) { if (Array.isArray(o.potions)) o.potions = {}; o.potions ??= {}; o.phase ??= 0; }
   for (const e of g.ledger) { e.at ??= 0; e.renown ??= 0; }
+  // Renown in units half the size of today's: double what was earned, and what campaigns paid so undo takes back the same.
+  if ((g.renownUnit ?? 1) < RENOWN_UNIT) {
+    const k = RENOWN_UNIT / (g.renownUnit ?? 1);
+    g.renown = Math.round(g.renown * k);
+    g.ledger = g.ledger.map((e) => (e.renown ? { ...e, renown: Math.round(e.renown * k) } : e));
+    g.renownUnit = RENOWN_UNIT;
+  }
   for (const r of g.recruits) { if (!r.adv.traitIds?.length) { const rr = rngFor(g.seed, 'traits', r.adv.id); r.adv.traitIds = pickTraits(rr); r.adv.backstory = backstory(rr, r.adv.race, r.adv.traitIds); }
     if (!r.adv.conviction) { const rr = rngFor(g.seed, 'vow', r.adv.id); r.adv.conviction = pickConviction(rr); r.adv.vow = makeVow(rr, r.adv.level); }
     r.adv.gear ??= {}; r.adv.autoBuy ??= true; r.adv.staffAt ??= null; r.adv.shared ??= {}; r.adv.clears5 ??= 0; r.adv.liberated ??= 0; }
@@ -526,8 +534,9 @@ function returnHome(g: Guild, o: Outing) {
 
   const full = o.result.stages.length === o.offer.stages.length && o.result.stages.every((s) => s.outcome !== 'fail');
   const finished = o.result.stages.length === o.offer.stages.length && o.result.stages[o.result.stages.length - 1].outcome !== 'fail';
-  if (full && o.offer.scale === 'expedition' && !o.offer.recover) g.renown += o.offer.tier * o.offer.tier;
-  if (full && o.offer.scale === 'odyssey') g.renown += 10 * o.offer.tier;
+  // Every expedition and odyssey earns renown for the checks it passed; a flawless one earns as much again.
+  o.renown = outingRenown(o.offer, o.result.stages.map((s) => s.outcome));
+  g.renown += o.renown;
   if (full && o.offer.tier >= 5) for (const a of survivors) a.clears5++;
   if (o.offer.scale === 'odyssey' && finished && o.offer.stages[o.offer.stages.length - 1].kind === 'boss' && survivors.length && !g.regions[o.offer.region].liberated) {
     g.regions[o.offer.region].liberated = true;

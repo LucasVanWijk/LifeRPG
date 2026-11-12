@@ -18,12 +18,12 @@ export const DESIRE_INFO: Record<Desire, { name: string; verb: string; weight: n
   supplies: { name: 'Supplies', verb: 'bought potions and herbs', weight: 0.08, gold: 4, from: ['stillroom'] },
 };
 
-/** Visitors a week at 200 renown. */
-export const VISITORS_AT_200 = 10;
-/** Visitors per week: in proportion to renown up to 10 at 200, then more slowly (20 at 800, 30 at 1,800), so they stay a small extra. */
+/** Visitors a week at 800 renown. */
+export const VISITORS_AT_800 = 10;
+/** Visitors per week: in proportion to renown up to 10 at 800, then more slowly (20 at 3,200, 30 at 7,200), so they stay a small extra. */
 export const visitorsPerWeek = (renown: number) => {
-  const r = Math.max(0, renown) / 200;
-  return Math.round(VISITORS_AT_200 * (r <= 1 ? r : Math.sqrt(r)));
+  const r = Math.max(0, renown) / 800;
+  return Math.round(VISITORS_AT_800 * (r <= 1 ? r : Math.sqrt(r)));
 };
 /** How many people a desire can take in a week: a few for the first level, more for each level after. */
 export const capacity = (level: number) => (level > 0 ? 3 + 3 * level : 0);

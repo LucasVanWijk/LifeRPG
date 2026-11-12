@@ -71,8 +71,9 @@ export const QUAD_ATTR = { crisis: 'might', main: 'wits', errand: 'finesse', sid
 
 // ── Levels and money ─────────────────────────────────────────
 
-export const MAX_LEVEL = 20;
-export const xpToNext = (level: number) => 100 * level;
+export const MAX_LEVEL = 30;
+/** XP from one level to the next: 80 per level, so level 20 takes 15,200 XP and level 30 takes 34,800. */
+export const xpToNext = (level: number) => 80 * level;
 /** Talent ★1–5: attribute points per level-up. */
 export const pointsPerLevel = (talent: number) => 1 + Math.floor(talent / 2);
 export const hireFee = (level: number, talent: number) => 15 + 10 * level + 15 * (talent - 1);
@@ -255,7 +256,15 @@ export const REGIONS: Record<RegionId, Region> = {
 };
 export const REGION_ORDER: RegionId[] = ['hearth', 'mire', 'frost', 'dusk', 'sun', 'fen'];
 /** Liberating a region: expeditions there are shorter and richer, and the guild gets an outpost. */
-export const LIBERATED = { duration: 0.85, loot: 1.1, renown: 100 };
+export const LIBERATED = { duration: 0.85, loot: 1.1, renown: 200 };
+/**
+ * Renown from going out. Every expedition and odyssey earns its worth (tier² for an expedition, 10 × tier for an odyssey)
+ * times the share of its checks the party passed, at least 1 if they passed any; a flawless run (every stage, no failure)
+ * earns as much again on top.
+ */
+export const RENOWN = { share: 1, flawless: 1, odyssey: 10 };
+/** Saves before renown came from every outing counted it in half-size units; they are doubled once on load. */
+export const RENOWN_UNIT = 2;
 
 export const PHASE_EFFECT = [
   { name: 'Morning', text: 'Travel is 10% faster.', duration: 0.9, loot: 1, dark: false },
@@ -366,15 +375,15 @@ export const workersFor = (b: BuildingDef, level: number) => (b.workers ? b.work
 export interface HallStep { gold: number; wood: number; stone: number; iron: number; renown: number; phases: number }
 /** Index = the level it takes the Hall to. */
 export const HALL_STEPS: (HallStep | null)[] = [null, null,
-  { gold: 150, wood: 80, stone: 40, iron: 0, renown: 10, phases: 12 },
-  { gold: 700, wood: 200, stone: 150, iron: 20, renown: 60, phases: 36 },
-  { gold: 1500, wood: 450, stone: 350, iron: 80, renown: 150, phases: 60 },
-  { gold: 4200, wood: 700, stone: 650, iron: 150, renown: 300, phases: 96 },
-  { gold: 5000, wood: 1250, stone: 1150, iron: 250, renown: 500, phases: 140 },
-  { gold: 8500, wood: 1700, stone: 1600, iron: 400, renown: 800, phases: 190 },
-  { gold: 13000, wood: 2500, stone: 2400, iron: 600, renown: 1200, phases: 250 },
-  { gold: 17000, wood: 3500, stone: 3400, iron: 900, renown: 1700, phases: 320 },
-  { gold: 9000, wood: 4800, stone: 4800, iron: 1400, renown: 2400, phases: 300 },
+  { gold: 150, wood: 80, stone: 40, iron: 0, renown: 20, phases: 12 },
+  { gold: 700, wood: 200, stone: 150, iron: 20, renown: 120, phases: 36 },
+  { gold: 1500, wood: 450, stone: 350, iron: 80, renown: 360, phases: 60 },
+  { gold: 4200, wood: 700, stone: 650, iron: 150, renown: 800, phases: 96 },
+  { gold: 5000, wood: 1250, stone: 1150, iron: 250, renown: 1500, phases: 140 },
+  { gold: 10000, wood: 1700, stone: 1600, iron: 400, renown: 2800, phases: 190 },
+  { gold: 15000, wood: 2500, stone: 2400, iron: 600, renown: 4200, phases: 250 },
+  { gold: 19500, wood: 3500, stone: 3400, iron: 900, renown: 5800, phases: 320 },
+  { gold: 25000, wood: 4800, stone: 4800, iron: 1400, renown: 8000, phases: 380 },
 ];
 export const RANKS = ['Copper', 'Copper', 'Bronze', 'Bronze', 'Iron', 'Iron', 'Silver', 'Silver', 'Gold', 'Adamant'];
 export const hallRank = (level: number) => RANKS[level - 1];
@@ -384,8 +393,8 @@ export const maxTierFor = (hall: number) => TIER_HALL.filter((h) => h <= hall).l
 export const crewsFor = (hall: number) => 1 + (hall >= 3 ? 1 : 0) + (hall >= 6 ? 1 : 0) + (hall >= 9 ? 1 : 0);
 /** Expeditions and odysseys out at once. */
 export const maxOutFor = (hall: number, outposts: number) => 1 + Math.floor(hall / 2) + outposts;
-/** Gold from real life grows with the Hall: ×1.0 at level 1, ×1.9 at level 10. */
-export const realGoldMult = (hall: number) => 1 + 0.1 * (hall - 1);
+/** Gold from real life grows with the Hall: ×1.0 at level 1, ×2.35 at level 10. */
+export const realGoldMult = (hall: number) => 1 + 0.15 * (hall - 1);
 /** What a new guild starts with besides the Hall. Every other building starts at level 0. */
 export const STARTING_BUILDINGS: BuildingId[] = ['home', 'farm'];
 
@@ -433,4 +442,4 @@ export const LEGEND_STAT: Record<ClassId, { name: string; text: string }> = {
   blademaster: { name: 'speed', text: 'shorter expeditions' },
   rogue: { name: 'fortune', text: 'more gold from outings' },
 };
-export const MONUMENT = { S: { name: 'Plaque', renown: 5 }, M: { name: 'Statue', renown: 10 }, L: { name: 'Obelisk', renown: 20 } };
+export const MONUMENT = { S: { name: 'Plaque', renown: 10 }, M: { name: 'Statue', renown: 20 }, L: { name: 'Obelisk', renown: 40 } };
