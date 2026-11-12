@@ -26,7 +26,7 @@ describe('founding', () => {
     expect(g.board.filter((o) => o.tutorial)).toHaveLength(1);
     expect(g.board.filter((o) => o.scale === 'expedition')).toHaveLength(4);
     expect(g.board.filter((o) => o.scale === 'odd' && !o.tutorial).length).toBeGreaterThanOrEqual(2);
-    expect(g.recruits).toHaveLength(2);
+    expect(g.recruits).toHaveLength(1);
     expect(g.recruits.some((r) => ['tank', 'healer'].includes(role(r.adv)))).toBe(true);
   });
 });
@@ -139,7 +139,7 @@ describe('outings', () => {
 describe('hiring', () => {
   it('costs the fee and respects the roster limit', () => {
     let g = fresh();
-    g = { ...g, gold: 10_000 };
+    g = { ...g, gold: 10_000, buildings: [...g.buildings, { id: 'l', type: 'lodge', level: 1 }] };
     const first = g.recruits[0];
     const r = hire(g, first.adv.id);
     expect(r.ok).toBe(true);
@@ -150,7 +150,8 @@ describe('hiring', () => {
     while (full.adventurers.filter((a) => a.state === 'active').length < rosterLimit(full)) {
       full = { ...full, adventurers: [...full.adventurers, makeAdventurer(rngFor(5, full.adventurers.length), 'z' + full.adventurers.length, 0)] };
     }
-    const again = hire(full, full.recruits[0].adv.id);
+    full = { ...full, recruits: [{ ...first, adv: { ...first.adv, id: 'again' } }] };
+    const again = hire(full, 'again');
     expect(again.ok).toBe(false);
   });
 });

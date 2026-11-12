@@ -1,6 +1,6 @@
-import { BUILDINGS, hallRank, MAX_HALL, plotsFor, STOCK_NAME } from '../domain/guild/content';
+import { BUILDING_IDS, BUILDINGS, hallRank, MAX_HALL, STOCK_NAME } from '../domain/guild/content';
 import type { StockKey } from '../domain/guild/content';
-import { bld, buildProblem, capacity, CAP_KEYS, capLabel, costOf, costText, crews, hallLevel, plotsUsed, production, staffOf, staffSlots, storageCap, surplus } from '../domain/guild/town';
+import { bld, buildProblem, capacity, CAP_KEYS, capLabel, costOf, costText, crews, hallLevel, production, staffOf, staffSlots, storageCap, surplus } from '../domain/guild/town';
 import type { Building, Guild as GuildT } from '../domain/guild/types';
 import { Icon } from '../components/Icon';
 import { Bar } from '../components/guildParts';
@@ -40,8 +40,8 @@ export function Town({ g }: { g: GuildT }) {
         options={[{ key: 'map', label: 'Map' }, { key: 'list', label: 'List' }]} />
       {map && (
         <section className="panel" style={{ padding: 6 }}>
-          <TownMap g={g} onBuilding={(id) => setUi({ buildSheet: id })} onPlot={(plot) => setUi({ buildSheet: 'new', buildPlot: plot })} />
-          <p className="muted" style={{ margin: '6px 8px 4px', fontSize: 12 }}>Tap a building to open it, an empty plot to build there, and the Guild Hall to raise it. A green arrow means it can be raised now.</p>
+          <TownMap g={g} onBuilding={(id) => setUi({ buildSheet: id })} />
+          <p className="muted" style={{ margin: '6px 8px 4px', fontSize: 12 }}>Every building has its own place in town. Faded ones are still at level 0: tap one to build it, or a built one to raise it. A green arrow or plus means you can afford it now; a lock means the Guild Hall must rise first. Housing and Farms spread out as they rise.</p>
         </section>
       )}
       {!map && <button className="panel-framed" onClick={() => setUi({ buildSheet: hall.id })} style={{ padding: '14px 16px', display: 'flex', alignItems: 'center', gap: 14, textAlign: 'left', cursor: 'pointer', width: '100%' }}>
@@ -57,7 +57,7 @@ export function Town({ g }: { g: GuildT }) {
         <Icon n="chevron-right" size={18} />
       </button>}
 
-      <Section title="The town" sub={plotsUsed(g) + ' of ' + plotsFor(level) + ' plots'}>
+      <Section title="The town" sub={g.buildings.length - 1 + ' of ' + BUILDING_IDS.length + ' buildings standing'}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px 16px', paddingTop: 4 }}>
           {CAP_KEYS.map((k) => {
             const c = cap[k], s = surplus(c);
@@ -74,7 +74,7 @@ export function Town({ g }: { g: GuildT }) {
         </div>
         {CAP_KEYS.some((k) => surplus(cap[k]) < 0) && (
           <p style={{ margin: '10px 0 0', fontSize: 13, color: 'var(--q-wax)' }}>
-            Over capacity: {CAP_KEYS.filter((k) => surplus(cap[k]) < 0).map(capLabel).join(', ').toLowerCase()}. Nothing gets worse, but you can’t build anything else that adds to it. Homes and Farms can always be built.
+            Over capacity: {CAP_KEYS.filter((k) => surplus(cap[k]) < 0).map(capLabel).join(', ').toLowerCase()}. Nothing gets worse, but you can’t build anything else that adds to it. Housing and Farms can always be raised, up to the Guild Hall's level.
           </p>
         )}
         <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>Demand against supply. {cap.workers} workers, {cap.residents - cap.workers} retirees and children.</div>
@@ -107,10 +107,20 @@ export function Town({ g }: { g: GuildT }) {
         </Section>
       )}
 
-      {map && <button className="dashed-btn" onClick={() => setUi({ buildSheet: 'new', buildPlot: null })} style={{ gap: 8, minHeight: 48, fontSize: 17 }}><Icon n="plus" size={17} />Build something</button>}
+      {map && <button className="dashed-btn" onClick={() => setUi({ buildSheet: 'new' })} style={{ gap: 8, minHeight: 48, fontSize: 17 }}><Icon n="plus" size={17} />Build something</button>}
       {!map && <Section title="Buildings" sub={buildings.length + ' built'}>
         {buildings.map((b) => <BuildingRow key={b.id} g={g} b={b} />)}
-        <button className="dashed-btn" onClick={() => setUi({ buildSheet: 'new', buildPlot: null })} style={{ gap: 8, minHeight: 48, marginTop: 10, fontSize: 17 }}>
+        {BUILDING_IDS.filter((t) => !g.buildings.some((b) => b.type === t) && !g.construction.some((c) => c.type === t && !c.target)).map((t) => (
+          <button key={t} className="agenda-row" onClick={() => setUi({ buildSheet: 'type:' + t })} style={{ gap: 12, padding: '10px 2px', opacity: 0.75 }}>
+            <span className="seal" style={{ width: 34, height: 34, flex: 'none', opacity: 0.6 }}><Icon n={BUILDINGS[t].icon} size={16} /></span>
+            <span style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span className="heading" style={{ fontSize: 17 }}>{BUILDINGS[t].name} <span className="muted tnum" style={{ fontSize: 13 }}>· level 0</span></span>
+              <span className="muted" style={{ fontSize: 12 }}>{level < BUILDINGS[t].hall ? 'Needs Guild Hall level ' + BUILDINGS[t].hall : buildProblem(g, t) ? 'Not built yet' : 'Can be built now'}</span>
+            </span>
+            <Icon n="chevron-right" size={16} />
+          </button>
+        ))}
+        <button className="dashed-btn" onClick={() => setUi({ buildSheet: 'new' })} style={{ gap: 8, minHeight: 48, marginTop: 10, fontSize: 17 }}>
           <Icon n="plus" size={17} />Build something
         </button>
       </Section>}

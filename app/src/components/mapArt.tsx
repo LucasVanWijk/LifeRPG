@@ -1,6 +1,7 @@
 // The drawings on the town map: simple ink-and-wash shapes, each a few lines, drawn in code. Level shows as size and detail.
 import type { BuildingId } from '../domain/guild/content';
 import { BUILDINGS } from '../domain/guild/content';
+import { FARM_FIELDS, fieldsAt, HOUSES, housesAt, SPOTS } from '../domain/guild/plots';
 import { ICON_PATHS } from './Icon';
 
 const INK = 'var(--q-ink)';
@@ -168,6 +169,40 @@ export function HeroesArt() {
       {[-13, 0, 13].map((x) => <rect key={x} x={x - 2.5} y={0} width={5} height={15} fill={PARCH} />)}
       <rect x={-22} y={15} width={44} height={4} fill={PARCH} />
       <Emblem type="heroes" x={-5} y={-16} s={0.4} color={GOLD} />
+    </g>
+  );
+}
+
+const ROOFS = ['var(--q-wax)', 'var(--color-accent-600)', 'oklch(0.45 0.08 255)', 'oklch(0.5 0.06 40)', 'var(--q-moss)'];
+/** The lower town: two more houses each level, drawn around Housing's spot. */
+export function HousingArt({ level }: { level: number }) {
+  const o = SPOTS.home;
+  return (
+    <g stroke={INK} strokeWidth={1} strokeLinejoin="round">
+      {HOUSES.slice(0, housesAt(level)).map((h, i) => (
+        <g key={i} transform={`translate(${h.x - o.x} ${h.y - o.y})`}>
+          <rect x={-8} y={-3} width={16} height={11} fill={PARCH} />
+          <path d="M-10 -3 L0 -12 L10 -3 Z" fill={ROOFS[(i * 3) % ROOFS.length]} />
+          <rect x={-2} y={3} width={4} height={5} fill={INK} opacity={0.6} />
+          {i % 3 === 0 && <rect x={4} y={-12} width={3} height={6} fill={PARCH} />}
+          {level >= 6 && i % 2 === 1 && <rect x={3} y={0} width={3} height={3} fill={LIT} />}
+        </g>
+      ))}
+    </g>
+  );
+}
+/** The fields: one more each level, around the farmhouse at Farms' spot. */
+export function FarmsArt({ level, winter }: { level: number; winter: boolean }) {
+  const o = SPOTS.farm;
+  return (
+    <g stroke={INK} strokeWidth={0.8}>
+      {FARM_FIELDS.slice(0, fieldsAt(level)).map((f, i) => (
+        <g key={i} transform={`translate(${f.x - o.x} ${f.y - o.y})`}>
+          <rect width={f.w} height={f.h} rx={2} fill={winter ? '#e9eef2' : i % 2 ? '#d9cf8f' : '#c9d39a'} />
+          {Array.from({ length: Math.floor(f.h / 6) }, (_, k) => <path key={k} d={`M3 ${4 + k * 6} H${f.w - 3}`} stroke={i % 2 ? GOLD : 'var(--q-moss)'} strokeWidth={1.4} opacity={winter ? 0.25 : 0.8} />)}
+        </g>
+      ))}
+      <Barn type="farm" level={Math.min(5, Math.ceil(level / 2))} staffed={false} />
     </g>
   );
 }

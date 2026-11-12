@@ -122,3 +122,13 @@ Not built, and why:
 - **The long-press menu.** The arrow on raisable buildings and the sheet are one tap away already, and a hidden gesture is poor on a phone.
 - **A pinch-and-pan scene.** The whole map fits the screen width, so nothing needs it.
 - **Distinct drawings for every building.** The 22 types share seven shapes (house, barn, tower, crops, pond, grove, rock), told apart by roof colour and the emblem on the front. Replacing a shape for one type is a change to one function in `mapArt.tsx`.
+
+### Later change: one of each building
+
+Several plots that could each take any building punished a wrong build: you could fill the town with the wrong things and have to pull them down. The town now has **one of every building**, each with its own fixed spot, and every building except the Guild Hall, Housing and Farms **starts at level 0** (not built). Building one raises it from 0 to 1; pulling it down returns it to level 0 on its spot.
+
+- **Housing and Farms** replaced the separate Homes and Farms. Each is a single building with ten levels instead of five, and can rise one level per Guild Hall level (other buildings rise one level per two). They are never pulled down, and each level costs ×1.5 and takes ×1.25 rather than ×2 and ×1.6. On the map Housing is the lower town outside the south gate, two more houses each level, and Farms are the fields beyond it, one more field each level, with the farmhouse by the river.
+- **The layout** (`plots.ts`) is drawn as a walled market town on a river: the Guild Hall on the central square with the Tavern, Market and Lodge around it; the Library, Cartographer, Chapel and Garden of Valor in the quieter north; the Smithy, Armoury and Warehouse by the south gate, with the Watchtower on the wall; the Infirmary and Stillroom together on the east side; the Training Yard and Herb Garden just outside the east wall; the Forestry in the woods, the Fishery on the river, the Quarry and Mine in the hills, and the Hall of Heroes on the north road.
+- **On the map**, a building at level 0 is a faint outline on its spot with a green "+" (can be built now) or a lock and the Guild Hall level it needs. Tapping it opens a sheet with what level 1 does and a "Build to level 1" button.
+- **Without a Tavern or Lodge**, one recruit waits at a time and the roster holds 3 adventurers, so building them is an early choice rather than a given.
+- **Older saves** move to the new layout once on load (`Guild.layout = 3`): their Homes merge into one Housing and their Farms into one Farms, at the lowest level that gives at least as much as they did; work under way on them is dropped. Every other building goes to its own spot.

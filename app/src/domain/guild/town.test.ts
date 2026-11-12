@@ -10,7 +10,7 @@ import {
 import { births, comeOfAge, pairUp, records } from './legacy';
 import { odds, oddsRange } from './resolve';
 import { rngFor } from './rng';
-import { bld, buildProblem, capacity, costOf, hallLevel, production, staffMult, storageCap, value } from './town';
+import { bld, buildProblem, capacity, costOf, hallLevel, production, rosterLimit, staffMult, storageCap } from './town';
 import type { Guild, Item } from './types';
 
 const NOW = Date.UTC(2026, 10, 5, 12);
@@ -29,9 +29,9 @@ const item = (id: string, patch: Partial<Item> = {}): Item => ({ id, name: 'Test
 describe('the starting town', () => {
   it('supplies enough for everyone it starts with', () => {
     const c = capacity(fresh());
-    expect(c.food).toEqual({ supply: 12, demand: 5 });
-    expect(c.housing).toEqual({ supply: 8, demand: 2 });
-    expect(c.happiness.supply).toBe(3);
+    expect(c.food).toEqual({ supply: 12, demand: 3 });
+    expect(c.housing).toEqual({ supply: 10, demand: 0 });
+    expect(c.happiness.supply).toBe(2);
   });
 });
 
@@ -57,16 +57,21 @@ describe('building', () => {
     expect(buildProblem(one, 'quarry')).toMatch(/crew/);
   });
 
-  it('can always add Homes and Farms, so the town never locks', () => {
+  it('can always raise Housing and Farms, one level per Guild Hall level, so the town never locks', () => {
     let g = rich(fresh());
+    g = { ...g, buildings: g.buildings.map((b) => (b.type === 'hall' ? { ...b, level: 2 } : b)) };
     // Pile on workers until housing is far over.
     for (let i = 0; i < 4; i++) g.buildings.push({ id: 'q' + i, type: 'quarry', level: 1 });
     expect(capacity(g).housing.supply).toBeLessThan(capacity(g).housing.demand);
     expect(buildProblem(g, 'forestry')).toMatch(/Not enough (food|housing|happiness)/);
-    expect(buildProblem(g, 'home')).toBeNull();
-    expect(buildProblem(g, 'farm')).toBeNull();
-    g = must(build(g, 'home')).guild;
+    const home = bld(g, 'home')!, farm = bld(g, 'farm')!;
+    expect(buildProblem(g, 'home')).toBe('Already built');
+    expect(buildProblem(g, 'home', home)).toBeNull();
+    expect(buildProblem(g, 'farm', farm)).toBeNull();
+    g = must(upgrade(g, home.id)).guild;
     expect(g.construction).toHaveLength(1);
+    const two = { ...g, construction: [], buildings: g.buildings.map((b) => (b.type === 'home' ? { ...b, level: 2 } : b)) };
+    expect(buildProblem(two, 'home', bld(two, 'home'))).toMatch(/Guild Hall level 3/);
   });
 
   it('stops production when the warehouse is full', () => {
@@ -95,14 +100,15 @@ describe('building', () => {
   });
 
   it('limits each building to half the Guild Hall level', () => {
-    const g = rich(fresh());
+    const g0 = rich(fresh());
+    const g = { ...g0, buildings: [...g0.buildings, { id: 'tv', type: 'tavern' as const, level: 1 }] };
     const tavern = bld(g, 'tavern')!;
     const lvl2 = { ...g, buildings: g.buildings.map((b) => (b.id === tavern.id ? { ...b, level: 1 } : b)) };
     expect(buildProblem(lvl2, 'tavern', tavern)).toMatch(/Guild Hall level 3/);
   });
 
-  it('gives each building five levels with growing effects', () => {
-    for (const d of Object.values(BUILDINGS)) if (d.id !== 'hall') expect(d.values).toHaveLength(5);
+  it('gives each building five levels (Housing and Farms ten) with growing effects', () => {
+    for (const d of Object.values(BUILDINGS)) if (d.id !== 'hall') expect(d.values).toHaveLength(d.id === 'home' || d.id === 'farm' ? 10 : 5);
   });
 });
 
@@ -422,6 +428,6 @@ describe('saves from before the town', () => {
     expect(up.buildings.map((b) => b.type)).toContain('hall');
     expect(up.regions.mire).toEqual({ liberated: false, stones: 0 });
     expect(up.adventurers[0].gear).toEqual({});
-    expect(value(up, 'lodge')).toBe(4);
+    expect(rosterLimit(up)).toBe(3);
   });
 });

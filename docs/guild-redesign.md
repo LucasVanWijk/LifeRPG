@@ -325,14 +325,14 @@ At home, each phase: Health +5 (more with an Infirmary), Fatigue −6, plus thei
 | Capacity | Supplied by | Demanded by | A surplus gives |
 |---|---|---|---|
 | **Food** | Farms, Fishery | 1 per resident in use (workers, retirees, children) and 1 per adventurer | – |
-| **Housing** | Homes | Each building's workers, and each retiree and child | – |
+| **Housing** | Housing | Each building's workers, and each retiree and child | – |
 | **Happiness** | Guild Hall (+2), Tavern, Chapel, Garden of Valor | Quarry and Mine (1 each) | Better recruits: +1 recruit and higher talent per 5 surplus |
 | **Order** | Guild Hall (+2), Watch House | 1 per 10 residents | +1 board offer per 5 surplus, and better Merchant stock |
 
 **The build rule:**
 - A building can be built or upgraded only if no capacity is over once it's done.
-- **Homes and Farms are the exception: they can always be built.**
-- Retirees and children can push a capacity over on their own, even while you're away. When that happens nothing gets worse. You just can't build other things or hire until you've fixed it, and Homes and Farms always can fix it. The town can never lock itself.
+- **Housing and Farms are the exception: they can always be raised**, up to the Guild Hall's level.
+- Retirees and children can push a capacity over on their own, even while you're away. When that happens nothing gets worse. You just can't build other things or hire until you've fixed it, and raising Housing and Farms fixes it. If they are already at the Hall's level, the Hall itself can still rise (it needs no capacity), so the town can never lock itself.
 
 ## 8. Town
 
@@ -341,8 +341,8 @@ At home, each phase: Health +5 (more with an Infirmary), Fatigue −6, plus thei
 - **Levels:** every building has **5 levels**, and the **Guild Hall has 10**. A building's level can't be higher than `ceil(Guild Hall level / 2)`, so level 5 needs Guild Hall 9.
 - **Cost:** gold + materials + time. Each level costs ×2 the one before, so level 5 costs 16× level 1. A year of play won't max out every building; choosing is the game.
 - **Build crews:** 1, and one more at Guild Hall 3, 6 and 9.
-- **Plots:** every building takes a plot, except the Garden of Valor and Hall of Heroes. You get 12 plots at Guild Hall 1, +2 per level after. Plots already exist here so the future paper map (14) needs no conversion of saves.
-- **Demolish:** frees the plot and its workers, refunds 50% of materials and no gold.
+- **One of each:** the town has one of every building, each on its own spot, and all of them except the Guild Hall, Housing and Farms start at level 0 (not built). Housing and Farms have ten levels and can rise one per Guild Hall level; every other building has five and rises one per two Hall levels. (This replaced shared plots and separate Homes and Farms, which let a wrong build crowd out the right one; see the paper-map plan, section 11.)
+- **Demolish:** returns the building to level 0 (Housing, Farms, the Hall, the Garden and the Hall of Heroes can't be pulled down), frees its workers, refunds 50% of materials and no gold.
 - Seasons change costs (8.4).
 
 ### 8.2 Buildings
@@ -354,8 +354,8 @@ The level values in the table are for levels 1 / 2 / 3 / 4 / 5. Workers rise by 
 | **Guild Hall** | 10 levels; see 8.3 | 0 |
 | **Tavern** | Recruits 2/3/4/5/6, refreshed every 4 days. Happiness +1/1/2/2/3. | 1 |
 | **Adventurers' Lodge** | Roster limit 4/6/8/10/12 | 1 |
-| **Home** (build many) | Housing +4/6/8/10/12. Always buildable. | 0 |
-| **Farm** (build many) | Food +6/9/12/15/18. Always buildable. | 0 |
+| **Housing** (one, ten levels) | Housing 10/18/28/38/52/66/84/102/122/144. Always buildable; up to the Hall's level. | 0 |
+| **Farms** (one, ten levels) | Food 12/22/36/50/68/88/112/138/168/200. Always buildable; up to the Hall's level. | 0 |
 | **Fishery** | Food +4/6/8/10/12 | 1 |
 | **Forestry** | Wood 4/6/8/10/12 per phase (12–36 per game day) | 2 |
 | **Quarry** | Stone 3/4/6/8/10 per phase. −1 Happiness. | 3 |
@@ -372,8 +372,8 @@ The level values in the table are for levels 1 / 2 / 3 / 4 / 5. Workers rise by 
 | **Library** | Expedition XP +5/10/15/20/25%. Reveals "?" conditions (1/2/3/all/all). | 1 |
 | **Cartographer** | Unlocks regions 1–5 (11) | 1 |
 | **Watch House** | Order +5/8/12/16/20 | 2 |
-| **Garden of Valor** | Holds every campaign monument; +1 Happiness per monument, up to 5/10/15/20/25. You start with it. | 0 |
-| **Hall of Heroes** | Legends, Witness Stones and Tombs, the Heirloom shelf; bonus caps rise by level. You start with it. | 0 |
+| **Garden of Valor** | Holds every campaign monument; +1 Happiness per monument, up to 5/10/15/20/25. Starts at level 0. | 0 |
+| **Hall of Heroes** | Legends, Witness Stones and Tombs, the Heirloom shelf; bonus caps rise by level. Starts at level 0. | 0 |
 
 ### 8.3 The Guild Hall (10 levels, about 1 year)
 
@@ -404,7 +404,7 @@ Seasons change **building costs only**. They never change production or capacity
 |---|---|---|
 | Spring | Farms, Herb Garden −20% | – |
 | Summer | Quarry, Forestry −15% | Infirmary +15% |
-| Autumn | Warehouse, Homes −15% | Farms +20% |
+| Autumn | Warehouse, Housing −15% | Farms +20% |
 | Winter | Mine, Blacksmith −20% | Farms, Herb Garden +40% |
 
 The build screen shows "cheaper next season" hints.
@@ -423,7 +423,7 @@ At the welcome screen you:
 | Hospitaller | −20% death chance (the difference becomes injuries) |
 | Builders | −15% construction cost and time |
 
-You start with a Guild Hall, Tavern and Adventurers' Lodge (each at level 1), 2 Homes, 2 Farms, the Garden of Valor and the Hall of Heroes, 150 gold, 50 wood and 30 stone. You also start with 3 free recruits (a Tank, a Healer and a DPS), pick your Champion, and the tutorial odd job is waiting on the board.
+You start with a Guild Hall, Housing and Farms at level 1; every other building, the Tavern and Adventurers' Lodge included, is at level 0 until you build it (until then one recruit waits at the Tavern and the roster holds 3). You have 150 gold, 50 wood and 30 stone. You also start with 3 free recruits (a Tank, a Healer and a DPS), pick your Champion, and the tutorial odd job is waiting on the board.
 
 ## 9. Legacy
 
@@ -585,7 +585,7 @@ A hidden **time-skip** panel (advance N phases, days or years) for testing and b
 - **Death share** over whole careers: careful play 25–40%, risky play 55–75%.
 - **Pacing:** a simulated typical player (5 quests and 3 habits a day, 3 check-ins a day, sensible build order) reaches each Guild Hall level within ±20% of its target day.
 - **Real-life share of gold:** at least 50% of guild gold through Guild Hall 6.
-- **No lock:** from random town states, Homes and Farms can always restore building.
+- **No lock:** from random town states, raising Housing, Farms or the Hall can always restore building.
 - **Storage fits:** every Guild Hall level's cost fits in the Warehouse you can have at the level before it.
 
 ### 13.5 Migration v2 → v3
@@ -668,7 +668,7 @@ Where the build settled differently from the numbers above, or where the design 
 - **Time and pacing.** A bot that plays the real engine (5 quests and 3 habits a day, a visit every 6 real hours, sensible builds) reaches Hall levels 2 to 10 on about days 4, 15, 40, 58, 110, 148, 224, 289 and 416. That is inside the ±25% pacing test against the targets in 8.3 (level 10 is a little late). Real life supplies about 57% of the guild's gold through Hall 6.
 - **Hall costs** were raised after the bot showed gold was not binding late on. The final table is `HALL_STEPS` in `content.ts` (level 10: 9,000 gold, 4,800 wood and stone, 1,400 iron, 2,400 renown). Every step still fits the Warehouse you can have a level earlier.
 - **Renown** per full expedition clear is `tier²` (1, 4, 9, 16, 25), an odyssey `10 × tier`, a freed region 100, and a finished campaign 5, 10 or 20.
-- **Retirees pile up.** With careers of 3 to 15 years, a roster of 12 produces about 40 retirees a year, living 10 to 80 years afterwards. By day 380 the bot housed 68. Housing, food and order demand is therefore the real late-game limit, which is the point of the Homes, Farms and Watch House, but it means Homes and Farms must be raised, not just added.
+- **Retirees pile up.** With careers of 3 to 15 years, a roster of 12 produces about 40 retirees a year, living 10 to 80 years afterwards. By day 380 the bot housed 68. Housing, food and order demand is therefore the real late-game limit, which is the point of Housing, Farms and the Watch House, and why those two have ten levels.
 - **Death rates.** Measured over 300 simulated careers with conditions in play: careful play loses 31%, Bold play 67% (Bold's death multiplier is ×2.2). Stacking two risks loses far more.
 - **Conditions** cost 1.2 on every non-rest check for each one nobody in the party counters (by class, race or a trinket). Evening departures always add Darkness.
 - **Odds** are exact for outings of up to 8 stages. Odysseys use 20,000 fixed seeded runs. Hidden conditions turn the odds into a range from "none of them matter" to "all of them are uncountered".

@@ -1,29 +1,26 @@
 // The town: what's built, what it supplies and demands, what it costs, and what it produces.
 import type { BuildingId, ClassId, RegionId, StockKey } from './content';
 import {
-  BUILDINGS, BUILDING_IDS, buildingCap, CLASSES, crewsFor, DAYS_PER_SEASON, DAYS_PER_YEAR, HALL_STEPS, LEGEND_CAP_PER_LEVEL, LEGEND_LEVEL, LEGEND_STAT,
-  MAX_BUILDING_LEVEL, MAX_HALL, maxOutFor, maxTierFor, OUTPOST_SLOTS, PHASES_PER_DAY, plotsFor, SEASON_COST, SINGLE, STONE_BONUS, STONE_MAX, workersFor,
+  BUILDINGS, BUILDING_IDS, CLASSES, crewsFor, DAYS_PER_SEASON, DAYS_PER_YEAR, HALL_STEPS, LEGEND_CAP_PER_LEVEL, LEGEND_LEVEL, LEGEND_STAT,
+  hallFor, levelCap, MAX_HALL, maxLevel, maxOutFor, maxTierFor, OUTPOST_SLOTS, PHASES_PER_DAY, SEASON_COST, STONE_BONUS, STONE_MAX, workersFor,
 } from './content';
-import { PLOTS, PREFERRED } from './plots';
 import type { Building, Guild } from './types';
 
 // ── Looking things up ────────────────────────────────────────
 
-export const blds = (g: Guild, type: BuildingId) => g.buildings.filter((b) => b.type === type);
 export const bld = (g: Guild, type: BuildingId) => g.buildings.find((b) => b.type === type);
 export const hallLevel = (g: Guild) => bld(g, 'hall')?.level ?? 1;
 /** The effect of a single building at its level, or 0 if it isn't built. */
 export const value = (g: Guild, type: BuildingId) => { const b = bld(g, type); return b ? BUILDINGS[type].values[b.level - 1] ?? 0 : 0; };
 export const levelOf = (g: Guild, type: BuildingId) => bld(g, type)?.level ?? 0;
-/** The summed effect of every building of a type (Homes and Farms). */
-export const total = (g: Guild, type: BuildingId) => blds(g, type).reduce((n, b) => n + (BUILDINGS[type].values[b.level - 1] ?? 0), 0);
 
 export const dayOf = (t: number) => Math.floor(t / 3_600_000 / PHASES_PER_DAY);
 export const seasonIndex = (t: number) => Math.floor((dayOf(t) % DAYS_PER_YEAR) / DAYS_PER_SEASON);
 /** A running count of seasons since founding, for things that refresh each season. */
 export const seasonCount = (t: number) => Math.floor(dayOf(t) / DAYS_PER_SEASON);
 
-export const rosterLimit = (g: Guild) => value(g, 'lodge') || 4;
+/** Without a Lodge, a few cots in the Hall hold three. */
+export const rosterLimit = (g: Guild) => value(g, 'lodge') || 3;
 export const storageCap = (g: Guild) => Math.max(150, value(g, 'warehouse'));
 export const outposts = (g: Guild) => Object.values(g.regions).filter((r) => r.liberated).length * OUTPOST_SLOTS;
 export const outLimit = (g: Guild) => maxOutFor(hallLevel(g), outposts(g));
@@ -84,7 +81,8 @@ export function capacity(g: Guild, buildings: Building[] = g.buildings): Capacit
 const KEYS = ['food', 'housing', 'happiness', 'order'] as const;
 export const surplus = (c: Cap) => c.supply - c.demand;
 /** Recruits at the Tavern: its level, plus one for every 5 surplus Happiness. */
-export const tavernSize = (g: Guild) => (value(g, 'tavern') || 2) + Math.max(0, Math.floor(surplus(capacity(g).happiness) / 5));
+/** Without a Tavern, one hopeful at a time knocks on the Hall's door. */
+export const tavernSize = (g: Guild) => (value(g, 'tavern') || 1) + Math.max(0, Math.floor(surplus(capacity(g).happiness) / 5));
 export const happyTalent = (g: Guild) => Math.max(0, Math.floor(surplus(capacity(g).happiness) / 5));
 export const boardSize = (g: Guild, patrolling: number) => Math.min(8, 4 + Math.max(0, Math.floor(surplus(capacity(g).order) / 5)) + (patrolling > 0 ? 1 : 0));
 
@@ -99,17 +97,16 @@ export function costOf(g: Guild, type: BuildingId, level: number): Cost {
     const h = HALL_STEPS[level]!;
     return { gold: Math.ceil(h.gold * cut), wood: Math.ceil(h.wood * cut), stone: Math.ceil(h.stone * cut), iron: Math.ceil(h.iron * cut), phases: Math.ceil(h.phases * cut), renown: h.renown };
   }
-  const d = BUILDINGS[type], k = 2 ** (level - 1);
+  const d = BUILDINGS[type], k = (d.grow?.cost ?? 2) ** (level - 1);
   const m = (SEASON_COST[seasonIndex(g.t)][type] ?? 1) * cut;
   return {
     gold: Math.ceil(d.base.gold * k * m), wood: Math.ceil((d.base.wood ?? 0) * k * m), stone: Math.ceil((d.base.stone ?? 0) * k * m), iron: Math.ceil((d.base.iron ?? 0) * k * m),
-    phases: Math.ceil(d.base.phases * 1.6 ** (level - 1) * cut), renown: 0,
+    phases: Math.ceil(d.base.phases * (d.grow?.time ?? 1.6) ** (level - 1) * cut), renown: 0,
   };
 }
 /** The cost next season, to show "cheaper next season" hints. */
 export const costNextSeason = (g: Guild, type: BuildingId, level: number) => costOf({ ...g, t: g.t + DAYS_PER_SEASON * PHASES_PER_DAY * 3_600_000 }, type, level);
 
-export const plotsUsed = (g: Guild) => g.buildings.filter((b) => !BUILDINGS[b.type].noPlot).length + g.construction.filter((c) => !c.target && !BUILDINGS[c.type].noPlot).length;
 export const underway = (g: Guild, b: Building) => g.construction.some((c) => c.target === b.id);
 
 const afford = (g: Guild, c: Cost) => g.gold >= c.gold && g.stock.wood >= c.wood && g.stock.stone >= c.stone && g.stock.iron >= c.iron;
@@ -125,10 +122,9 @@ export function buildProblem(g: Guild, type: BuildingId, target?: Building): str
   } else {
     const d = BUILDINGS[type];
     if (!target && hall < d.hall) return 'Needs Guild Hall level ' + d.hall;
-    if (!target && SINGLE.has(type) && (bld(g, type) || g.construction.some((c) => c.type === type && !c.target))) return 'Already built';
-    if (target && level > Math.min(MAX_BUILDING_LEVEL, buildingCap(hall))) return level > MAX_BUILDING_LEVEL ? 'Already at its highest level' : 'Needs Guild Hall level ' + (level * 2 - 1);
+    if (!target && (bld(g, type) || g.construction.some((c) => c.type === type && !c.target))) return 'Already built';
+    if (target && level > levelCap(type, hall)) return level > maxLevel(type) ? 'Already at its highest level' : 'Needs Guild Hall level ' + hallFor(type, level);
     if (target && underway(g, target)) return 'Already being improved';
-    if (!target && !d.noPlot && plotsUsed(g) >= plotsFor(hall)) return 'No free plot (' + plotsFor(hall) + ' at this Hall level)';
   }
   if (g.construction.length >= crews(g)) return 'Every crew is busy';
   const c = costOf(g, type, type === 'hall' ? hall + 1 : level);
@@ -158,21 +154,4 @@ export function production(g: Guild): Record<StockKey, number> {
     if (b) out[key] += Math.round(BUILDINGS[type].values[b.level - 1] * staffMult(g, type));
   }
   return out;
-}
-
-// ── Plots ────────────────────────────────────────────────────
-
-/** Plots the Guild Hall has opened so far. */
-export const openPlots = (g: Guild) => PLOTS.slice(0, plotsFor(hallLevel(g)));
-const taken = (g: Guild) => new Set<number>([...g.buildings.map((b) => b.plot), ...g.construction.map((c) => c.plot)].filter((n): n is number => n !== undefined));
-/** Indexes of open plots with nothing built or being built on them. */
-export function freePlots(g: Guild): number[] {
-  const used = taken(g);
-  return openPlots(g).flatMap((_, i) => (used.has(i) ? [] : [i]));
-}
-/** The plot a new building takes when the player doesn't choose: the lowest free one in the zone it prefers, else the lowest free one. */
-export function pickPlot(g: Guild, type: BuildingId): number | undefined {
-  const free = freePlots(g);
-  const zone = PREFERRED[type];
-  return free.find((i) => PLOTS[i].zone === zone) ?? free[0];
 }
