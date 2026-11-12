@@ -7,6 +7,8 @@ import type { Companion, Data, Note, Rhythm } from '../domain/model';
 import { NOTE_ICONS, QM, RHYTHM_NAME } from '../domain/model';
 import { ageOf, allGroups, lastContact } from '../domain/people';
 import { firstLink, mapsUrl, noteMatches, sortNotes } from '../domain/notes';
+import type { TomeSort } from '../domain/tomes';
+import { sortItems, toggleItem, yearText } from '../domain/tomes';
 import { LinkText, NoteBody } from '../components/RichText';
 import { Icon, type IconName } from '../components/Icon';
 import { AddForm, Empty, onEnter, Seg } from '../components/common';
@@ -144,8 +146,10 @@ function CompanionList() {
 
 function TomeList() {
   const { data, ui, setUi, actions } = useStore();
+  const { today } = useStore();
   const [draft, setDraft] = useState('');
   const [tomeName, setTomeName] = useState('');
+  const [sort, setSort] = useState<TomeSort>('added');
   const addTome = () => {
     const n = tomeName.trim();
     if (!n) return false;
@@ -170,15 +174,21 @@ function TomeList() {
               <span style={{ color: 'var(--color-accent-700)' }}><Icon n="library" size={19} /></span>
               <span style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                 <span className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{t.name}</span>
-                <span className="muted tnum" style={{ fontSize: 12 }}>{left} of {t.items.length} open</span>
+                <span className="muted tnum" style={{ fontSize: 12 }}>{left} of {t.items.length} open{t.log ? ' · ' + yearText(t, Number(today.slice(0, 4))) : ''}</span>
               </span>
               <Icon n={open ? 'chevron-up' : 'chevron-down'} size={17} />
             </button>
             {open && (
               <div style={{ padding: '0 14px 12px' }}>
-                {t.items.map((i) => (
-                  <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 4, borderTop: '1px solid var(--q-rule)' }}>
-                    <button onClick={() => updTome(t.id, (items) => items.map((y) => (y.id === i.id ? { ...y, done: !y.done } : y)))} aria-label={(i.done ? 'Uncheck ' : 'Check ') + i.t} aria-pressed={i.done}
+                {t.log && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '0 0 8px' }}>
+                    <span className="label">Sort</span>
+                    {(['added', 'date', 'rating'] as TomeSort[]).map((k) => <button key={k} className="chip" aria-pressed={sort === k} onClick={() => setSort(k)} style={{ minHeight: 32, padding: '2px 10px', fontSize: 14 }}>{k === 'added' ? 'Added' : k === 'date' ? 'Date' : 'Rating'}</button>)}
+                  </div>
+                )}
+                {(t.log ? sortItems(t.items, sort) : t.items).map((i) => (<div key={i.id}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4, borderTop: '1px solid var(--q-rule)' }}>
+                    <button onClick={() => updTome(t.id, (items) => items.map((y) => (y.id === i.id ? (t.log ? toggleItem(y, today) : { ...y, done: !y.done }) : y)))} aria-label={(i.done ? 'Uncheck ' : 'Check ') + i.t} aria-pressed={i.done}
                       style={{ width: 40, height: 44, flex: 'none', display: 'grid', placeItems: 'center', border: 0, background: 'transparent', cursor: 'pointer', marginLeft: -9 }}>
                       <span className={'checkbox' + (i.done ? ' on' : '')} style={{ width: 19, height: 19 }}>{i.done && <Icon n="check" size={13} stroke={2.4} />}</span>
                     </button>
@@ -189,12 +199,28 @@ function TomeList() {
                     {firstLink(i.t) && <a className="icon-btn" href={firstLink(i.t)!.href} target="_blank" rel="noreferrer noopener" aria-label={'Open link in ' + i.t} style={{ width: 32, height: 32, display: 'grid', placeItems: 'center' }}><Icon n="chevron-right" size={14} /></a>}
                     <button className="icon-btn" onClick={() => updTome(t.id, (items) => items.filter((y) => y.id !== i.id))} aria-label={'Remove ' + i.t} style={{ width: 32, height: 32 }}><Icon n="x" size={14} /></button>
                   </div>
-                ))}
+                  {t.log && i.done && (
+                    <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, padding: '0 0 8px 36px' }}>
+                      <span role="radiogroup" aria-label={'Rating for ' + i.t} style={{ display: 'inline-flex' }}>
+                        {[1, 2, 3, 4, 5].map((n) => (
+                          <button key={n} role="radio" aria-checked={(i.rating ?? 0) >= n} aria-label={n + (n === 1 ? ' star' : ' stars')} onClick={() => updTome(t.id, (items) => items.map((y) => (y.id === i.id ? { ...y, rating: y.rating === n ? undefined : n } : y)))}
+                            style={{ border: 0, background: 'transparent', cursor: 'pointer', padding: '2px 1px', fontSize: 20, color: (i.rating ?? 0) >= n ? 'var(--color-accent-700)' : 'var(--q-rule)' }}>{(i.rating ?? 0) >= n ? '★' : '☆'}</button>
+                        ))}
+                      </span>
+                      <input className="input" type="date" aria-label={'Date finished for ' + i.t} value={i.finished ?? ''} onChange={(e) => updTome(t.id, (items) => items.map((y) => (y.id === i.id ? { ...y, finished: e.target.value || undefined } : y)))} style={{ width: 'auto', minHeight: 34, fontSize: 13 }} />
+                      <input className="input" placeholder="A line of review" aria-label={'Review of ' + i.t} value={i.review ?? ''} onChange={(e) => { const v = e.target.value; updTome(t.id, (items) => items.map((y) => (y.id === i.id ? { ...y, review: v || undefined } : y))); }} style={{ flex: '1 1 160px', minHeight: 34, fontSize: 13 }} />
+                    </div>
+                  )}
+                </div>))}
                 <div style={{ display: 'flex', gap: 8, paddingTop: 10, borderTop: '1px solid var(--q-rule)' }}>
                   <input className="input" placeholder="Add an item" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={onEnter(add)} style={{ minHeight: 42 }} />
                   <button className="btn btn-primary btn-icon" onClick={add} aria-label="Add item" style={{ width: 42, height: 42, flex: 'none' }}><Icon n="plus" size={18} /></button>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--q-rule)' }}>
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, marginTop: 12, paddingTop: 10, borderTop: '1px dashed var(--q-rule)' }}>
+                  <label className="toggle-row" style={{ minHeight: 34 }}><input type="checkbox" checked={!!t.log} onChange={(e) => actions.update((d) => ({ ...d, tomes: d.tomes.map((x) => (x.id === t.id ? { ...x, log: e.target.checked } : x)) }))} /><span>Log (ratings, dates, reviews)</span></label>
+                  {t.log && <input className="input" placeholder="count as, e.g. books" aria-label="What to count" value={t.noun ?? ''} onChange={(e) => { const v = e.target.value; actions.update((d) => ({ ...d, tomes: d.tomes.map((x) => (x.id === t.id ? { ...x, noun: v || undefined } : x)) })); }} style={{ width: 160, minHeight: 34, fontSize: 13 }} />}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 8, paddingTop: 10, borderTop: '1px dashed var(--q-rule)' }}>
                   <label className="label" htmlFor={'tn-' + t.id} style={{ flex: 'none' }}>Tome name</label>
                   <input id={'tn-' + t.id} className="bare-input" value={t.name} style={{ fontSize: 14 }}
                     onChange={(e) => { const v = e.target.value; actions.update((d) => ({ ...d, tomes: d.tomes.map((x) => (x.id === t.id ? { ...x, name: v } : x)) })); }}

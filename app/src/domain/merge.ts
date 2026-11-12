@@ -107,7 +107,9 @@ function mergeQuest(a: Quest, b: Quest): Quest {
 
 function mergeHabit(a: Habit, b: Habit): Habit {
   const newer = stampOf(b) > stampOf(a) ? b : a;
-  return { ...newer, log: [...new Set([...a.log, ...b.log])].sort(), updated: Math.max(stampOf(a), stampOf(b)) };
+  const counts: Record<string, number> = { ...a.counts };
+  for (const [d, n] of Object.entries(b.counts ?? {})) counts[d] = Math.max(n, counts[d] ?? 0);
+  return { ...newer, log: [...new Set([...a.log, ...b.log])].sort(), ...(Object.keys(counts).length ? { counts } : {}), updated: Math.max(stampOf(a), stampOf(b)) };
 }
 
 function mergeList<T extends Item>(kind: string, a: T[], b: T[], tombs: Map<string, number>, pick: (x: T, y: T) => T): T[] {

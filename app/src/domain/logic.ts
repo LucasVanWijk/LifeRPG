@@ -169,7 +169,8 @@ export function bestStreak(h: Habit): number {
 export function toggleHabit(data: Data, id: number, today: string): Outcome {
   const h = data.habits.find((x) => x.id === id);
   if (!h) return none(data);
-  const r = habitReward(h);
+  // An amount habit: a tap adds one step; on a finished day it takes the day back.
+  if (hasAmount(h)) return countToday(h, today) >= h.amount! ? adjustAmount(data, id, -countToday(h, today), today) : adjustAmount(data, id, h.step || 1, today);
   const target = habitTarget(h);
   const cur = periodOf(today, h.every);
   const setLog = (log: string[]) => data.habits.map((x) => (x.id === id ? { ...x, log } : x));
@@ -181,16 +182,53 @@ export function toggleHabit(data: Data, id: number, today: string): Outcome {
     return none(d);
   }
   if (habitDone(h, today)) return none(data);
-  const next = { ...h, log: [...h.log, today] };
+  return payCheckIn(data, h, today, {});
+}
+
+/** Records today's check-in (plus any other habit fields) and pays it. */
+function payCheckIn(data: Data, h: Habit, today: string, patch: Partial<Habit>): Outcome {
+  const id = h.id, r = habitReward(h);
+  const next = { ...h, ...patch, log: [...h.log, today] };
+  const setNext = data.habits.map((x) => (x.id === id ? next : x));
   const prog = habitProgress(next, today);
   const sub = prog.count < prog.target ? prog.count + ' of ' + prog.target + ' this week' : streakText(habitStreak(next, today), h.every);
-  const paid = pay({ ...data, habits: setLog(next.log) }, {
+  const paid = pay({ ...data, habits: setNext }, {
     key: 'h:' + id + ':' + today, xp: r.xp, gold: r.gold, kind: 'habit', title: h.title, date: today, attr: 'main', notable: false,
   }, h.title + ' · ' + sub);
   // A streak milestone forges an heirloom, and it stays even if the streak breaks later.
   const forged = paid.data.guild ? awardStreak(paid.data.guild, id, h.title, habitStreak(next, today), h.every) : null;
   if (forged) return { ...paid, data: { ...paid.data, guild: forged }, toasts: [...paid.toasts, { text: 'Heirloom forged', sub: h.title + ' · see the Hall of Heroes' }] };
   return paid;
+}
+
+// ── Habits with amounts ─────────────────────────────────────
+
+export const hasAmount = (h: Habit) => !!h.amount && h.amount > 0;
+/** Today's count for an amount habit. */
+export const countToday = (h: Habit, today: string) => h.counts?.[today] ?? 0;
+const KEEP_COUNT_DAYS = 90;
+
+/**
+ * Adds to (or takes from) today's count of an amount habit. The day is done, and paid once, when the count
+ * reaches the amount; if the count falls back below it, the day and its reward are taken back.
+ */
+export function adjustAmount(data: Data, id: number, delta: number, today: string): Outcome {
+  const h = data.habits.find((x) => x.id === id);
+  if (!h || !hasAmount(h)) return none(data);
+  const before = countToday(h, today), after = Math.max(0, before + delta);
+  if (after === before) return none(data);
+  const counts: Record<string, number> = {};
+  const cutoff = addDays(today, -KEEP_COUNT_DAYS);
+  for (const [d, n] of Object.entries(h.counts ?? {})) if (d >= cutoff && d !== today) counts[d] = n;
+  if (after > 0) counts[today] = after;
+  const wasDone = before >= h.amount!, isDone = after >= h.amount!;
+  // A weekly habit whose week is already done (on other days) counts the amount but pays nothing more.
+  if (!wasDone && isDone && !h.log.includes(today) && !habitDone(h, today)) return payCheckIn(data, h, today, { counts });
+  if (wasDone && !isDone && h.log.includes(today)) {
+    const d = { ...data, habits: data.habits.map((x) => (x.id === id ? { ...x, counts, log: x.log.filter((day) => day !== today) } : x)) };
+    return none(takeBack(d, 'h:' + id + ':' + today));
+  }
+  return none({ ...data, habits: data.habits.map((x) => (x.id === id ? { ...x, counts } : x)) });
 }
 
 // ── Chronicle ───────────────────────────────────────────────

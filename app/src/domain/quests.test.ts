@@ -104,3 +104,38 @@ describe('preparation quests', () => {
     expect(prepQuest({ ...e, allDay: true }).due).toBe('2026-11-19');
   });
 });
+
+import { adjustAmount, toggleHabit } from './logic';
+import type { Habit } from './model';
+describe('habits with amounts', () => {
+  const water: Habit = { id: 1, title: 'Water', every: 'daily', size: 'S', log: [], created: T, amount: 8, unit: 'glasses', step: 1 };
+  const withHabit = (h: Habit = water): Data => ({ ...emptyData(), habits: [h] });
+  it('is done and paid once, when the count reaches the amount', () => {
+    let d = withHabit();
+    for (let i = 0; i < 7; i++) d = adjustAmount(d, 1, 1, T).data;
+    expect(d.habits[0].counts![T]).toBe(7);
+    expect(d.habits[0].log).toEqual([]);
+    const o = adjustAmount(d, 1, 1, T);
+    expect(o.data.habits[0].log).toEqual([T]);
+    expect(o.toasts.length).toBeGreaterThan(0);
+    const more = adjustAmount(o.data, 1, 2, T);
+    expect(more.data.habits[0].log).toEqual([T]);
+    expect(more.toasts).toHaveLength(0);
+  });
+  it('takes the day back when the count falls below the amount', () => {
+    const done = adjustAmount(withHabit({ ...water, counts: { [T]: 7 } }), 1, 1, T).data;
+    const back = adjustAmount(done, 1, -3, T).data;
+    expect(back.habits[0].log).toEqual([]);
+    expect(back.habits[0].counts![T]).toBe(5);
+  });
+  it('a tap on the box adds a step, and on a finished day resets it', () => {
+    const d1 = toggleHabit(withHabit({ ...water, step: 4 }), 1, T).data;
+    expect(d1.habits[0].counts![T]).toBe(4);
+    const d2 = toggleHabit(d1, 1, T).data;
+    expect(d2.habits[0].counts![T]).toBe(8);
+    expect(d2.habits[0].log).toEqual([T]);
+    const d3 = toggleHabit(d2, 1, T).data;
+    expect(d3.habits[0].log).toEqual([]);
+    expect(d3.habits[0].counts?.[T]).toBeUndefined();
+  });
+});

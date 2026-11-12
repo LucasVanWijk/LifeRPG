@@ -1,5 +1,5 @@
 import { addDays, dayDiff, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
-import { checkedInToday, habitDone, habitProgress, habitStreak } from '../domain/logic';
+import { checkedInToday, countToday, habitDone, habitProgress, habitStreak, hasAmount } from '../domain/logic';
 import type { CalItem } from '../domain/calendar';
 import { calendarItems, kindText } from '../domain/calendar';
 import { isOverdue, RescheduleButtons } from '../components/Reschedule';
@@ -128,6 +128,26 @@ export function Home() {
             const done = habitDone(h, today), streak = habitStreak(h, today), prog = habitProgress(h, today);
             // With a weekly target of several days the box is today's check-in; otherwise it is the whole period.
             const multi = prog.target > 1, ticked = multi ? checkedInToday(h, today) : done, locked = multi && done && !ticked;
+            if (hasAmount(h)) {
+              const n = countToday(h, today), full = n >= h.amount!;
+              return (
+                <div key={h.id} className="today-row" style={{ flexWrap: 'wrap' }}>
+                  <div style={{ flex: '1 1 160px', minWidth: 0, padding: '9px 0' }}>
+                    <div className="heading" style={{ fontSize: 19, lineHeight: 1.2, color: full ? 'var(--color-accent-700)' : 'var(--q-ink)' }}>{h.title}</div>
+                    <div className="bar" role="progressbar" aria-valuenow={n} aria-valuemax={h.amount} aria-label={h.title + ' progress'} style={{ height: 7, margin: '6px 0 4px' }}><div style={{ width: Math.min(100, Math.round((n / h.amount!) * 100)) + '%', background: full ? 'var(--q-moss)' : undefined }} /></div>
+                    <div className="meta">
+                      <span className="tnum">{n} / {h.amount}{h.unit ? ' ' + h.unit : ''}{full ? ' · done' : ''}</span>
+                      {streak > 0 && <span style={{ gap: 4, color: 'var(--q-wax)' }}><Icon n="repeat" size={12} />{streakText(streak, h.every)}</span>}
+                    </div>
+                  </div>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button className="btn btn-secondary btn-icon" aria-label={'Take ' + (h.step || 1) + ' off ' + h.title} disabled={n === 0} onClick={() => actions.adjustHabit(h.id, -(h.step || 1))} style={{ width: 36, height: 36 }}>−</button>
+                    <input className="input tnum" type="number" min={0} inputMode="numeric" aria-label={h.title + ' count'} value={n} onChange={(e) => actions.setHabitCount(h.id, Number(e.target.value) || 0)} style={{ width: 68, minHeight: 36, textAlign: 'center', padding: '0 4px' }} />
+                    <button className="btn btn-primary btn-icon inked" aria-label={'Add ' + (h.step || 1) + ' to ' + h.title} onClick={() => actions.adjustHabit(h.id, h.step || 1)} style={{ width: 36, height: 36 }}>+{h.step && h.step > 1 ? h.step : ''}</button>
+                  </span>
+                </div>
+              );
+            }
             return (
               <div key={h.id} className="today-row">
                 <button className="today-check" onClick={() => actions.toggleHabit(h.id)} disabled={locked} aria-label={(ticked ? 'Undo ' : 'Check in ') + h.title} aria-pressed={ticked}>

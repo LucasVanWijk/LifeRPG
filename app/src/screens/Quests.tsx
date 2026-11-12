@@ -406,11 +406,12 @@ function HabitsView() {
   const [every, setEvery] = useState<Every>('daily');
   const [size, setSize] = useState<SizeKey>('S');
   const [target, setTarget] = useState(1);
-  const reset = () => { setTitle(''); setEvery('daily'); setSize('S'); setTarget(1); };
+  const [amt, setAmt] = useState<Amt>(noAmt);
+  const reset = () => { setTitle(''); setEvery('daily'); setSize('S'); setTarget(1); setAmt(noAmt); };
   const add = () => {
     const t = title.trim();
     if (!t) return false;
-    actions.createHabit({ title: t, every, size, target: every === 'weekly' ? target : 1 });
+    actions.createHabit({ title: t, every, size, target: every === 'weekly' ? target : 1, ...amountPatch(amt) });
     reset();
     return true;
   };
@@ -423,14 +424,24 @@ function HabitsView() {
       {data.habits.map((h) => <HabitRow key={h.id} h={h} today={today} dots={isDesk ? 21 : 14} />)}
       <AddForm label="New habit" onSave={add} invalid={!title.trim()} onCancel={reset}>
         <div className="field"><label htmlFor="nh-title">Habit</label><input id="nh-title" className="input" placeholder="e.g. Read before bed" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(add)} autoFocus style={{ minHeight: 44 }} /></div>
-        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} target={target} setTarget={setTarget} />
+        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} target={target} setTarget={setTarget} amt={amt} setAmt={setAmt} />
       </AddForm>
     </div>
   );
 }
 
-function HabitFields({ every, setEvery, size, setSize, target, setTarget }: {
-  every: Every; setEvery: (e: Every) => void; size: SizeKey; setSize: (s: SizeKey) => void; target: number; setTarget: (n: number) => void;
+/** The amount fields as typed: strings, so a half-typed number doesn't snap back. */
+interface Amt { amount: string; unit: string; step: string }
+const noAmt: Amt = { amount: '', unit: '', step: '' };
+const amtOf = (h: Habit): Amt => ({ amount: h.amount ? String(h.amount) : '', unit: h.unit ?? '', step: h.step && h.step !== 1 ? String(h.step) : '' });
+/** The habit fields these describe; clearing the amount removes them. */
+const amountPatch = (a: Amt): Pick<Habit, 'amount' | 'unit' | 'step'> => {
+  const amount = Math.round(Number(a.amount));
+  return amount > 0 ? { amount, unit: a.unit.trim() || undefined, step: Math.max(1, Math.round(Number(a.step)) || 1) } : { amount: undefined, unit: undefined, step: undefined };
+};
+
+function HabitFields({ every, setEvery, size, setSize, target, setTarget, amt, setAmt }: {
+  every: Every; setEvery: (e: Every) => void; size: SizeKey; setSize: (s: SizeKey) => void; target: number; setTarget: (n: number) => void; amt: Amt; setAmt: (a: Amt) => void;
 }) {
   return (
     <>
@@ -453,6 +464,14 @@ function HabitFields({ every, setEvery, size, setSize, target, setTarget }: {
         </span>
       </div>
     )}
+    <div className="field"><label htmlFor="h-amount">Daily amount (optional)</label>
+      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+        <input id="h-amount" className="input" inputMode="numeric" placeholder="e.g. 8" aria-label="Daily amount" value={amt.amount} onChange={(e) => setAmt({ ...amt, amount: e.target.value.replace(/\D/g, '') })} style={{ minHeight: 44, width: 90 }} />
+        <input className="input" placeholder="unit, e.g. glasses" aria-label="Unit" value={amt.unit} onChange={(e) => setAmt({ ...amt, unit: e.target.value })} style={{ minHeight: 44, flex: '1 1 120px' }} />
+        <input className="input" inputMode="numeric" placeholder="+1" aria-label="Amount added per tap" value={amt.step} onChange={(e) => setAmt({ ...amt, step: e.target.value.replace(/\D/g, '') })} style={{ minHeight: 44, width: 70 }} />
+      </div>
+      <span className="muted" style={{ fontSize: 12 }}>With an amount, each check-in adds to the day's count (the last box is how much one tap adds). The day is done, and paid once, when the count reaches the amount.</span>
+    </div>
     </>
   );
 }
@@ -464,6 +483,7 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
   const [every, setEvery] = useState<Every>(h.every);
   const [size, setSize] = useState<SizeKey>(h.size);
   const [target, setTarget] = useState(habitTarget(h));
+  const [amt, setAmt] = useState<Amt>(() => amtOf(h));
   const done = habitDone(h, today), streak = habitStreak(h, today), best = bestStreak(h), prog = habitProgress(h, today);
   const multi = prog.target > 1, ticked = multi ? checkedInToday(h, today) : done, locked = multi && done && !ticked;
   const step = h.every === 'daily' ? 1 : 7;
@@ -472,7 +492,7 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
     const iso = addDays(cur, -(dots - 1 - i) * step);
     return { iso, on: habitDone(h, iso) };
   });
-  const save = () => { if (!title.trim()) return; actions.updateHabit(h.id, { title: title.trim(), every, size, target: every === 'weekly' ? target : 1 }); setEditing(false); };
+  const save = () => { if (!title.trim()) return; actions.updateHabit(h.id, { title: title.trim(), every, size, target: every === 'weekly' ? target : 1, ...amountPatch(amt) }); setEditing(false); };
   const remove = () => actions.confirm({
     title: 'Delete this habit?', body: '“' + h.title + '” and its streak history will be gone. Rewards already earned are kept.',
     confirmLabel: 'Delete habit', onConfirm: () => actions.deleteHabit(h.id),
@@ -482,12 +502,12 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
     return (
       <section className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14 }}>
         <div className="field"><label htmlFor={'eh-' + h.id}>Habit</label><input id={'eh-' + h.id} className="input" value={title} onChange={(e) => setTitle(e.target.value)} onKeyDown={onEnter(save)} style={{ minHeight: 44 }} /></div>
-        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} target={target} setTarget={setTarget} />
+        <HabitFields every={every} setEvery={setEvery} size={size} setSize={setSize} target={target} setTarget={setTarget} amt={amt} setAmt={setAmt} />
         {(every !== h.every || (every === 'weekly' && target !== habitTarget(h))) && <p className="muted" style={{ margin: 0, fontSize: 12 }}>Changing how often it repeats recounts the streak from the same check-ins.</p>}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button className="danger-btn" onClick={remove}>Delete</button>
           <span style={{ flex: 1 }} />
-          <button className="btn btn-secondary" onClick={() => { setEditing(false); setTitle(h.title); setEvery(h.every); setSize(h.size); setTarget(habitTarget(h)); }} style={{ minHeight: 42 }}>Cancel</button>
+          <button className="btn btn-secondary" onClick={() => { setEditing(false); setTitle(h.title); setEvery(h.every); setSize(h.size); setTarget(habitTarget(h)); setAmt(amtOf(h)); }} style={{ minHeight: 42 }}>Cancel</button>
           <button className="btn btn-primary inked" onClick={save} disabled={!title.trim()} style={{ minHeight: 42 }}>Save</button>
         </div>
       </section>
@@ -501,7 +521,7 @@ function HabitRow({ h, today, dots }: { h: Habit; today: string; dots: number })
       <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
         <div className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{h.title}</div>
         <div className="meta">
-          <span className="tnum">{multi ? prog.target + '× a week · ' + prog.count + ' of ' + prog.target + ' so far' : EVERY_NAME[h.every]} · {h.size} · +{habitReward(h).xp} XP</span>
+          <span className="tnum">{h.amount ? h.amount + (h.unit ? ' ' + h.unit : '') + ' a day · ' : ''}{multi ? prog.target + '× a week · ' + prog.count + ' of ' + prog.target + ' so far' : EVERY_NAME[h.every]} · {h.size} · +{habitReward(h).xp} XP</span>
           <span style={{ color: streak ? 'var(--q-wax)' : undefined, gap: 4 }}><Icon n="repeat" size={12} />{streak ? streakText(streak, h.every) : 'No streak yet'}</span>
           {best > streak && <span>best {best}</span>}
         </div>

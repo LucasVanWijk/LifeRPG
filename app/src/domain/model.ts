@@ -50,7 +50,15 @@ export interface Quest {
  * A repeating habit. Daily habits are checked in once a day; weekly ones `target` times a week
  * (on different days). `log` holds the days it was done.
  */
-export interface Habit { id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string; updated?: number }
+export interface Habit {
+  id: number; title: string; every: Every; target?: number; size: SizeKey; log: string[]; created: string; updated?: number;
+  /** A daily amount (8 glasses, 10,000 steps, 20 pages): the day is done, and paid once, when the count reaches it. */
+  amount?: number; unit?: string;
+  /** How much one tap adds. */
+  step?: number;
+  /** Today's and recent days' counts. */
+  counts?: Record<string, number>;
+}
 
 export interface Campaign {
   name: string; short: string; desc: string; xp: number; gold: number; seal: string; icon: IconName;
@@ -84,8 +92,18 @@ export interface Companion {
   rhythm?: Rhythm | null; rhythmSince?: string; later?: string;
 }
 
-export interface TomeItem { id: number; t: string; done: boolean }
-export interface Tome { id: string; name: string; items: TomeItem[]; updated?: number }
+export interface TomeItem {
+  id: number; t: string; done: boolean;
+  /** In a log tome: stars (1 to 5), the day it was finished, and a line of review. */
+  rating?: number; finished?: string; review?: string;
+}
+export interface Tome {
+  id: string; name: string; items: TomeItem[]; updated?: number;
+  /** A reading or watching log: items can be rated, dated and reviewed. */
+  log?: boolean;
+  /** What the yearly count calls them ("books" gives "14 books in 2026"). */
+  noun?: string;
+}
 
 
 /** What's left of the old Hero: there is no "you" in the game, only the guild. */

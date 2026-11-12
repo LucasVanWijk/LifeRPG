@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { addDays, dayDiff, todayISO } from '../domain/dates';
 import { linkedQuests, prepQuest } from '../domain/quests';
 import type { LevelUp, Outcome, Toast } from '../domain/logic';
-import { completeQuest, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
+import { adjustAmount, completeQuest, countToday, deleteCampaign, deleteQuest, patchQuest, setStatus, settleCampaigns, toggleHabit, undoQuest } from '../domain/logic';
 import { migrate } from '../domain/migrate';
 import { mergeData, stamp } from '../domain/merge';
 import type { Shared } from '../domain/share';
@@ -475,7 +475,11 @@ function useStoreValue() {
 
       // Habits
       toggleHabit(id: number) { apply(toggleHabit(d(), id, today)); },
-      createHabit(h: Pick<Habit, 'title' | 'every' | 'size' | 'target'>) {
+      /** Adds to (or takes from) today's count of an amount habit. */
+      adjustHabit(id: number, delta: number) { apply(adjustAmount(d(), id, delta, today)); },
+      /** Sets today's count to a number typed in. */
+      setHabitCount(id: number, n: number) { const h = d().habits.find((x) => x.id === id); if (h) apply(adjustAmount(d(), id, Math.max(0, Math.round(n)) - countToday(h, today), today)); },
+      createHabit(h: Pick<Habit, 'title' | 'every' | 'size' | 'target' | 'amount' | 'unit' | 'step'>) {
         const cur = d();
         commit({ ...cur, habits: [...cur.habits, { id: nextId(cur.habits), log: [], created: today, ...h }] });
         showToast('Habit started', h.title);
