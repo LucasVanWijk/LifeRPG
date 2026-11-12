@@ -9,7 +9,7 @@ const HELP = [
   ['@study', 'campaign (any word of its name)'],
   ['fri', 'due: today, tomorrow, mon–sun, 3 oct, +3d, +2w'],
   ['~L', 'size S, M or L'],
-  ['#Sophie', 'companion (repeat for more)'],
+  ['#Sophie', 'companion, or #family for everyone in a group'],
 ];
 
 /** A one-line bar that pins a quest straight away: "Paint walls !main @study fri ~L #Sophie". */

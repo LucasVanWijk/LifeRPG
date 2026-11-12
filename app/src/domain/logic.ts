@@ -219,7 +219,7 @@ export function glossaryEvents(data: Data, today: string): CalendarEvent[] {
   const y = Number(today.slice(0, 4));
   for (const c of data.companions) {
     if (c.bday) for (const yr of [y - 1, y, y + 1]) out.push({ date: yr + '-' + c.bday, label: c.first + "'s birthday", kind: 'Companion', target: 'companion:' + c.id, who: c.first });
-    for (const n of c.notes) if (n.date) out.push({ date: n.date, label: n.label || n.t, kind: 'Companion', target: 'companion:' + c.id, who: c.first, source: c.first });
+    for (const n of c.notes) if (n.date && !n.contact) out.push({ date: n.date, label: n.label || n.t, kind: 'Companion', target: 'companion:' + c.id, who: c.first, source: c.first });
   }
   for (const n of data.notes)
     for (const l of datedLines(n.body)) out.push({ date: l.date, label: l.label, kind: 'Note', target: 'note:' + n.id, source: n.title });

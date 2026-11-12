@@ -586,6 +586,22 @@ function useStoreValue() {
           profile: { ...cur.profile, plannedDay: today },
         });
       },
+      today() { return today; },
+      /** Adds a dated note "Talked" to a companion, which counts as the last contact. */
+      talkedToday(id: string) {
+        const cur = d();
+        commit({ ...cur, companions: cur.companions.map((c) => (c.id === id ? { ...c, notes: [...c.notes, { t: 'Talked', date: today, contact: true }], later: undefined } : c)) });
+        showToast('Noted', 'You talked today');
+      },
+      /** A quest to plan something with someone, due in a week. */
+      planWith(id: string) {
+        const c = d().companions.find((x) => x.id === id);
+        if (!c) return;
+        actions.createQuest({ title: 'Plan something with ' + c.first, quad: 'main', due: addDays(today, 7), size: 'S', campaign: null, status: 'todo', notes: [], steps: [], companions: [id] });
+        actions.laterContact(id);
+      },
+      /** Hides someone's Keep in touch reminder for a week. */
+      laterContact(id: string) { const cur = d(); commit({ ...cur, companions: cur.companions.map((c) => (c.id === id ? { ...c, later: addDays(today, 7) } : c)) }); },
       markReviewed(monday: string) { const cur = d(); commit({ ...cur, profile: { ...cur.profile, reviewedWeek: monday } }); setUi({ reviewOpen: false }); },
 
       // Guild

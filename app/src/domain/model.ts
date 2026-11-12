@@ -61,9 +61,28 @@ export interface Campaign {
   updated?: number;
 }
 
-export interface CompanionNote { t: string; date?: string; label?: string }
+export interface CompanionNote { t: string; date?: string; label?: string; /** A "Talked today" mark: counts as contact but doesn't show on the calendar. */ contact?: boolean }
 /** bday is MM-DD, or empty when unknown. */
-export interface Companion { id: string; name: string; first: string; rel: string; bday: string; notes: CompanionNote[]; updated?: number }
+export type Rhythm = 'week' | 'fortnight' | 'month' | 'quarter';
+export const RHYTHM_DAYS: Record<Rhythm, number> = { week: 7, fortnight: 14, month: 30, quarter: 91 };
+export const RHYTHM_NAME: Record<Rhythm, string> = { week: 'Every week', fortnight: 'Every two weeks', month: 'Every month', quarter: 'Every three months' };
+export interface GiftIdea { id: number; t: string; /** A tome this idea links to. */ tome?: string }
+export interface Companion {
+  id: string; name: string; first: string; rel: string; bday: string; notes: CompanionNote[]; updated?: number;
+  phone?: string; email?: string; address?: string;
+  /** Year of birth, to show an age. */
+  birthYear?: number;
+  /** Other companions. */
+  partner?: string; children?: string[];
+  met?: string; likes?: string; dislikes?: string; sizes?: string;
+  gifts?: GiftIdea[];
+  /** Any other label and value. */
+  extra?: { k: string; v: string }[];
+  /** Groups like Family or Colleagues. */
+  groups?: string[];
+  /** How often to keep in touch; `since` is the day the rhythm was set, `later` hides the reminder until that day. */
+  rhythm?: Rhythm | null; rhythmSince?: string; later?: string;
+}
 
 export interface TomeItem { id: number; t: string; done: boolean }
 export interface Tome { id: string; name: string; items: TomeItem[]; updated?: number }

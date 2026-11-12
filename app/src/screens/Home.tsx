@@ -1,4 +1,4 @@
-import { addDays, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
+import { addDays, dayDiff, longDate, MON, MONL, parseDay, shortDate, WDL } from '../domain/dates';
 import { checkedInToday, habitDone, habitProgress, habitStreak } from '../domain/logic';
 import type { CalItem } from '../domain/calendar';
 import { calendarItems, kindText } from '../domain/calendar';
@@ -17,6 +17,7 @@ import { questView, withNames } from '../components/common';
 import { stepCount } from '../components/Steps';
 import { QuickAdd } from '../components/QuickAdd';
 import { useState, type ReactNode } from 'react';
+import { overdueContacts } from '../domain/people';
 import { dayPoints, dayTooFull, FULL_DAY, isOpen, planCandidates, todayQuests } from '../domain/quests';
 import { backupDue, exportBackup, snoozeBackup } from '../backup';
 import { useStore } from '../state/store';
@@ -52,6 +53,7 @@ export function Home() {
     actions: <button className="btn btn-primary inked" style={{ minHeight: 38 }} onClick={() => setUi({ reviewOpen: true })}>Open</button>,
   });
 
+  const keepList = overdueContacts(data, today);
   const todayList = todayQuests(data.quests, today).map((q) => ({ q, checked: false }));
   const full = dayTooFull(todayList.map((t) => t.q));
   const doneToday = data.quests.filter((q) => q.doneOn === today).length;
@@ -230,7 +232,28 @@ export function Home() {
           </div>
         </section>
     ),
-    keep: null,
+    keep: keepList.length > 0 ? (
+      <section className="panel today home-keep" key="keep">
+        <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12, paddingBottom: 8 }}>
+          <h3 style={{ fontSize: 24 }}>Keep in touch</h3>
+          <span className="muted tnum" style={{ fontSize: 12 }}>{keepList.length} overdue</span>
+        </div>
+        {keepList.slice(0, 5).map(({ c, last, days }) => (
+          <div key={c.id} className="today-row" style={{ flexWrap: 'wrap', rowGap: 4 }}>
+            <button onClick={() => actions.goGlossary('companion:' + c.id)} style={{ flex: '1 1 150px', minWidth: 0, padding: '9px 0', border: 0, background: 'transparent', textAlign: 'left', cursor: 'pointer', color: 'var(--q-ink)', fontFamily: 'var(--font-body)' }}>
+              <div className="heading" style={{ fontSize: 19, lineHeight: 1.2 }}>{c.name}</div>
+              <div className="meta"><span>{last ? 'Last in touch ' + dayDiff(today, last) + ' days ago' : 'No contact yet'}</span>{days > 0 && <span style={{ color: 'var(--q-wax)' }}>{days} days overdue</span>}</div>
+            </button>
+            <span style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+              <button className="btn btn-secondary" style={{ minHeight: 32, padding: '2px 10px', fontSize: 13 }} onClick={() => actions.talkedToday(c.id)}>Talked today</button>
+              <button className="btn btn-secondary" style={{ minHeight: 32, padding: '2px 10px', fontSize: 13 }} onClick={() => actions.planWith(c.id)}>Plan something</button>
+              <button className="btn btn-ghost inked" style={{ minHeight: 32, padding: '2px 8px', fontSize: 13 }} onClick={() => actions.laterContact(c.id)}>Later</button>
+            </span>
+          </div>
+        ))}
+        {keepList.length > 5 && <p className="muted" style={{ margin: 0, padding: '6px 0', fontSize: 13 }}>and {keepList.length - 5} more</p>}
+      </section>
+    ) : null,
     guild: g ? (
         <section className="panel home-strip" key="guild">
           <button className="strip-btn" onClick={() => actions.goTab('guild')} aria-label={champ ? 'Open the guild, Champion ' + champ.first : 'Open the guild'}>

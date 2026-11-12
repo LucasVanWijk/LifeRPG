@@ -3,9 +3,10 @@ import { addDays, dayDiff, dueLabel, MONL, nextAnnual, shortDate, weekdayDate } 
 import { calendarItems } from '../domain/calendar';
 import { glossaryEvents } from '../domain/logic';
 import { GlossaryAdd } from '../components/GlossaryAdd';
-import type { Companion, Data, Note } from '../domain/model';
-import { NOTE_ICONS, QM } from '../domain/model';
-import { firstLink, noteMatches, sortNotes } from '../domain/notes';
+import type { Companion, Data, Note, Rhythm } from '../domain/model';
+import { NOTE_ICONS, QM, RHYTHM_NAME } from '../domain/model';
+import { ageOf, allGroups, lastContact } from '../domain/people';
+import { firstLink, mapsUrl, noteMatches, sortNotes } from '../domain/notes';
 import { LinkText, NoteBody } from '../components/RichText';
 import { Icon, type IconName } from '../components/Icon';
 import { AddForm, Empty, onEnter, Seg } from '../components/common';
@@ -93,6 +94,8 @@ function CompanionList() {
   const [name, setName] = useState('');
   const [rel, setRel] = useState('');
   const [bday, setBday] = useState('');
+  const [group, setGroup] = useState('');
+  const groups = allGroups(data.companions);
   const add = () => {
     const n = name.trim();
     if (!n) return false;
@@ -105,9 +108,15 @@ function CompanionList() {
   return (
     <div>
       {!data.companions.length && <Empty>No companions yet. Add the people you want to remember things about.</Empty>}
+      {groups.length > 0 && (
+        <div className="hscroll" style={{ gap: 6, paddingBottom: 6 }} role="group" aria-label="Filter by group">
+          <button className="chip" aria-pressed={!group} onClick={() => setGroup('')} style={{ minHeight: 36, padding: '4px 12px' }}>Everyone</button>
+          {groups.map((g) => <button key={g} className="chip" aria-pressed={group === g} onClick={() => setGroup(group === g ? '' : g)} style={{ minHeight: 36, padding: '4px 12px' }}>{g}</button>)}
+        </div>
+      )}
       {/* As many columns as fit; A to Z reads across, then down. */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', columnGap: 28 }}>
-      {[...data.companions].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((c) => {
+      {[...data.companions].filter((c) => !group || c.groups?.includes(group)).sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })).map((c) => {
         const next = events.filter((e) => e.who === c.first && e.date >= today).sort((a, b) => a.date.localeCompare(b.date))[0];
         return (
           <button key={c.id} className="row-btn" onClick={() => setUi({ gDetail: 'companion:' + c.id })} style={{ gap: 14, minHeight: 68, padding: '12px 0' }}>
@@ -263,17 +272,7 @@ function CompanionDetail({ c }: { c: Companion }) {
   const [draft, setDraft] = useState('');
   const [date, setDate] = useState('');
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(c.name);
-  const [rel, setRel] = useState(c.rel);
-  // Birthdays keep only month and day; the date field needs a year, so a leap year stands in.
-  const [bday, setBday] = useState(c.bday ? '2000-' + c.bday : '');
   const updC = (fn: (x: Companion) => Companion) => actions.update((d) => ({ ...d, companions: d.companions.map((x) => (x.id === c.id ? fn(x) : x)) }));
-  const save = () => {
-    const n = name.trim();
-    if (!n) return;
-    updC((x) => ({ ...x, name: n, first: n.split(' ')[0], rel: rel.trim(), bday: bday ? bday.slice(5) : '' }));
-    setEditing(false);
-  };
   const remove = () => actions.confirm({
     title: 'Remove ' + c.name + '?', body: 'Their notes and dates leave the Glossary and your week.', confirmLabel: 'Remove companion',
     onConfirm: () => {
@@ -296,24 +295,11 @@ function CompanionDetail({ c }: { c: Companion }) {
       <BackButton label="Companions" cat="companions" />
       <div style={{ display: 'flex', alignItems: 'center', gap: 18 }}>
         <div className="portrait" style={{ width: 84, height: 84, fontSize: 40 }}>{c.name[0]}</div>
-        <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ fontSize: 32 }}>{c.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{c.rel}</div></div>
+        <div style={{ flex: 1, minWidth: 0 }}><h2 style={{ fontSize: 32 }}>{c.name}</h2><div className="muted" style={{ fontStyle: 'italic' }}>{c.rel}{c.groups?.length ? ' · ' + c.groups.join(', ') : ''}</div></div>
         {!editing && <button className="btn btn-secondary" onClick={() => setEditing(true)} style={{ minHeight: 40 }}><Icon n="pencil" size={14} />Edit</button>}
       </div>
-      {editing && (
-        <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14 }}>
-          <div className="field"><label htmlFor="ec-name">Name</label><input id="ec-name" className="input" value={name} onChange={(e) => setName(e.target.value)} style={{ minHeight: 44 }} /></div>
-          <div className="two-col">
-            <div className="field"><label htmlFor="ec-rel">Relation</label><input id="ec-rel" className="input" value={rel} onChange={(e) => setRel(e.target.value)} style={{ minHeight: 44 }} /></div>
-            <div className="field"><label htmlFor="ec-bday">Birthday</label><input id="ec-bday" className="input" type="date" value={bday} onChange={(e) => setBday(e.target.value)} style={{ minHeight: 44 }} /></div>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <button className="danger-btn" onClick={remove}>Remove</button>
-            <span style={{ flex: 1 }} />
-            <button className="btn btn-secondary" onClick={() => { setEditing(false); setName(c.name); setRel(c.rel); setBday(c.bday ? '2000-' + c.bday : ''); }} style={{ minHeight: 42 }}>Cancel</button>
-            <button className="btn btn-primary inked" onClick={save} disabled={!name.trim()} style={{ minHeight: 42 }}>Save</button>
-          </div>
-        </div>
-      )}
+      {editing && <CompanionEditor c={c} onDone={() => setEditing(false)} onRemove={remove} />}
+      {!editing && <CompanionInfo c={c} />}
       <div className="facts" style={{ borderTop: '1px solid var(--q-rule)', borderBottom: '1px solid var(--q-rule)' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '12px 0' }}>
           <span className="label">Birthday</span>
@@ -403,6 +389,177 @@ function NoteDetail({ n }: { n: Note }) {
       </div>
       <div style={{ borderTop: '1px solid var(--q-rule)', paddingTop: 14 }}>
         <NoteBody body={n.body} onChange={(body) => upd((y) => ({ ...y, body }))} />
+      </div>
+    </div>
+  );
+}
+
+/** Label and value rows for what is known about a companion; phone, email and address are links. */
+function CompanionInfo({ c }: { c: Companion }) {
+  const { data, today, setUi, actions } = useStore();
+  const age = ageOf(c, today);
+  const person = (id: string) => data.companions.find((x) => x.id === id);
+  const chip = (id: string) => { const p = person(id); return p && <button key={id} className="chip" onClick={() => setUi({ gDetail: 'companion:' + id })} style={{ minHeight: 34, padding: '2px 10px', fontSize: 15 }}><Icon n="users" size={13} />{p.name}</button>; };
+  const rows: [string, React.ReactNode][] = [];
+  if (c.phone) rows.push(['Phone', <LinkText key="p" text={c.phone} />]);
+  if (c.email) rows.push(['Email', <LinkText key="e" text={c.email} />]);
+  if (c.address) rows.push(['Address', <a key="a" className="auto-link" href={mapsUrl(c.address)} target="_blank" rel="noreferrer noopener">{c.address}</a>]);
+  if (age !== null) rows.push(['Age', age + ' (born ' + c.birthYear + ')']);
+  if (c.partner && person(c.partner)) rows.push(['Partner', chip(c.partner)]);
+  const kids = (c.children ?? []).filter((id) => person(id));
+  if (kids.length) rows.push(['Children', <span key="k" style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{kids.map(chip)}</span>]);
+  if (c.met) rows.push(['How we met', <LinkText key="m" text={c.met} />]);
+  if (c.likes) rows.push(['Likes', <LinkText key="l" text={c.likes} />]);
+  if (c.dislikes) rows.push(['Dislikes', <LinkText key="d" text={c.dislikes} />]);
+  if (c.sizes) rows.push(['Sizes', c.sizes]);
+  for (const x of c.extra ?? []) rows.push([x.k, <LinkText key={x.k} text={x.v} />]);
+  const gifts = c.gifts ?? [];
+  const last = lastContact(data, c, today);
+  return (
+    <>
+      {rows.length > 0 && (
+        <dl style={{ margin: 0, display: 'flex', flexDirection: 'column' }}>
+          {rows.map(([k, v], i) => (
+            <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: 2, padding: '10px 0', borderTop: '1px solid var(--q-rule)' }}>
+              <dt className="label">{k}</dt><dd style={{ margin: 0, fontSize: 16, overflowWrap: 'anywhere' }}>{v}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {gifts.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          <h3 style={{ fontSize: 23, paddingBottom: 4 }}>Gift ideas</h3>
+          {gifts.map((g) => (
+            <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderTop: '1px solid var(--q-rule)' }}>
+              <span style={{ flex: 1, fontSize: 15 }}><LinkText text={g.t} /></span>
+              {g.tome && data.tomes.some((t) => t.id === g.tome) && <button className="chip" onClick={() => setUi({ gCat: 'tomes', gDetail: null, openTome: g.tome! })} style={{ minHeight: 30, padding: '0 8px', fontSize: 13 }}><Icon n="library" size={12} />{data.tomes.find((t) => t.id === g.tome)!.name}</button>}
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', borderTop: '1px solid var(--q-rule)', paddingTop: 10 }}>
+        <span className="muted" style={{ flex: 1, minWidth: 160, fontSize: 13 }}>
+          {last ? 'Last in touch ' + dayDiff(today, last) + (dayDiff(today, last) === 1 ? ' day' : ' days') + ' ago' : 'No contact recorded'}
+          {c.rhythm ? ' · ' + RHYTHM_NAME[c.rhythm].toLowerCase() : ''}
+        </span>
+        <button className="btn btn-secondary" style={{ minHeight: 38 }} onClick={() => actions.talkedToday(c.id)}><Icon n="check" size={14} />Talked today</button>
+      </div>
+    </>
+  );
+}
+
+/** The form for everything about a companion. */
+function CompanionEditor({ c, onDone, onRemove }: { c: Companion; onDone: () => void; onRemove: () => void }) {
+  const { data, actions } = useStore();
+  const [d, setD] = useState<Companion>({ ...c, gifts: c.gifts ?? [], extra: c.extra ?? [], children: c.children ?? [], groups: c.groups ?? [] });
+  // Birthdays keep only month and day; the date field needs a year, so a leap year stands in.
+  const [bday, setBday] = useState(c.bday ? '2000-' + c.bday : '');
+  const [year, setYear] = useState(c.birthYear ? String(c.birthYear) : '');
+  const [group, setGroup] = useState('');
+  const [gift, setGift] = useState('');
+  const [giftTome, setGiftTome] = useState('');
+  const [xk, setXk] = useState('');
+  const [xv, setXv] = useState('');
+  const set = (patch: Partial<Companion>) => setD((cur) => ({ ...cur, ...patch }));
+  const others = data.companions.filter((x) => x.id !== c.id);
+  const known = allGroups(data.companions);
+  const addGroup = (g: string) => { const v = g.trim(); if (v && !d.groups!.some((x) => x.toLowerCase() === v.toLowerCase())) set({ groups: [...d.groups!, v] }); setGroup(''); };
+  const save = () => {
+    const n = d.name.trim();
+    if (!n) return;
+    actions.update((all) => ({ ...all, companions: all.companions.map((x) => (x.id === c.id ? {
+      ...d, birthYear: /^\d{4}$/.test(year) ? Number(year) : undefined, name: n, first: n.split(' ')[0], rel: d.rel.trim(), bday: bday ? bday.slice(5) : '',
+      phone: d.phone?.trim() || undefined, email: d.email?.trim() || undefined, address: d.address?.trim() || undefined,
+      met: d.met?.trim() || undefined, likes: d.likes?.trim() || undefined, dislikes: d.dislikes?.trim() || undefined, sizes: d.sizes?.trim() || undefined,
+      partner: d.partner || undefined, children: d.children?.length ? d.children : undefined, groups: d.groups?.length ? d.groups : undefined,
+      gifts: d.gifts?.length ? d.gifts : undefined, extra: d.extra?.length ? d.extra : undefined,
+      rhythm: d.rhythm || undefined, rhythmSince: d.rhythm ? (d.rhythm !== c.rhythm ? actions.today() : d.rhythmSince) : undefined,
+    } : x)) }));
+    onDone();
+  };
+  const text = (id: string, label: string, key: 'phone' | 'email' | 'address' | 'met' | 'likes' | 'dislikes' | 'sizes', type = 'text') => (
+    <div className="field"><label htmlFor={id}>{label}</label><input id={id} className="input" type={type} value={d[key] ?? ''} onChange={(e) => set({ [key]: e.target.value })} style={{ minHeight: 44 }} /></div>
+  );
+  return (
+    <div className="panel" style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: 14 }}>
+      <div className="field"><label htmlFor="ec-name">Name</label><input id="ec-name" className="input" value={d.name} onChange={(e) => set({ name: e.target.value })} style={{ minHeight: 44 }} /></div>
+      <div className="two-col">
+        <div className="field"><label htmlFor="ec-rel">Relation</label><input id="ec-rel" className="input" value={d.rel} onChange={(e) => set({ rel: e.target.value })} style={{ minHeight: 44 }} /></div>
+        <div className="field"><label htmlFor="ec-bday">Birthday</label><input id="ec-bday" className="input" type="date" value={bday} onChange={(e) => setBday(e.target.value)} style={{ minHeight: 44 }} /></div>
+      </div>
+      <div className="two-col">
+        <div className="field"><label htmlFor="ec-year">Birth year</label><input id="ec-year" className="input" inputMode="numeric" placeholder="e.g. 1990" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, '').slice(0, 4))} style={{ minHeight: 44 }} /></div>
+        {text('ec-phone', 'Phone', 'phone', 'tel')}
+      </div>
+      {text('ec-email', 'Email', 'email', 'email')}
+      {text('ec-addr', 'Address', 'address')}
+      <div className="field"><label>Groups</label>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {d.groups!.map((g) => <button key={g} className="chip" aria-pressed onClick={() => set({ groups: d.groups!.filter((x) => x !== g) })} style={{ minHeight: 34, padding: '2px 10px' }}>{g}<Icon n="x" size={12} /></button>)}
+          {known.filter((g) => !d.groups!.includes(g)).map((g) => <button key={g} className="chip" onClick={() => addGroup(g)} style={{ minHeight: 34, padding: '2px 10px', opacity: 0.8 }}>+ {g}</button>)}
+        </div>
+        <div style={{ display: 'flex', gap: 6 }}>
+          <input className="input" placeholder="New group, e.g. Family" aria-label="New group" value={group} onChange={(e) => setGroup(e.target.value)} onKeyDown={onEnter(() => addGroup(group))} style={{ minHeight: 42 }} />
+          <button className="btn btn-secondary" onClick={() => addGroup(group)} style={{ minHeight: 42 }}>Add</button>
+        </div>
+      </div>
+      {others.length > 0 && (
+        <>
+          <div className="field"><label htmlFor="ec-partner">Partner</label>
+            <select id="ec-partner" className="input" value={d.partner ?? ''} onChange={(e) => set({ partner: e.target.value || undefined })} style={{ minHeight: 44 }}>
+              <option value="">None</option>{others.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
+            </select>
+          </div>
+          <div className="field"><label>Children</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {others.map((x) => { const on = d.children!.includes(x.id); return <button key={x.id} className="chip" aria-pressed={on} onClick={() => set({ children: on ? d.children!.filter((y) => y !== x.id) : [...d.children!, x.id] })} style={{ minHeight: 34, padding: '2px 10px' }}>{on && <Icon n="check" size={12} stroke={2.2} />}{x.name}</button>; })}
+            </div>
+          </div>
+        </>
+      )}
+      {text('ec-met', 'How we met', 'met')}
+      {text('ec-likes', 'Likes', 'likes')}
+      {text('ec-dislikes', 'Dislikes', 'dislikes')}
+      {text('ec-sizes', 'Sizes', 'sizes')}
+      <div className="field"><label>Gift ideas</label>
+        {d.gifts!.map((g) => (
+          <div key={g.id} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ flex: 1 }}>{g.t}{g.tome ? ' · ' + (data.tomes.find((t) => t.id === g.tome)?.name ?? '') : ''}</span>
+            <button className="icon-btn" aria-label={'Remove ' + g.t} onClick={() => set({ gifts: d.gifts!.filter((x) => x.id !== g.id) })}><Icon n="x" size={14} /></button>
+          </div>
+        ))}
+        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <input className="input" placeholder="A gift idea" aria-label="Gift idea" value={gift} onChange={(e) => setGift(e.target.value)} style={{ flex: '2 1 160px', minHeight: 42 }} />
+          {data.tomes.length > 0 && <select className="input" aria-label="Link to a tome" value={giftTome} onChange={(e) => setGiftTome(e.target.value)} style={{ flex: '1 1 120px', minHeight: 42 }}><option value="">No tome</option>{data.tomes.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}</select>}
+          <button className="btn btn-secondary" style={{ minHeight: 42 }} onClick={() => { const t = gift.trim(); if (!t) return; set({ gifts: [...d.gifts!, { id: Date.now(), t, tome: giftTome || undefined }] }); setGift(''); setGiftTome(''); }}>Add</button>
+        </div>
+      </div>
+      <div className="field"><label>Other details</label>
+        {d.extra!.map((x, i) => (
+          <div key={i} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <span style={{ flex: 1 }}><strong>{x.k}</strong>: {x.v}</span>
+            <button className="icon-btn" aria-label={'Remove ' + x.k} onClick={() => set({ extra: d.extra!.filter((_, j) => j !== i) })}><Icon n="x" size={14} /></button>
+          </div>
+        ))}
+        <div className="two-col">
+          <input className="input" placeholder="Label, e.g. Shoe size" aria-label="Detail label" value={xk} onChange={(e) => setXk(e.target.value)} style={{ minHeight: 42 }} />
+          <div style={{ display: 'flex', gap: 6 }}>
+            <input className="input" placeholder="Value" aria-label="Detail value" value={xv} onChange={(e) => setXv(e.target.value)} onKeyDown={onEnter(() => { if (xk.trim() && xv.trim()) { set({ extra: [...d.extra!, { k: xk.trim(), v: xv.trim() }] }); setXk(''); setXv(''); } })} style={{ minHeight: 42 }} />
+            <button className="btn btn-secondary" style={{ minHeight: 42 }} onClick={() => { if (xk.trim() && xv.trim()) { set({ extra: [...d.extra!, { k: xk.trim(), v: xv.trim() }] }); setXk(''); setXv(''); } }}>Add</button>
+          </div>
+        </div>
+      </div>
+      <div className="field"><label htmlFor="ec-rhythm">Keep in touch</label>
+        <select id="ec-rhythm" className="input" value={d.rhythm ?? ''} onChange={(e) => set({ rhythm: (e.target.value || null) as Companion['rhythm'] })} style={{ minHeight: 44 }}>
+          <option value="">No rhythm</option>
+          {(Object.keys(RHYTHM_NAME) as Rhythm[]).map((r) => <option key={r} value={r}>{RHYTHM_NAME[r]}</option>)}
+        </select>
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        <button className="danger-btn" onClick={onRemove}>Remove</button>
+        <span style={{ flex: 1 }} />
+        <button className="btn btn-secondary" onClick={onDone} style={{ minHeight: 42 }}>Cancel</button>
+        <button className="btn btn-primary inked" onClick={save} disabled={!d.name.trim()} style={{ minHeight: 42 }}>Save</button>
       </div>
     </div>
   );
