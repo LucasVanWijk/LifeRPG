@@ -1,0 +1,357 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<title>Questlog – Handleiding</title>
+<style>
+  @page { size: A4; margin: 18mm 17mm 18mm 17mm; }
+  :root {
+    --ink: #2b2118; --muted: #6b5a48; --line: #d9c7a8; --paper: #fbf6ec;
+    --accent: #8a4b1f; --wax: #a5322a; --main: #7a5a12; --errand: #2f4f86; --side: #2d6b66;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; font-family: Inter, "DejaVu Sans", sans-serif; font-size: 10pt; line-height: 1.5; color: var(--ink); }
+  h1, h2, h3, .serif { font-family: Caladea, "Bitstream Charter", Georgia, serif; }
+  h2 { font-size: 17pt; color: var(--accent); margin: 0 0 6pt; padding-bottom: 3pt; border-bottom: 1.5pt solid var(--line); break-after: avoid; }
+  h3 { font-size: 12pt; margin: 12pt 0 3pt; break-after: avoid; }
+  p { margin: 0 0 6pt; }
+  ul, ol { margin: 0 0 6pt; padding-left: 15pt; }
+  li { margin-bottom: 2pt; }
+  section { margin-bottom: 16pt; }
+  h2 { margin-top: 4pt; }
+  .page-break { break-before: page; }
+  code { font-family: "JetBrains Mono", "DejaVu Sans Mono", monospace; font-size: 8.8pt; background: #f3eadb; padding: 0.5pt 3pt; border-radius: 3pt; }
+  table { width: 100%; border-collapse: collapse; margin: 4pt 0 8pt; font-size: 9.3pt; }
+  tr { break-inside: avoid; }
+  thead { display: table-header-group; break-after: avoid; }
+  tbody tr:first-child { break-before: avoid; }
+  table.keep { break-inside: avoid; }
+  th { text-align: left; font-weight: 600; background: #f3eadb; border-bottom: 1pt solid var(--line); padding: 4pt 6pt; }
+  td { border-bottom: 0.5pt solid #eadfcb; padding: 4pt 6pt; vertical-align: top; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .tip { background: var(--paper); border-left: 3pt solid var(--accent); padding: 6pt 9pt; margin: 6pt 0 8pt; border-radius: 0 4pt 4pt 0; break-inside: avoid; }
+  .warn { border-left-color: var(--wax); }
+  .tip b:first-child { color: var(--accent); }
+  .warn b:first-child { color: var(--wax); }
+
+  /* Cover */
+  .cover { height: 257mm; display: flex; flex-direction: column; justify-content: space-between; background: var(--paper); border: 1.5pt solid var(--line); border-radius: 6pt; padding: 22mm 18mm 16mm; }
+  .cover .kicker { letter-spacing: 3pt; text-transform: uppercase; font-size: 9pt; color: var(--muted); }
+  .cover h1 { font-size: 46pt; margin: 6pt 0 4pt; color: var(--accent); line-height: 1; }
+  .cover .sub { font-family: Caladea, serif; font-size: 16pt; color: var(--ink); max-width: 130mm; }
+  .cover .rule { height: 1.5pt; background: var(--line); margin: 14pt 0; width: 60mm; }
+  .cover .lead { font-size: 11pt; max-width: 140mm; }
+  .cover .link { font-size: 11pt; }
+  .cover .link b { color: var(--accent); }
+  .toc { columns: 2; column-gap: 12mm; font-size: 10pt; }
+  .toc div { break-inside: avoid; padding: 1.5pt 0; border-bottom: 0.5pt dotted var(--line); }
+  .toc span { color: var(--accent); font-weight: 600; display: inline-block; width: 16pt; }
+
+  /* Eisenhower grid */
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6pt; margin: 6pt 0 8pt; break-inside: avoid; }
+  .zone { border-radius: 5pt; padding: 7pt 9pt; color: #fff; }
+  .zone b { font-family: Caladea, serif; font-size: 12.5pt; display: block; }
+  .zone small { opacity: 0.9; font-size: 8.5pt; display: block; margin-bottom: 2pt; }
+  .zone span { font-size: 9pt; }
+  .z-crisis { background: var(--wax); } .z-main { background: var(--main); } .z-errand { background: var(--errand); } .z-side { background: var(--side); }
+
+  .steps { counter-reset: s; list-style: none; padding: 0; }
+  .steps li { counter-increment: s; position: relative; padding-left: 22pt; margin-bottom: 5pt; }
+  .steps li::before { content: counter(s); position: absolute; left: 0; top: 0; width: 15pt; height: 15pt; border-radius: 50%; background: var(--accent); color: #fff; font-size: 8.5pt; font-weight: 600; text-align: center; line-height: 15pt; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; }
+  .card { border: 1pt solid var(--line); border-radius: 5pt; padding: 7pt 9pt; break-inside: avoid; }
+  .card h3 { margin-top: 0; }
+  footer { display: none; }
+</style>
+</head>
+<body>
+
+<!-- ============ COVER ============ -->
+<div class="cover">
+  <div>
+    <div class="kicker">Handleiding &amp; naslag</div>
+    <h1>Questlog</h1>
+    <div class="sub">Een questlog voor je echte leven: taken worden quests, en wat je in het echt afmaakt houdt je eigen avonturiersgilde draaiende.</div>
+    <div class="rule"></div>
+    <p class="lead">In dit document lees je waarvoor de app bedoeld is, hoe je begint en hoe elk onderdeel werkt. Lees het niet in één keer: begin met de hoofdstukken 1 tot en met 4 en zoek de rest op wanneer je het nodig hebt.</p>
+    <p class="link">Open de app op: <b>lucasvanwijk.github.io/LifeRPG</b></p>
+  </div>
+  <div>
+    <h3 style="margin-bottom:6pt">Inhoud</h3>
+    <div class="toc">
+      <div><span>1</span>Wat is Questlog?</div>
+      <div><span>2</span>Installeren en beginnen</div>
+      <div><span>3</span>De schermen</div>
+      <div><span>4</span>Quests en het bord</div>
+      <div><span>5</span>Snel toevoegen</div>
+      <div><span>6</span>Gewoontes</div>
+      <div><span>7</span>Campagnes</div>
+      <div><span>8</span>Beloningen: XP en goud</div>
+      <div><span>9</span>Agenda</div>
+      <div><span>10</span>Glossary</div>
+      <div><span>11</span>De gilde</div>
+      <div><span>12</span>Weekoverzicht en geschiedenis</div>
+      <div><span>13</span>Snel iets vastleggen</div>
+      <div><span>14</span>Je gegevens en back-ups</div>
+      <div><span>15</span>Veelgestelde vragen</div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ 1 ============ -->
+<section class="page-break">
+  <h2>1. Wat is Questlog?</h2>
+  <p>Questlog is een planner voor taken, gewoontes en afspraken met een spel eromheen. De app ziet eruit als een oud perkamenten logboek, en alles wat je in het echt doet levert iets op in het spel.</p>
+  <ul>
+    <li><b>Quests</b> zijn je taken. Je zet ze op een bord met vier vakken, ingedeeld naar urgentie en belang (de Eisenhower-methode).</li>
+    <li><b>Gewoontes</b> zijn dingen die je dagelijks of een paar keer per week wilt doen, zoals sporten of lezen. Je houdt er streaks mee bij.</li>
+    <li><b>Campagnes</b> bundelen quests tot een groter doel, bijvoorbeeld "Verhuizen" of "Rijbewijs halen".</li>
+    <li>De <b>agenda</b> toont je afspraken, deadlines en verjaardagen.</li>
+    <li>De <b>Glossary</b> is je tweede geheugen: mensen, notities en lijstjes van boeken, films en dergelijke.</li>
+    <li>In de <b>gilde</b> komt alles samen. Met elke quest die je afmaakt verdien je XP en goud. Daarmee groeit je held (de Champion) en bouw je je stadje uit.</li>
+  </ul>
+  <div class="tip"><b>Het idee erachter.</b> Het spel beloont je voor wat je in het echt doet, maar het straft je nooit. Ben je een week weg of druk, dan verlies je niets van wat je al hebt opgebouwd.</div>
+  <p>Je hoeft geen account te maken en de app is gratis. Alles wordt op je eigen apparaat opgeslagen en de app werkt ook offline.</p>
+</section>
+
+<!-- ============ 2 ============ -->
+<section>
+  <h2>2. Installeren en beginnen</h2>
+  <ol class="steps">
+    <li>Ga op je telefoon naar <b>lucasvanwijk.github.io/LifeRPG</b>.</li>
+    <li>Zet de app op je beginscherm:<br>
+      <b>Android (Chrome):</b> tik op <i>App installeren</i> in de melding of in het menu (⋮).<br>
+      <b>iPhone (Safari):</b> tik op het deel-icoon en kies <i>Zet op beginscherm</i>.</li>
+    <li>Open de app vanaf je beginscherm en vul je naam in. Je begint met een leeg logboek op level 1.</li>
+    <li>Voeg je eerste quest toe via de balk op Home, bijvoorbeeld <code>Boodschappen doen tomorrow ~S</code>.</li>
+    <li>Maak de quest af en bekijk je beloning. Open daarna het tabblad <b>Guild</b> om je gilde te stichten en een Champion te kiezen.</li>
+  </ol>
+  <div class="tip warn"><b>Belangrijk voor iPhone.</b> Safari wist de gegevens van websites die je zeven dagen niet hebt geopend. Zet Questlog daarom altijd op je beginscherm: dan blijven je gegevens bewaard. De app waarschuwt je hier ook voor.</div>
+  <p>Op een computer werkt de app ook. Vanaf een schermbreedte van ongeveer 900 pixels krijg je een desktopweergave met een zijbalk.</p>
+</section>
+
+<!-- ============ 3 ============ -->
+<section class="page-break">
+  <h2>3. De schermen</h2>
+  <p>Onderin staat een tabbalk (op een computer is dat een zijbalk) met deze schermen:</p>
+  <table><thead><tr><th style="width:22%">Scherm</th><th>Wat je er vindt</th></tr></thead><tbody>
+    <tr><td><b>Home</b></td><td>De quests van vandaag, <i>Up next</i> (belangrijke quests zonder deadline vandaag), je gewoontes om af te vinken, de komende week, een strook met je gilde en meldingen. Je kunt de volgorde van de onderdelen aanpassen. Via de moersleutel rechtsboven open je de instellingen en back-ups.</td></tr>
+    <tr><td><b>Quests</b></td><td>Het bord met de vier vakken, je campagnes en je gewoontes.</td></tr>
+    <tr><td><b>Calendar</b></td><td>Een maand-, week- en dagoverzicht met je afspraken, deadlines, verjaardagen en notities met een datum.</td></tr>
+    <tr><td><b>Glossary</b></td><td>Companions (mensen), Tomes (lijstjes zoals boeken en films) en Notes (notities). Je kunt er alles doorzoeken.</td></tr>
+    <tr><td><b>Guild</b></td><td>Het spel: Board, Town, Tavern en Legacy (zie hoofdstuk 11).</td></tr>
+  </tbody></table>
+  <p>De rechtsonder zwevende <b>+-knop</b> maakt iets nieuws aan dat bij het scherm hoort waarop je bent.</p>
+</section>
+
+<!-- ============ 4 ============ -->
+<section>
+  <h2>4. Quests en het bord</h2>
+  <p>Elke quest staat in een van vier vakken. Hoe belangrijker de quest, hoe hoger de beloning. Zo word je gestimuleerd om aan de dingen te werken die er echt toe doen.</p>
+  <div class="grid">
+    <div class="zone z-crisis"><b>Crisis</b><small>Urgent én belangrijk</small><span>Brandjes blussen: dit moet nu. Beloning ×1,25.</span></div>
+    <div class="zone z-main"><b>Main Quests</b><small>Belangrijk, niet urgent</small><span>Wat je echt vooruit helpt. Hier verdien je het meest: ×1,5.</span></div>
+    <div class="zone z-errand"><b>Errands</b><small>Urgent, niet belangrijk</small><span>Klusjes die toevallig nu moeten. Beloning ×0,8.</span></div>
+    <div class="zone z-side"><b>Side Quests</b><small>Geen van beide</small><span>Leuk voor erbij. Beloning ×0,6.</span></div>
+  </div>
+  <h3>Wat een quest kan hebben</h3>
+  <ul>
+    <li><b>Grootte</b>: S (klein), M (gemiddeld) of L (groot). Dit bepaalt hoeveel XP de quest oplevert.</li>
+    <li><b>Deadline</b>, eventueel met een tijd. Een quest met een deadline verschijnt ook in de agenda.</li>
+    <li><b>Stappen</b>: een checklist. Vink je de laatste stap af, dan vraagt de app of de quest klaar is.</li>
+    <li><b>Status</b>: To Do, Doing of Done.</li>
+    <li><b>Herhalen</b>, voor taken die steeds terugkomen, zoals elke maand de huur overmaken.</li>
+    <li><b>Someday</b>: "ooit". Zo staat een quest wel op je lijst, maar niet in de weg.</li>
+    <li><b>Companions</b>: de mensen met wie je de quest doet of voor wie hij is. Ze staan op de kaart van de quest, en op de pagina van een companion zie je alle quests waar die persoon bij hoort.</li>
+    <li>Een <b>campagne</b> waar de quest bij hoort.</li>
+  </ul>
+  <h3>Handig om te weten</h3>
+  <ul>
+    <li><b>Plan your day.</b> Kies elke dag welke quests je vandaag wilt doen. De app stelt Crisis- en Main-quests voor, en de quests die je gisteren had gekozen maar niet hebt afgemaakt.</li>
+    <li><b>Te laat?</b> Verplaats een quest met één tik naar morgen, naar volgende week of naar geen datum.</li>
+    <li><b>Stale.</b> Quests die al lang openstaan worden gemarkeerd, zodat je kunt beslissen of je ze nog wilt doen.</li>
+    <li><b>Duplicate</b> in het bewerkscherm kopieert een quest, met de stappen weer uitgevinkt.</li>
+    <li><b>Undo.</b> Heb je een quest per ongeluk afgemaakt of verwijderd? Tik dan binnen vijf seconden op <i>Undo</i>.</li>
+  </ul>
+</section>
+
+<!-- ============ 5 ============ -->
+<section>
+  <h2>5. Snel toevoegen</h2>
+  <p>Met de invoerbalk op Home en op het bord maak je in één regel een complete quest. Alles wat geen code is, wordt de titel.</p>
+  <p>Voorbeeld: <code>Muren schilderen !main @verbouwing fri ~L #Sophie</code></p>
+  <table><thead><tr><th style="width:32%">Typ</th><th>Betekenis</th></tr></thead><tbody>
+    <tr><td><code>!c</code> <code>!m</code> <code>!e</code> <code>!s</code></td><td>Het vak: Crisis, Main, Errand of Side. Je mag het woord ook voluit schrijven, zoals <code>!crisis</code>.</td></tr>
+    <tr><td><code>~S</code> <code>~M</code> <code>~L</code></td><td>De grootte.</td></tr>
+    <tr><td><code>@woord</code></td><td>De campagne. Eén woord uit de naam is genoeg.</td></tr>
+    <tr><td><code>#naam</code></td><td>Een companion. Herhaal dit voor meer mensen.</td></tr>
+    <tr><td><code>today</code> <code>tomorrow</code></td><td>Vandaag of morgen.</td></tr>
+    <tr><td><code>mon</code> … <code>sun</code></td><td>De eerstvolgende maandag tot en met zondag.</td></tr>
+    <tr><td><code>3 oct</code> <code>2026-10-03</code></td><td>Een vaste datum.</td></tr>
+    <tr><td><code>+3d</code> <code>+2w</code></td><td>Over 3 dagen of over 2 weken.</td></tr>
+  </tbody></table>
+  <p>Je kunt een quest ook inspreken. Tik daarvoor op het microfoontje in de balk. Let op: in Chrome stuurt de browser het geluid naar Google om het om te zetten in tekst.</p>
+</section>
+
+<!-- ============ 6 + 7 ============ -->
+<section>
+  <h2>6. Gewoontes</h2>
+  <p>Gewoontes (habits) staan los van quests. Ze komen steeds terug en je vinkt ze af op Home.</p>
+  <ul>
+    <li><b>Dagelijks</b>, of <b>wekelijks</b> met een doel van 1 tot 7 dagen per week (bijvoorbeeld 3× per week sporten).</li>
+    <li>Je kunt een <b>hoeveelheid</b> bijhouden, zoals het aantal glazen water of pagina's.</li>
+    <li>Een <b>streak</b> telt hoeveel dagen of weken je je doel achter elkaar hebt gehaald.</li>
+    <li>Een gewoonte levert de helft op van een quest van dezelfde grootte, omdat hij steeds terugkomt.</li>
+  </ul>
+
+  <h2 style="margin-top:14pt">7. Campagnes</h2>
+  <p>Een campagne is een groot doel dat uit meerdere quests bestaat. Je geeft hem een naam, een icoon en een grootte. Op het campagnebord zie je hoe ver je bent.</p>
+  <table class="keep"><thead><tr><th>Grootte</th><th class="num">Bonus-XP</th><th class="num">Bonus-goud</th></tr></thead><tbody>
+    <tr><td>Short</td><td class="num">120</td><td class="num">50</td></tr>
+    <tr><td>Medium</td><td class="num">250</td><td class="num">100</td></tr>
+    <tr><td>Epic</td><td class="num">450</td><td class="num">180</td></tr>
+  </tbody></table>
+  <p>Deze bonus krijg je zodra de laatste quest van de campagne af is, bovenop wat de losse quests opleveren. Op Home verschijnt dan een zegel. Heropen je op dezelfde dag een quest of voeg je er een toe, dan wordt de bonus weer ingetrokken. Daarna blijft hij staan.</p>
+  <p>In de gilde kun je een campagne aan een eigen avonturier koppelen, de <b>Standard-bearer</b>. De beloningen van die campagne gaan dan naar die avonturier in plaats van naar je Champion.</p>
+</section>
+
+<!-- ============ 8 ============ -->
+<section>
+  <h2>8. Beloningen: XP en goud</h2>
+  <p>De XP van een quest is de basiswaarde van de grootte maal de vermenigvuldiger van het vak, afgerond op 5. Goud is een derde van de XP.</p>
+  <table class="keep"><thead><tr><th>Vak</th><th class="num">S (basis 20)</th><th class="num">M (basis 40)</th><th class="num">L (basis 70)</th></tr></thead><tbody>
+    <tr><td>Main Quests ×1,5</td><td class="num">30 XP</td><td class="num">60 XP</td><td class="num">105 XP</td></tr>
+    <tr><td>Crisis ×1,25</td><td class="num">25 XP</td><td class="num">50 XP</td><td class="num">90 XP</td></tr>
+    <tr><td>Errands ×0,8</td><td class="num">15 XP</td><td class="num">30 XP</td><td class="num">55 XP</td></tr>
+    <tr><td>Side Quests ×0,6</td><td class="num">10 XP</td><td class="num">25 XP</td><td class="num">40 XP</td></tr>
+    <tr><td>Gewoonte</td><td class="num">10 XP</td><td class="num">20 XP</td><td class="num">35 XP</td></tr>
+  </tbody></table>
+  <p><b>Waar gaat het naartoe?</b> Alle XP gaat naar je Champion (of naar de Standard-bearer van de campagne). Van het goud gaat 25% naar de held en 75% naar de schatkist van de gilde.</p>
+  <p>Het vak bepaalt ook in welke eigenschap je held groeit: Crisis traint <i>Might</i>, Main Quests <i>Wits</i>, Errands <i>Finesse</i>, Side Quests <i>Spirit</i>, en gewoontes de hoofdeigenschap van de klasse van je held.</p>
+  <p>Maak je een afgevinkte quest ongedaan, dan worden de XP en het goud teruggenomen. Een level dat je al hebt gehaald verlies je nooit.</p>
+</section>
+
+<!-- ============ 9 ============ -->
+<section>
+  <h2>9. Agenda</h2>
+  <p>De agenda (Calendar) heeft een maand-, week- en dagweergave. In de week- en dagweergave kun je je dag inplannen in tijdblokken. Sommige dingen verschijnen vanzelf in de agenda, elk met een eigen kleur en vorm:</p>
+  <table class="keep"><thead><tr><th>Wat</th><th>Kleur en vorm</th></tr></thead><tbody>
+    <tr><td>Afspraak (event)</td><td>● blauw</td></tr>
+    <tr><td>Deadline van een quest</td><td>■ rood</td></tr>
+    <tr><td>Verjaardag van een companion</td><td>▲ roze</td></tr>
+    <tr><td>Notitie met een datum</td><td>◆ groen</td></tr>
+  </tbody></table>
+  <ul>
+    <li>Een afspraak kan de hele dag duren, een begin- en eindtijd hebben of meerdere dagen beslaan. Je kunt er een locatie, notities en companions aan toevoegen.</li>
+    <li>Afspraken kunnen zich dagelijks, wekelijks, maandelijks of jaarlijks herhalen, eventueel met een einddatum.</li>
+    <li>Vanuit een afspraak maak je een <b>voorbereidingsquest</b>, bijvoorbeeld "cadeau kopen" voor een verjaardagsfeest.</li>
+    <li>Met <b>Import</b> lees je eenmalig een <code>.ics</code>-bestand in, zoals een export uit Google Agenda.</li>
+    <li>De app geeft <b>geen herinneringen</b> of meldingen. Gebruik daarvoor je gewone agenda.</li>
+  </ul>
+</section>
+
+<!-- ============ 10 ============ -->
+<section>
+  <h2>10. Glossary: je tweede geheugen</h2>
+  <div class="two">
+    <div class="card">
+      <h3>Companions</h3>
+      <p>De mensen in je leven. Je legt per persoon gegevens vast, zoals een verjaardag, notities en groepen (familie, werk, enzovoort).</p>
+      <p><b>Keep in touch:</b> stel in hoe vaak je iemand wilt spreken. De app kijkt naar je quests en afspraken met die persoon en laat zien wie je te lang niet hebt gesproken.</p>
+    </div>
+    <div class="card">
+      <h3>Tomes</h3>
+      <p>Lijstjes van dingen die je leest, kijkt, speelt of wilt proberen: boeken, films, series, restaurants.</p>
+      <p>Per item leg je een <b>beoordeling</b> en de datum vast. Per jaar zie je hoeveel items je hebt afgerond.</p>
+    </div>
+    <div class="card">
+      <h3>Notes</h3>
+      <p>Losse notities, elk met een icoon. Links in notities zijn aanklikbaar.</p>
+      <p>Geef je een notitie een datum, dan verschijnt hij in de agenda.</p>
+    </div>
+    <div class="card">
+      <h3>Zoeken</h3>
+      <p>Met de zoekbalk bovenaan doorzoek je companions, tomes en notities tegelijk.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 11 ============ -->
+<section>
+  <h2>11. De gilde</h2>
+  <p>De gilde is het spel van Questlog. Je echte quests zijn de brandstof. Je hoeft het spel niet te spelen om de planner te gebruiken, maar het maakt het afvinken van taken een stuk leuker.</p>
+
+  <h3>De basis</h3>
+  <ul>
+    <li>Je sticht een gilde en kiest een <b>Champion</b>. Die krijgt de XP van alles wat je in het echt afmaakt. Je kunt op elk moment een andere Champion kiezen.</li>
+    <li>De gilde krijgt het grootste deel van het goud (75%). Daarmee bouw je je stad uit.</li>
+    <li><b>De tijd loopt door</b>, ook als de app dicht is. Eén dagdeel (Morning, Noon, Evening) duurt een echt uur, en een spel-jaar duurt 8 echte dagen. Open je de app weer, dan krijg je een samenvatting van wat er is gebeurd.</li>
+  </ul>
+
+  <h3>De vier tabbladen</h3>
+  <table><thead><tr><th style="width:18%">Tabblad</th><th>Wat je er doet</th></tr></thead><tbody>
+    <tr><td><b>Board</b></td><td>Je stuurt avonturiers op <b>klusjes</b> (odd jobs) en <b>expedities</b>. Vóór vertrek zie je de exacte kansen. De uitkomst ligt vast op het moment van vertrek en wordt etappe voor etappe onthuld. Ze komen terug met goud, spullen, grondstoffen en <i>renown</i> (faam).</td></tr>
+    <tr><td><b>Town</b></td><td>Je stadje als papieren kaart (of als lijst). Er zijn 22 gebouwen, zoals een herberg, smidse, ziekenboeg en boerderijen. Tik op een gebouw om het te bouwen of te verbeteren. Let erop dat voedsel, woonruimte, geluk en orde gelijk oplopen. Bezoekers komen af op je faam en geven geld uit in je gebouwen.</td></tr>
+    <tr><td><b>Tavern</b></td><td>Hier huur je nieuwe avonturiers in. Wie je niet inhuurt, vertrekt na een paar dagen.</td></tr>
+    <tr><td><b>Legacy</b></td><td>De Hall of Heroes, de Garden of Valor (een monument voor elke afgeronde campagne), records en tijdperken.</td></tr>
+  </tbody></table>
+
+  <h3>Avonturiers</h3>
+  <ul>
+    <li>Elke avonturier heeft een ras (mens, dwerg, elf of halfling), een klasse (zoals Guardian, Cleric, Ranger, Arcanist, Blademaster, Rogue, Paladin, Druid of Bard), twee karaktertrekken, een eigen achtergrondverhaal en een gelofte.</li>
+    <li>Ze hebben <b>stamina</b> (energie, die afneemt tijdens een tocht en terugkomt door rust) en <b>fatigue</b> (vermoeidheid, die langzaam oploopt). Ze kunnen gewond raken. Verwondingen zijn licht, middel of zwaar en kunnen behandeld worden.</li>
+    <li>Een avonturier dient 3 tot 15 spel-jaren en gaat daarna met pensioen. Gepensioneerden blijven in de stad wonen en kunnen een gebouw bemannen of een gezin stichten.</li>
+    <li>In de "chapter" van een avonturier staat wat jij in het echt hebt gedaan terwijl die avonturier jouw held was. Zo wordt elke held een hoofdstuk uit je eigen leven.</li>
+  </ul>
+  <div class="tip"><b>Op vakantie?</b> Zet in de instellingen <i>holiday mode</i> aan. Dan staat de tijd in de gilde stil. Wat je in het echt afmaakt, telt nog wel voor je Champion.</div>
+</section>
+
+<!-- ============ 12 + 13 ============ -->
+<section>
+  <h2>12. Weekoverzicht en geschiedenis</h2>
+  <ul>
+    <li>Vanaf zondag biedt Home een <b>weekoverzicht</b> aan. Je ziet welke quests je hebt afgemaakt, hoe je gewoontes gingen en welke quests te laat zijn (en die kun je meteen verzetten), plus een vooruitblik op de komende zeven dagen.</li>
+    <li>Via de kaart van je Champion open je <b>History</b>: alles wat je ooit hebt afgemaakt, per week. Ook oude weekoverzichten vind je daar.</li>
+  </ul>
+
+  <h2 style="margin-top:14pt">13. Snel iets vastleggen</h2>
+  <ul>
+    <li><b>Delen naar Questlog</b> (Android, en Chrome of Edge op een computer): deel een link of tekst vanuit een andere app naar Questlog. Je kunt het opslaan als notitie, als item in een tome of als notitie bij een companion.</li>
+    <li><b>Snelkoppelingen</b>: houd het app-icoon ingedrukt voor <i>New quest</i>, <i>Check in a habit</i> of <i>New note</i>.</li>
+    <li><b>Spraak</b>: met de microfoon in de invoerbalken spreek je een quest in.</li>
+    <li><b>iPhone</b>: Safari ondersteunt geen delen naar web-apps. Met een opdracht in de app Opdrachten (Shortcuts) die <code>…/LifeRPG/?title=…&amp;text=…&amp;url=…</code> opent, kom je in de buurt.</li>
+  </ul>
+</section>
+
+<!-- ============ 14 ============ -->
+<section>
+  <h2>14. Je gegevens en back-ups</h2>
+  <p>Alles wat je invoert wordt alleen opgeslagen in de browser op je eigen apparaat. Er is geen server en niemand anders kan je gegevens zien. Het nadeel is dat je gegevens niet automatisch naar een nieuwe telefoon meegaan.</p>
+  <div class="tip warn"><b>Maak regelmatig een back-up.</b> Ga naar Profiel en kies <i>Export backup</i>. Bewaar het bestand op een veilige plek, zoals je cloudopslag. Op een nieuw apparaat zet je je log terug met <i>Restore backup</i>. Is je laatste back-up meer dan 14 dagen oud, dan herinnert Home je eraan.</div>
+  <ul>
+    <li><b>Google Drive-synchronisatie</b> (optioneel): hiermee wordt je logboek automatisch bewaard in je eigen Google Drive en kun je het op meerdere apparaten gebruiken. Omdat de app nog in een testfase zit bij Google, moet de maker van de app je eerst als testgebruiker toevoegen. Vraag dit gerust.</li>
+    <li><b>Google Agenda</b> (optioneel, ook alleen als testgebruiker): je afspraken worden in beide richtingen gesynchroniseerd tussen Questlog en de agenda's die je kiest.</li>
+    <li>Na een uur vraagt Google of je opnieuw wilt inloggen. Home toont dan <i>Sync paused · tap to resume</i>. Wat je in de tussentijd wijzigt, gaat niet verloren.</li>
+  </ul>
+</section>
+
+<!-- ============ 15 ============ -->
+<section>
+  <h2>15. Veelgestelde vragen</h2>
+  <h3>Wat is het verschil tussen een quest en een gewoonte?</h3>
+  <p>Een quest doe je één keer en is daarna af. Een gewoonte komt steeds terug en vink je elke dag of week af.</p>
+  <h3>Ik heb een tijdje niets gedaan. Ben ik nu alles kwijt?</h3>
+  <p>Nee. Je gebouwen, je goud en je levels blijven staan. Het ergste wat kan gebeuren, is dat er intussen een avonturier met pensioen gaat.</p>
+  <h3>Waarom krijg ik bij Main Quests de meeste XP?</h3>
+  <p>Belangrijke maar niet-urgente taken zijn de dingen die je het makkelijkst uitstelt, terwijl ze je het meest opleveren. De app beloont je daarom extra als je ze toch oppakt.</p>
+  <h3>Werkt de app zonder internet?</h3>
+  <p>Ja. Na de eerste keer openen werkt de geïnstalleerde app ook offline. Alleen de synchronisatie met Google heeft internet nodig.</p>
+  <h3>Kan ik opnieuw beginnen?</h3>
+  <p>Ja. Wis de websitegegevens van de app in je browserinstellingen. Maak eerst een back-up als je je oude log wilt bewaren.</p>
+  <h3>Ik zie iets geks of heb een idee.</h3>
+  <p>Laat het de maker weten! De app wordt nog volop verbeterd.</p>
+</section>
+
+</body>
+</html>
