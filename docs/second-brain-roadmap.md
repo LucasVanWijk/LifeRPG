@@ -2,15 +2,38 @@
 
 The guild game is the reward layer. This roadmap is about the other half: making Questlog a place you trust with your life and reach for first. It comes from a critical review of the app as a user (November 2026). Each idea keeps its letter and number from that review so decisions can refer back to it.
 
-Status: **planned**, nothing here is built yet. Section 1 still needs one decision (how to sync).
+Status: **planned**, nothing here is built yet. **High priority:** Home order (K1) and Google Calendar sync (H1).
 
-## 1. Automatic, private sync (A1)
+## Order of work
 
-**Goal:** your log is on every device you use, kept up to date without pressing anything, and nobody but you can read it.
+1. **Home order** (K1, high priority). Small, and changes every visit.
+2. **Per-item merge** (section 2, first part). Everything after this keeps `updated` times right from the start.
+3. **Automatic Drive sync** (section 2).
+4. **Google Calendar sync** (H1, high priority). Reuses the Google sign-in from Drive.
+5. **Notes replace the Codex** (C1) with **clickable links** (L2), then **share target** (B2, which saves into notes), **shortcuts** (B3) and **voice** (B4).
+6. **Quests:** times (E3), pick today (E5), repeating (E1), someday (E8), stale (E11). Then **calendar day and week views** (H3, which uses quest times) and **preparation quests** (H4).
+7. **Companions:** more details (G2), groups (G5), keep in touch (G1).
+8. **Habits with amounts** (F2) and **log tomes** (C6).
 
-### What every option needs first: per-item merge
+## 1. Home order (K1, high priority)
 
-Today the whole log is one blob, and loading a copy replaces everything. Automatic sync between a phone and a laptop would then lose whatever was changed on the other device. So before any sync:
+**Goal:** opening the app shows what to do today, not banners and the game.
+
+- On a phone, **Today's Quests comes first**, above the fold. Then Habits, Up next, the week, and (once G1 exists) Keep in touch.
+- **The guild becomes a one-line strip** (crest, Champion, level, gold, "next back in…"), tapping through to the Guild tab. The full card goes.
+- **Notices collapse into one slim line** (backup due, Safari warning, weekly review ready) that expands on tap, instead of three tall cards.
+- **Sections can be reordered and hidden** in Settings (Today, Habits, Up next, Week, Keep in touch, Guild strip). The order is stored with your data, so it syncs between devices.
+- Quick-add stays at the top, but as a single compact line.
+
+## 2. Automatic Drive sync (A1)
+
+**Goal:** your log is on every device you use, kept up to date without pressing Save and Load.
+
+**Decision:** keep Google Drive for now. A small encrypted sync server can replace it later (see the end of this section); the merge below works for both.
+
+### Per-item merge (needed first)
+
+Today the whole log is one blob, and loading a copy replaces everything. Automatic sync would then lose whatever changed on the other device. So:
 
 - Every item (quest, habit, campaign, companion, tome, note, event) gets an `updated` time.
 - Deleting leaves a small tombstone (`{ id, deletedAt }`) for 60 days, so a deletion on one device wins over an older copy on another.
@@ -20,40 +43,55 @@ Today the whole log is one blob, and loading a copy replaces everything. Automat
 
 This also gives E11 (stale quests) its "last touched" date.
 
-### Where the data goes: the options
+### How Drive sync works
 
-| | Drive, encrypted | Own small relay, encrypted (recommended) | Local-first library (Evolu, Jazz) | Synced folder |
-|---|---|---|---|---|
-| Who can read it | Only you | Only you | Only you | Only you |
-| Truly automatic | No: Google's browser sign-in lasts an hour and can only be renewed with a popup, so a phone would keep asking you to sign in | Yes | Yes | Desktop only |
-| Works on iPhone and Android | Yes | Yes | Yes | No (no folder access in mobile browsers) |
-| Needs an account | Google | None: devices are paired with a QR code | Their own (passkey or phrase) | None |
-| What has to run | Nothing | A tiny serverless function on a free tier (for example Cloudflare Workers with KV storage) that you own | Their hosted relay, or one you host | Nothing |
-| Cost of building | Small | Medium | Large: the whole storage layer moves into their database | Small |
-| Main risk | Sign-in friction makes "automatic" a lie | You keep a free account alive; lose every device and the recovery key and the data is gone | A young dependency at the heart of the app | Phones left out |
+- Once connected, the app **loads and merges** the Drive copy when it opens, and **saves** a few seconds after each change and when it goes to the background.
+- **The sign-in limit:** Google's sign-in in the browser lasts an hour and can only be renewed through a popup, which browsers only allow after a tap. So when it has expired, a small "Sync paused · tap to resume" line appears on Home; one tap renews it for the next hour. Changes made meanwhile are kept and sent on the next sync.
+- The status is always visible in Settings: last synced, and from which device.
+- The manual backup file stays as an extra copy.
 
-**Recommendation: own small relay, end-to-end encrypted.**
+### Later: own sync server
 
-- On the first device the app makes a random secret key and shows it once as a recovery code (print it or keep it in a password manager).
-- A second device joins by scanning a QR code shown on the first, which holds the key and the sync address.
-- Everything is encrypted in the browser (AES-GCM, WebCrypto) before it leaves. The relay stores encrypted items and their versions and can't read any of them.
-- Sync runs on every change (debounced), on opening the app, and when the network comes back. No sign-in, no popups.
-- Drive and the manual backup file stay as optional extra copies.
+When there is a server, the recommended setup is a small relay (for example Cloudflare Workers with KV storage) with end-to-end encryption: devices are paired by scanning a QR code, everything is encrypted before it leaves the device, there's no sign-in to expire, and the server can't read anything. Losing every device and the recovery code would mean the data is gone for good.
 
-What it needs from you: a free Cloudflare account to deploy the relay to. The relay is about a hundred lines and lives in this repo with deploy steps.
+| | Drive (now) | Own relay, encrypted (later) |
+|---|---|---|
+| Who can read it | You and Google | Only you |
+| Automatic | While signed in; one tap an hour | Always |
+| Account | Google | None (QR pairing) |
+| Runs on | Nothing of yours | A free serverless account you own |
 
-## 2. Notes replace the Codex (C1)
+## 3. Google Calendar sync (H1, high priority)
+
+**Goal:** one calendar. Your Google events show in Questlog, and events made in Questlog land in Google.
+
+- Uses the same Google sign-in as Drive, with access to calendar events added (and the same one-tap-an-hour limit).
+- **Choose calendars:** pick which Google calendars to show, and which one new Questlog events go to.
+- **Both ways:** creating, editing or deleting an event in either place changes it in the other. Changes are fetched incrementally (only what changed since the last sync), on open and every few minutes while open.
+- **Repeating events:** Google's repeat rules are richer than Questlog's. Questlog shows every occurrence, and you can edit a single occurrence; changing the whole series opens it in Google Calendar.
+- **Conflicts:** the most recently changed version wins.
+- **Range:** from 30 days back to a year ahead.
+- Imported `.ics` events stay as they are. Quest deadlines and birthdays stay in Questlog only (sending them to Google is H5, not decided).
+- **Setup note:** calendar access is a sensitive permission. For personal use the Google project can stay in testing mode with you as a test user; a public release would need Google's verification.
+
+## 4. Notes replace the Codex (C1) with clickable links (L2)
 
 **Goal:** a place for anything that isn't a task: ideas, meeting notes, recipes, how the boiler works, the wifi password.
 
 - The Glossary keeps three tabs: **Companions**, **Tomes**, **Notes** (the Codex tab goes).
 - A note has a title, a body, an optional icon, a pin, and created and updated times.
-- The body is plain text with a little formatting: headings (`#`), lists (`-`), checkboxes (`[ ]`), bold, and links that become clickable. Typing stays plain text, so nothing is lost if the format changes later.
+- The body is plain text with a little formatting: headings (`#`), lists (`-`), checkboxes (`[ ]`), and bold. Typing stays plain text, so nothing is lost if the format changes later.
 - **Dates in notes:** a note can carry dated lines (as Codex fields could), and they keep showing on the calendar and Home week as Glossary dates.
 - Search covers note titles and bodies.
 - **Migration:** each Codex entry becomes a note. Its subtitle becomes the first line, and each field becomes a `Label: value` line; dated fields become dated lines. The Glossary quick-add that went to the "Reminders" Codex entry makes a note instead.
 
-## 3. Capture from anywhere
+### Clickable links everywhere (L2)
+
+- Web addresses become links in notes, quest notes, companion notes, tome items and event notes.
+- Phone numbers and email addresses become call and mail links; an event's location opens in maps.
+- Links open in a new tab and never while you're editing the text.
+
+## 5. Capture from anywhere
 
 ### Share to the app (B2)
 
@@ -71,7 +109,7 @@ What it needs from you: a free Cloudflare account to deploy the relay to. The re
 - A microphone button on the quest quick-add and the Glossary quick-add, using the browser's speech recognition. The words fill the box and go through the usual quick-add parsing.
 - Only shown where the browser supports it (Chrome, Edge, Safari). Note for privacy: Chrome sends the audio to Google to transcribe; the app says so the first time.
 
-## 4. Quests
+## 6. Quests
 
 ### Times on quests (E3)
 
@@ -99,27 +137,54 @@ What it needs from you: a free Cloudflare account to deploy the relay to. The re
 
 ### Stale quests (E11)
 
-- An open quest untouched for 30 days, with no due date ahead, counts as stale. "Touched" means any edit, step ticked or note added (the `updated` time from section 1).
+- An open quest untouched for 30 days, with no due date ahead, counts as stale. "Touched" means any edit, step ticked or note added (the `updated` time from section 2).
 - The weekly review lists stale quests with four buttons: **Today**, **Schedule**, **Someday**, **Drop**.
 
-## 5. Habits with amounts (F2)
+## 7. Calendar views and preparation
+
+### Day and week views with hours (H3)
+
+- Besides the month grid, a **week** view (seven columns) and a **day** view, both with an hour grid from morning to night and all-day items in a strip at the top.
+- Timed events, Google events and quests with a time (E3) sit in their slots; overlapping items share the width.
+- **Time blocking:** drag a quest onto a slot to give it that date and time; drag an event to move it (and, for Google events, in Google too).
+- On a phone the day view is the default; the week view scrolls sideways.
+
+### Preparation quests from events (H4)
+
+- An event's sheet has **"Add a quest for this"**. The quest is due the day before by default (or the same day for evening events), linked to the event, and carries the people from the event.
+- The event shows its linked quests and whether they're done; the quest shows which event it's for.
+- Moving the event offers to move its quests by the same amount.
+
+## 8. Companions
+
+### More details (G2)
+
+- Optional fields: phone, email, address, birth year (to show age), partner, children, how you met, likes, dislikes, sizes, and gift ideas.
+- Partner and children can link to other companions. Gift ideas can link to a tome.
+- Any extra label and value can be added too, as the Codex allowed.
+- Phone, email and address are links (call, mail, open in maps), from L2.
+
+### Groups (G5)
+
+- A companion can belong to groups (Family, Colleagues, Football team). The list can be filtered by group.
+- In quest quick-add, `#family` adds everyone in the group, as `#sophie` adds one person.
+
+### Keep in touch (G1)
+
+- Each companion can have a rhythm: every week, two weeks, month, three months, or none.
+- **Last contact** is worked out from dated notes, finished quests with them and past events with them, or set with a **"Talked today"** button that adds a dated note.
+- A **Keep in touch** section on Home lists the people you're overdue with, oldest first, with "Talked today", "Plan something" (makes a quest with them) and "Later" (a week).
+
+## 9. Habits with amounts (F2)
 
 - A habit can have a daily amount and a unit: 8 glasses of water, 10,000 steps, 20 pages.
 - Checking in adds to today's count (+1, or a step you set, or type a number). The habit is done for the day when the count reaches the amount; streaks and weekly targets count done days.
 - Home shows a small progress bar instead of a tick. Rewards are paid once, when the day's amount is reached.
 
-## 6. Reading and watching log (C6)
+## 10. Reading and watching log (C6)
 
 - A tome can be a **log**. Its items get an optional rating (1–5 stars), a date finished, and a line of review.
 - Ticking an item sets its date. A log tome shows a count for this year ("14 books in 2026") and can be sorted by date or rating.
-
-## Order of work
-
-1. **Per-item merge** (section 1, first part). Everything after this keeps `updated` times right from the start.
-2. **Sync** (section 1), once the option is chosen.
-3. **Notes replace the Codex** (2), then **share target** (B2, which saves into notes), **shortcuts** (B3) and **voice** (B4).
-4. **Quests:** times (E3), pick today (E5), repeating (E1), someday (E8), stale (E11).
-5. **Habits with amounts** (F2) and **log tomes** (C6).
 
 ## Declined
 
@@ -134,7 +199,7 @@ From the same review, still open for a yes or no:
 - **A3.** Version history: daily snapshots for 30 days.
 - **A4.** Trash bin for deleted items, 30 days.
 - **A5.** Export to Markdown, CSV and `.ics`.
-- **A6.** Encryption with a passphrase (part of the recommended sync option).
+- **A6.** Encryption with a passphrase (part of the later sync server).
 - **B1.** One inbox for anything, sorted later.
 - **C2.** Links between everything (`[[Sophie]]`) with backlinks.
 - **C3.** A daily page: a few lines, mood and energy, filled with the day's quests, habits and events.
@@ -157,16 +222,10 @@ From the same review, still open for a yes or no:
 - **F4.** Pause a habit without losing the streak.
 - **F5.** Habit history: year heatmap, monthly rate, notes per check-in.
 - **F6.** Habit order by time of day, and archiving.
-- **G1.** Keep-in-touch reminders per companion.
-- **G2.** More details per companion (phone, address, family, sizes, birth year).
 - **G3.** More dates per companion (anniversaries, memorial days).
 - **G4.** Gift prompts before birthdays.
-- **G5.** Companion groups.
 - **G6.** Import contacts from vCard.
-- **H1.** Google Calendar two-way sync.
 - **H2.** Subscribe to `.ics` links.
-- **H3.** Day and week views with hours, and time blocking.
-- **H4.** Preparation quests from events.
 - **H5.** Export deadlines and birthdays to your phone's calendar.
 - **I1.** Documents and expiry dates.
 - **I2.** Subscriptions and bills, with totals and renewal quests.
@@ -182,14 +241,12 @@ From the same review, still open for a yes or no:
 - **J4.** Statistics.
 - **J5.** Year in review.
 - **J6.** Mood against habits.
-- **K1.** Home order: Today first, guild card smaller, reorderable sections.
 - **K2.** A softer game mode (no deaths while you're away, or auto-holiday).
 - **K3.** Rewards for reviews, notes and keeping in touch; less gain from splitting tasks.
 - **K4.** Plain-language names option.
 - **K5.** First-run setup with starter habits, tomes and people.
 - **K6.** Import from Todoist, TickTick, Google Tasks or CSV.
 - **L1.** Dark mode.
-- **L2.** Clickable links (part of Notes for note bodies).
 - **L3.** Swipe gestures and haptics.
 - **L4.** Wider desktop layout.
 - **L5.** Archive for finished quests as data grows.
